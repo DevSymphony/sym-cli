@@ -1,0 +1,43 @@
+{
+  "name": "Symphony CLI Development",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-24.04",
+
+  "features": {
+    "ghcr.io/devcontainers/features/git:1": {},
+    "ghcr.io/devcontainers/features/go:1": {
+      "version": "1.25.1"
+    },
+    "ghcr.io/devcontainers/features/docker-in-docker:2": {},
+    "ghcr.io/devcontainers/features/node:1": {
+      "version": "22"
+    },
+    "ghcr.io/anthropics/devcontainer-features/claude-code:1": {}
+  },
+
+  "containerUser": "vscode",
+  "remoteUser": "vscode",
+
+//  "workspaceMount": "source=workspace-data,target=/workspace,type=volume",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "golang.go",
+        "yzhang.markdown-all-in-one",
+        "github.vscode-github-actions",
+        "GitHub.vscode-pull-request-github",
+        "ms-azuretools.vscode-docker",
+        "docker.docker",
+        "openai.chatgpt",
+        "streetsidesoftware.code-spell-checker",
+        "Anthropic.claude-code",
+        "MS-CEINTL.vscode-language-pack-ko",
+        "cschlosser.doxdocgen",
+        "ms-vscode.makefile-tools"
+      ]
+    }
+  },
+
+  "postCreateCommand": "bash /workspace/.devcontainer/post-create.sh"
+}
