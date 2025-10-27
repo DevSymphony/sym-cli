@@ -136,6 +136,10 @@ func (e *Engine) filterFiles(files []string, when *core.Selector) []string {
 
 // matchesSelector checks if a file matches the selector criteria.
 func (e *Engine) matchesSelector(file string, when *core.Selector) bool {
+	if when == nil {
+		return true
+	}
+
 	// Language filter
 	if len(when.Languages) > 0 {
 		ext := filepath.Ext(file)

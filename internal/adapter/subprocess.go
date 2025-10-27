@@ -3,6 +3,7 @@ package adapter
 import (
 	"context"
 	"fmt"
+	"os"
 	"os/exec"
 	"time"
 )
@@ -46,7 +47,7 @@ func (e *SubprocessExecutor) Execute(ctx context.Context, name string, args ...s
 
 	// Add environment variables
 	if len(e.Env) > 0 {
-		cmd.Env = append(cmd.Env, e.envSlice()...)
+		cmd.Env = append(os.Environ(), e.envSlice()...)
 	}
 
 	// Capture output
