@@ -16,6 +16,7 @@
 
   "containerUser": "vscode",
   "remoteUser": "vscode",
+  "workspaceFolder": "/workspace",
 
 //  "workspaceMount": "source=workspace-data,target=/workspace,type=volume",
   "workspaceMount": "source=${localWorkspaceFolder},target=/workspace,type=bind",
