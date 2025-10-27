@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"github.com/DevSymphony/sym-cli/internal/engine/ast"
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
 	"github.com/DevSymphony/sym-cli/internal/engine/length"
 	"github.com/DevSymphony/sym-cli/internal/engine/pattern"
@@ -22,5 +23,10 @@ func init() {
 	// Register style engine
 	MustRegister("style", func() (core.Engine, error) {
 		return style.NewEngine(), nil
+	})
+
+	// Register AST engine
+	MustRegister("ast", func() (core.Engine, error) {
+		return ast.NewEngine(), nil
 	})
 }

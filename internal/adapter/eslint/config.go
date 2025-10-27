@@ -179,3 +179,22 @@ func addStyleRules(config *ESLintConfig, rule *core.Rule) error {
 
 	return nil
 }
+
+// MarshalConfig converts a config map to JSON bytes.
+func MarshalConfig(config map[string]interface{}) ([]byte, error) {
+	return json.MarshalIndent(config, "", "  ")
+}
+
+// MapSeverity converts severity string to ESLint severity level.
+func MapSeverity(severity string) interface{} {
+	switch severity {
+	case "error":
+		return "error"
+	case "warning", "warn":
+		return "warn"
+	case "info", "off":
+		return "off"
+	default:
+		return "error"
+	}
+}

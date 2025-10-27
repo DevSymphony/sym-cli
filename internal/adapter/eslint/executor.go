@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
@@ -25,19 +26,14 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	}
 	defer os.Remove(configPath)
 
-	// Determine ESLint command
-	eslintCmd := a.getESLintCommand()
+	// Get command and arguments
+	eslintCmd, args := a.getExecutionArgs(configPath, files)
 
-	// Build arguments
-	args := []string{
-		"--config", configPath,
-		"--format", "json",
-		"--no-eslintrc", // Don't load user's .eslintrc
-	}
-	args = append(args, files...)
-
-	// Execute
+	// Execute with environment variable to support both ESLint 8 and 9
 	a.executor.WorkDir = a.WorkDir
+	a.executor.Env = map[string]string{
+		"ESLINT_USE_FLAT_CONFIG": "false",
+	}
 	return a.executor.Execute(ctx, eslintCmd, args...)
 }
 
@@ -49,8 +45,35 @@ func (a *Adapter) getESLintCommand() string {
 		return localPath
 	}
 
-	// Fall back to global
-	return "eslint"
+	// Try global eslint
+	if _, err := exec.LookPath("eslint"); err == nil {
+		return "eslint"
+	}
+
+	// Fall back to npx with ESLint 8.x
+	return "npx"
+}
+
+// getExecutionArgs returns the command and arguments for ESLint execution.
+func (a *Adapter) getExecutionArgs(configPath string, files []string) (string, []string) {
+	eslintCmd := a.getESLintCommand()
+
+	var args []string
+
+	// If using npx, specify eslint@8
+	if eslintCmd == "npx" {
+		args = []string{"eslint@8"}
+	}
+
+	// Add ESLint arguments
+	args = append(args,
+		"--config", configPath,
+		"--format", "json",
+		"--no-eslintrc", // Don't load user's .eslintrc
+	)
+	args = append(args, files...)
+
+	return eslintCmd, args
 }
 
 // writeConfigFile writes ESLint config to a temp file.
