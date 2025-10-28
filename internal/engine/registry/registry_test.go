@@ -112,9 +112,11 @@ func TestRegistry_List(t *testing.T) {
 	names := []string{"pattern", "length", "style"}
 	for _, name := range names {
 		n := name // capture
-		r.Register(n, func() (core.Engine, error) {
+		if err := r.Register(n, func() (core.Engine, error) {
 			return &mockEngine{name: n}, nil
-		})
+		}); err != nil {
+			t.Fatalf("Register(%s) failed: %v", n, err)
+		}
 	}
 
 	got := r.List()

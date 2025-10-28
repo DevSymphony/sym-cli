@@ -1,9 +1,6 @@
 package cmd
 
 import (
-	"fmt"
-	"os"
-
 	"github.com/spf13/cobra"
 )
 
@@ -32,11 +29,7 @@ func init() {
 
 func initConfig() {
 	if cfgFile != "" {
-		// Use config file from the flag
+		// TODO: Use config file from the flag
+		_ = cfgFile // Placeholder to avoid unused variable warning
 	}
-}
-
-func exitWithError(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-	os.Exit(1)
 }

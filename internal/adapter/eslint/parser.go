@@ -19,13 +19,13 @@ type ESLintFileResult struct {
 
 // ESLintMessage represents a single violation.
 type ESLintMessage struct {
-	RuleID   string `json:"ruleId"`
-	Severity int    `json:"severity"` // 0=off, 1=warn, 2=error
-	Message  string `json:"message"`
-	Line     int    `json:"line"`
-	Column   int    `json:"column"`
-	EndLine  int    `json:"endLine,omitempty"`
-	EndColumn int   `json:"endColumn,omitempty"`
+	RuleID    string `json:"ruleId"`
+	Severity  int    `json:"severity"` // 0=off, 1=warn, 2=error
+	Message   string `json:"message"`
+	Line      int    `json:"line"`
+	Column    int    `json:"column"`
+	EndLine   int    `json:"endLine,omitempty"`
+	EndColumn int    `json:"endColumn,omitempty"`
 }
 
 // parseOutput converts ESLint JSON output to violations.

@@ -30,13 +30,13 @@ func parseOutput(output *adapter.ToolOutput) ([]adapter.Violation, error) {
 
 		// Skip empty lines and status messages
 		if line == "" || strings.HasPrefix(line, "Checking") ||
-		   strings.HasPrefix(line, "[warn]") || strings.HasPrefix(line, "Code style") {
+			strings.HasPrefix(line, "[warn]") || strings.HasPrefix(line, "Code style") {
 			continue
 		}
 
 		// If line looks like a file path, it needs formatting
 		if strings.Contains(line, ".js") || strings.Contains(line, ".ts") ||
-		   strings.Contains(line, ".jsx") || strings.Contains(line, ".tsx") {
+			strings.Contains(line, ".jsx") || strings.Contains(line, ".tsx") {
 			violations = append(violations, adapter.Violation{
 				File:     line,
 				Line:     0, // Prettier doesn't report line numbers in --check

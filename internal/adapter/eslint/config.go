@@ -9,9 +9,9 @@ import (
 
 // ESLintConfig represents .eslintrc.json structure.
 type ESLintConfig struct {
-	Env   map[string]bool            `json:"env,omitempty"`
-	Rules map[string]interface{}     `json:"rules"`
-	Extra map[string]interface{}     `json:"-"` // For extensions
+	Env   map[string]bool        `json:"env,omitempty"`
+	Rules map[string]interface{} `json:"rules"`
+	Extra map[string]interface{} `json:"-"` // For extensions
 }
 
 // generateConfig creates ESLint config from a Symphony rule.
@@ -23,8 +23,8 @@ func generateConfig(ruleInterface interface{}) ([]byte, error) {
 
 	config := &ESLintConfig{
 		Env: map[string]bool{
-			"es2021": true,
-			"node":   true,
+			"es2021":  true,
+			"node":    true,
 			"browser": true,
 		},
 		Rules: make(map[string]interface{}),
@@ -69,8 +69,8 @@ func addPatternRules(config *ESLintConfig, rule *core.Rule) error {
 			rule.Severity, // "error", "warn", "off"
 			pattern,
 			map[string]interface{}{
-				"properties":      false,
-				"classFields":     false,
+				"properties":       false,
+				"classFields":      false,
 				"onlyDeclarations": true,
 			},
 		}
@@ -118,26 +118,27 @@ func addLengthRules(config *ESLintConfig, rule *core.Rule) error {
 			"code": max,
 		}
 		if min > 0 {
-			// ESLint doesn't have min-len, so we'd need custom rule
+			// TODO: ESLint doesn't have min-len, so we'd need custom rule
 			// For now, just enforce max
+			_ = min // Explicitly ignore min for now
 		}
 		config.Rules["max-len"] = []interface{}{rule.Severity, opts}
 
 	case "file":
 		// Use max-lines rule
 		opts := map[string]interface{}{
-			"max": max,
+			"max":            max,
 			"skipBlankLines": true,
-			"skipComments": true,
+			"skipComments":   true,
 		}
 		config.Rules["max-lines"] = []interface{}{rule.Severity, opts}
 
 	case "function":
 		// Use max-lines-per-function rule
 		opts := map[string]interface{}{
-			"max": max,
+			"max":            max,
 			"skipBlankLines": true,
-			"skipComments": true,
+			"skipComments":   true,
 		}
 		config.Rules["max-lines-per-function"] = []interface{}{rule.Severity, opts}
 

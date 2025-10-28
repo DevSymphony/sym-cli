@@ -9,12 +9,12 @@ import (
 
 // PrettierConfig represents .prettierrc.json structure.
 type PrettierConfig struct {
-	TabWidth     int    `json:"tabWidth,omitempty"`
-	UseTabs      bool   `json:"useTabs,omitempty"`
-	Semi         bool   `json:"semi,omitempty"`
-	SingleQuote  bool   `json:"singleQuote,omitempty"`
+	TabWidth      int    `json:"tabWidth,omitempty"`
+	UseTabs       bool   `json:"useTabs,omitempty"`
+	Semi          bool   `json:"semi,omitempty"`
+	SingleQuote   bool   `json:"singleQuote,omitempty"`
 	TrailingComma string `json:"trailingComma,omitempty"` // "none", "es5", "all"
-	PrintWidth   int    `json:"printWidth,omitempty"`
+	PrintWidth    int    `json:"printWidth,omitempty"`
 }
 
 // generateConfig creates Prettier config from a Symphony rule.

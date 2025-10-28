@@ -10,8 +10,8 @@ import (
 // Registry manages available engines.
 // Thread-safe for concurrent access.
 type Registry struct {
-	mu       sync.RWMutex
-	engines  map[string]core.Engine
+	mu        sync.RWMutex
+	engines   map[string]core.Engine
 	factories map[string]EngineFactory
 }
 

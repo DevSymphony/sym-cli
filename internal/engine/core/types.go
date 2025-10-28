@@ -15,7 +15,7 @@ type Rule struct {
 	Severity string                 `json:"severity"` // "error", "warning", "info"
 	Desc     string                 `json:"desc,omitempty"`
 	When     *Selector              `json:"when,omitempty"`
-	Check    map[string]interface{} `json:"check"`  // Engine-specific config
+	Check    map[string]interface{} `json:"check"` // Engine-specific config
 	Remedy   *Remedy                `json:"remedy,omitempty"`
 	Message  string                 `json:"message,omitempty"`
 }
@@ -39,21 +39,21 @@ type Remedy struct {
 
 // ValidationResult is the outcome of validating files against a rule.
 type ValidationResult struct {
-	RuleID     string      `json:"ruleId"`
-	Passed     bool        `json:"passed"`
-	Violations []Violation `json:"violations,omitempty"`
-	Metrics    *Metrics    `json:"metrics,omitempty"`
+	RuleID     string        `json:"ruleId"`
+	Passed     bool          `json:"passed"`
+	Violations []Violation   `json:"violations,omitempty"`
+	Metrics    *Metrics      `json:"metrics,omitempty"`
 	Duration   time.Duration `json:"-"` // Serialized separately
-	Engine     string      `json:"engine"`
-	Language   string      `json:"language,omitempty"`
+	Engine     string        `json:"engine"`
+	Language   string        `json:"language,omitempty"`
 }
 
 // Violation represents a single rule violation.
 type Violation struct {
 	File       string                 `json:"file"`
-	Line       int                    `json:"line"`               // 1-indexed, 0 if N/A
-	Column     int                    `json:"column"`             // 1-indexed, 0 if N/A
-	EndLine    int                    `json:"endLine,omitempty"`  // For multi-line
+	Line       int                    `json:"line"`              // 1-indexed, 0 if N/A
+	Column     int                    `json:"column"`            // 1-indexed, 0 if N/A
+	EndLine    int                    `json:"endLine,omitempty"` // For multi-line
 	EndColumn  int                    `json:"endColumn,omitempty"`
 	Message    string                 `json:"message"`
 	Severity   string                 `json:"severity"` // "error", "warning", "info"

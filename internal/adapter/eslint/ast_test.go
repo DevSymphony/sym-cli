@@ -126,7 +126,7 @@ func TestGenerateESTreeSelector(t *testing.T) {
 		{
 			name: "node with notHas clause",
 			query: &ASTQuery{
-				Node: "FunctionDeclaration",
+				Node:   "FunctionDeclaration",
 				NotHas: []string{"ReturnStatement"},
 			},
 			want: "FunctionDeclaration:has(ReturnStatement)",
