@@ -11,9 +11,15 @@ var (
 
 var rootCmd = &cobra.Command{
 	Use:   "sym",
-	Short: "Symphony - LLM-friendly convention linter",
-	Long: `Symphony는 자연어로 정의된 컨벤션을 검증하는 LLM 친화적 linter입니다.
-코드 스타일, 아키텍처 규칙, RBAC 정책 등을 자연어로 정의하고 자동 검증할 수 있습니다.`,
+	Short: "Symphony - LLM-friendly convention validation tool",
+	Long: `Symphony is an LLM-friendly tool for validating conventions defined in natural language.
+
+Key features:
+- Convert natural language rules into structured policies
+- Validate code compliance with defined conventions
+- Integrate with LLM tools via MCP server
+
+Designed to help LLMs easily understand and apply conventions when writing code.`,
 }
 
 func Execute() error {
