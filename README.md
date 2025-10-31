@@ -23,6 +23,13 @@ Symphony는 GitHub OAuth 인증을 통한 역할 기반 파일 접근 권한 및
 - **자동 저장**: 30초마다 자동 저장 (선택 가능)
 - **안전장치**: 최소 1명의 정책 편집자 보장, 역할 삭제 보호
 - **권한 기반 UI**: 권한에 따른 읽기 전용 모드 자동 적용
+- 자연어 기반 컨벤션 정의
+- **LLM 기반 자동 변환**: OpenAI API로 자연어 규칙을 linter 설정으로 자동 변환
+- **다중 Linter 지원**: ESLint, Checkstyle, PMD 등 여러 linter 설정 파일 동시 생성
+- 코드 스타일 및 아키텍처 규칙 검증
+- RBAC 기반 파일 접근 제어
+- JSON 출력을 통한 LLM 도구 연동
+- 컨텍스트 기반 컨벤션 추출
 
 ### 🔍 코드 컨벤션 검증 (개발 중)
 - **자연어 기반 컨벤션 정의**: `.sym/user-policy.json`에 자연어로 규칙 작성
@@ -88,6 +95,31 @@ sym whoami
 ```
 
 ### 2. 리포지토리 초기화
+자연어 정책을 linter 설정 파일로 자동 변환합니다.
+
+```bash
+# 모든 지원 linter 설정 파일 생성 (출력: <git-root>/.sym)
+sym convert -i user-policy.json --targets all
+
+# JavaScript/TypeScript만
+sym convert -i user-policy.json --targets eslint
+
+# Java만
+sym convert -i user-policy.json --targets checkstyle,pmd
+
+# 생성되는 파일들:
+# - .sym/.eslintrc.json      (JavaScript/TypeScript)
+# - .sym/checkstyle.xml      (Java)
+# - .sym/pmd-ruleset.xml     (Java)
+# - .sym/code-policy.json    (내부 검증용)
+# - .sym/conversion-report.json
+```
+
+**참고**: [Convert 명령어 상세 가이드](docs/CONVERT_USAGE.md)
+
+### 3. 코드 검증
+
+작성한 코드가 컨벤션을 준수하는지 검증합니다.
 
 ```bash
 # Git 리포지토리로 이동
