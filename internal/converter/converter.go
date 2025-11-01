@@ -3,6 +3,7 @@ package converter
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"strings"
 
 	"github.com/DevSymphony/sym-cli/internal/converter/linters"
@@ -12,7 +13,6 @@ import (
 
 // Converter converts user policy (A schema) to code policy (B schema)
 type Converter struct {
-	verbose    bool
 	llmClient  *llm.Client
 	inferencer *llm.Inferencer
 }
@@ -29,10 +29,8 @@ func WithLLMClient(client *llm.Client) ConverterOption {
 }
 
 // NewConverter creates a new converter
-func NewConverter(verbose bool, opts ...ConverterOption) *Converter {
-	c := &Converter{
-		verbose: verbose,
-	}
+func NewConverter(opts ...ConverterOption) *Converter {
+	c := &Converter{}
 
 	for _, opt := range opts {
 		opt(c)
@@ -71,6 +69,51 @@ func (c *Converter) Convert(userPolicy *schema.UserPolicy) (*schema.CodePolicy, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert rule %d: %w", i, err)
 		}
+		codePolicy.Rules = append(codePolicy.Rules, *policyRule)
+	}
+
+	return codePolicy, nil
+}
+
+// convertWithEngines converts user policy to code policy with engine mappings
+func (c *Converter) convertWithEngines(userPolicy *schema.UserPolicy, engineMap map[string]string) (*schema.CodePolicy, error) {
+	if userPolicy == nil {
+		return nil, fmt.Errorf("user policy is nil")
+	}
+
+	codePolicy := &schema.CodePolicy{
+		Version: userPolicy.Version,
+		Rules:   make([]schema.PolicyRule, 0, len(userPolicy.Rules)),
+		Enforce: schema.EnforceSettings{
+			Stages: []string{"pre-commit"},
+			FailOn: []string{"error"},
+		},
+	}
+
+	if codePolicy.Version == "" {
+		codePolicy.Version = "1.0.0"
+	}
+
+	// Convert RBAC
+	if userPolicy.RBAC != nil {
+		codePolicy.RBAC = c.convertRBAC(userPolicy.RBAC)
+	}
+
+	// Convert rules with engine information
+	for i, userRule := range userPolicy.Rules {
+		policyRule, err := c.convertRule(&userRule, userPolicy.Defaults, i)
+		if err != nil {
+			return nil, fmt.Errorf("failed to convert rule %d: %w", i, err)
+		}
+
+		// Update engine field based on mapping
+		if engine, ok := engineMap[userRule.ID]; ok {
+			policyRule.Check["engine"] = engine
+		} else {
+			// Fallback to llm-validator if no mapping found
+			policyRule.Check["engine"] = "llm-validator"
+		}
+
 		codePolicy.Rules = append(codePolicy.Rules, *policyRule)
 	}
 
@@ -230,14 +273,8 @@ func (c *Converter) ConvertMultiTarget(ctx context.Context, userPolicy *schema.U
 		opts.Targets = []string{"all"}
 	}
 
-	// Generate internal code policy first
-	codePolicy, err := c.Convert(userPolicy)
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert to code policy: %w", err)
-	}
-
 	result := &MultiTargetConvertResult{
-		CodePolicy:    codePolicy,
+		CodePolicy:    nil, // Will be generated after linter conversion
 		LinterConfigs: make(map[string]*linters.LinterConfig),
 		Results:       make(map[string]*linters.ConversionResult),
 		Warnings:      []string{},
@@ -249,17 +286,12 @@ func (c *Converter) ConvertMultiTarget(ctx context.Context, userPolicy *schema.U
 		return nil, fmt.Errorf("failed to resolve targets: %w", err)
 	}
 
-	if c.verbose {
-		fmt.Printf("Converting rules for %d linter(s): %v\n", len(targetConverters), c.getConverterNames(targetConverters))
-	}
+	// Aggregate engine mappings: ruleID -> engine name
+	engineMap := make(map[string]string)
 
 	// Convert rules for each target linter
 	for _, converter := range targetConverters {
 		linterName := converter.Name()
-
-		if c.verbose {
-			fmt.Printf("Converting rules for %s...\n", linterName)
-		}
 
 		convResult, err := c.convertForLinter(ctx, userPolicy, converter, opts.ConfidenceThreshold)
 		if err != nil {
@@ -270,11 +302,27 @@ func (c *Converter) ConvertMultiTarget(ctx context.Context, userPolicy *schema.U
 		result.Results[linterName] = convResult
 		result.LinterConfigs[linterName] = convResult.Config
 
+		// Aggregate engine mappings
+		// Priority: first linter that successfully converts wins
+		for ruleID, engine := range convResult.RuleEngineMap {
+			if _, exists := engineMap[ruleID]; !exists || engine != "llm-validator" {
+				engineMap[ruleID] = engine
+			}
+		}
+
 		// Collect warnings
 		for _, warning := range convResult.Warnings {
 			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %s", linterName, warning))
 		}
 	}
+
+	// Generate internal code policy with engine mappings
+	codePolicy, err := c.convertWithEngines(userPolicy, engineMap)
+	if err != nil {
+		return nil, fmt.Errorf("failed to convert to code policy: %w", err)
+	}
+
+	result.CodePolicy = codePolicy
 
 	return result, nil
 }
@@ -286,6 +334,7 @@ func (c *Converter) convertForLinter(ctx context.Context, userPolicy *schema.Use
 		Rules:      []*linters.LinterRule{},
 		Warnings:   []string{},
 		Errors:     []error{},
+		RuleEngineMap: make(map[string]string), // Track which engine handles each rule
 	}
 
 	// Filter rules by language if needed
@@ -294,39 +343,26 @@ func (c *Converter) convertForLinter(ctx context.Context, userPolicy *schema.Use
 	for i, userRule := range userPolicy.Rules {
 		// Check if rule applies to this linter's languages
 		if !c.ruleAppliesToLanguages(userRule, supportedLangs, userPolicy.Defaults) {
-			if c.verbose {
-				fmt.Printf("  Skipping rule %d: not applicable to %s languages\n", i+1, converter.Name())
-			}
 			continue
 		}
 
 		// Infer rule intent using LLM
-		var intent *llm.RuleIntent
-		if c.inferencer != nil {
-			inferResult, err := c.inferencer.InferFromUserRule(ctx, &userRule)
-			if err != nil {
-				result.Warnings = append(result.Warnings, fmt.Sprintf("Rule %d: inference failed: %v", i+1, err))
-				// Use fallback intent
-				intent = c.createFallbackIntent(&userRule)
-			} else {
-				intent = inferResult.Intent
+		if c.inferencer == nil {
+			return nil, fmt.Errorf("LLM client not configured")
+		}
 
-				// Check confidence threshold
-				if intent.Confidence < confidenceThreshold {
-					result.Warnings = append(result.Warnings,
-						fmt.Sprintf("Rule %d: low confidence (%.2f < %.2f): %s",
-							i+1, intent.Confidence, confidenceThreshold, userRule.Say))
-				}
+		inferResult, err := c.inferencer.InferFromUserRule(ctx, &userRule)
+		if err != nil {
+			result.Warnings = append(result.Warnings, fmt.Sprintf("Rule %d (%s): %v", i+1, userRule.ID, err))
+			continue
+		}
 
-				if c.verbose && inferResult.UsedCache {
-					fmt.Printf("  Rule %d: using cached inference\n", i+1)
-				}
-			}
-		} else {
-			// No LLM client, use fallback
-			intent = c.createFallbackIntent(&userRule)
+		intent := inferResult.Intent
+
+		// Check confidence threshold
+		if intent.Confidence < confidenceThreshold {
 			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("Rule %d: no LLM client, using fallback inference", i+1))
+				fmt.Sprintf("Rule %d (%s): low confidence %.2f", i+1, userRule.ID, intent.Confidence))
 		}
 
 		// Convert to linter-specific rule
@@ -338,9 +374,38 @@ func (c *Converter) convertForLinter(ctx context.Context, userPolicy *schema.Use
 
 		result.Rules = append(result.Rules, linterRule)
 
-		if c.verbose {
-			fmt.Printf("  Rule %d: converted successfully (engine: %s, confidence: %.2f)\n",
-				i+1, intent.Engine, intent.Confidence)
+		// Track which engine will validate this rule
+		// Check if the rule has meaningful configuration content
+		hasContent := false
+		if len(linterRule.Config) > 0 {
+			// Check if config has actual rule content (not just empty nested structures)
+			for key, value := range linterRule.Config {
+				if key == "modules" && value != nil {
+					// For Checkstyle, check if modules slice is not empty
+					v := reflect.ValueOf(value)
+					if v.Kind() == reflect.Slice && v.Len() > 0 {
+						hasContent = true
+						break
+					}
+				} else if key == "rules" && value != nil {
+					// For PMD, check if rules array/slice is not empty
+					v := reflect.ValueOf(value)
+					if v.Kind() == reflect.Slice && v.Len() > 0 {
+						hasContent = true
+						break
+					}
+				} else if key != "" && value != nil {
+					// For ESLint and other formats with direct config
+					hasContent = true
+					break
+				}
+			}
+		}
+
+		if hasContent {
+			result.RuleEngineMap[userRule.ID] = converter.Name()
+		} else {
+			result.RuleEngineMap[userRule.ID] = "llm-validator"
 		}
 	}
 
@@ -399,49 +464,6 @@ func (c *Converter) ruleAppliesToLanguages(rule schema.UserRule, supportedLangs 
 	}
 
 	return false
-}
-
-// createFallbackIntent creates a fallback intent when LLM is unavailable
-func (c *Converter) createFallbackIntent(userRule *schema.UserRule) *llm.RuleIntent {
-	intent := &llm.RuleIntent{
-		Engine:     "custom",
-		Category:   userRule.Category,
-		Params:     make(map[string]any),
-		Confidence: 0.5,
-		Reasoning:  "Fallback: no LLM inference available",
-	}
-
-	// Copy params
-	for k, v := range userRule.Params {
-		intent.Params[k] = v
-	}
-
-	// Use category as a hint for engine type
-	if userRule.Category != "" {
-		switch strings.ToLower(userRule.Category) {
-		case "naming":
-			intent.Engine = "pattern"
-		case "formatting", "style":
-			intent.Engine = "style"
-		case "length":
-			intent.Engine = "length"
-		}
-	}
-
-	if intent.Category == "" {
-		intent.Category = "custom"
-	}
-
-	return intent
-}
-
-// getConverterNames returns converter names for logging
-func (c *Converter) getConverterNames(converters []linters.LinterConverter) []string {
-	names := make([]string, len(converters))
-	for i, converter := range converters {
-		names[i] = converter.Name()
-	}
-	return names
 }
 
 // GetAll is a helper to get all registered converters

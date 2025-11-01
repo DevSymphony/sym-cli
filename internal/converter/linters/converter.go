@@ -40,9 +40,10 @@ type LinterConfig struct {
 
 // ConversionResult represents the result of converting rules for a linter
 type ConversionResult struct {
-	LinterName string
-	Config     *LinterConfig
-	Rules      []*LinterRule
-	Warnings   []string // Conversion warnings
-	Errors     []error  // Non-fatal errors
+	LinterName    string
+	Config        *LinterConfig
+	Rules         []*LinterRule
+	Warnings      []string          // Conversion warnings
+	Errors        []error           // Non-fatal errors
+	RuleEngineMap map[string]string // Maps rule ID to engine name (eslint/checkstyle/pmd/llm-validator)
 }

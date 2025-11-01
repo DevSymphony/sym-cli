@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/converter"
@@ -92,7 +91,7 @@ func runLegacyConvert(userPolicy *schema.UserPolicy) error {
 		outputFile = "code-policy.json"
 	}
 
-	conv := converter.NewConverter(verbose)
+	conv := converter.NewConverter()
 
 	fmt.Printf("Converting %d natural language rules into structured policy...\n", len(userPolicy.Rules))
 
@@ -150,7 +149,7 @@ func runMultiTargetConvert(userPolicy *schema.UserPolicy) error {
 	)
 
 	// Create converter with LLM client
-	conv := converter.NewConverter(verbose, converter.WithLLMClient(llmClient))
+	conv := converter.NewConverter(converter.WithLLMClient(llmClient))
 
 	// Setup context with timeout
 	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(convertTimeout*len(userPolicy.Rules))*time.Second)
@@ -206,67 +205,13 @@ func runMultiTargetConvert(userPolicy *schema.UserPolicy) error {
 	fmt.Printf("✓ Generated internal policy: %s\n", codePolicyPath)
 	filesWritten++
 
-	// Write conversion report
-	reportPath := filepath.Join(convertOutputDir, "conversion-report.json")
-	report := map[string]interface{}{
-		"timestamp":            time.Now().Format(time.RFC3339),
-		"input_file":           convertInputFile,
-		"total_rules":          len(userPolicy.Rules),
-		"targets":              convertTargets,
-		"openai_model":         convertOpenAIModel,
-		"confidence_threshold": convertConfidenceThreshold,
-		"linters":              make(map[string]interface{}),
-		"warnings":             result.Warnings,
-	}
-
-	for linterName, convResult := range result.Results {
-		report["linters"].(map[string]interface{})[linterName] = map[string]interface{}{
-			"rules_generated": len(convResult.Rules),
-			"warnings":        len(convResult.Warnings),
-			"errors":          len(convResult.Errors),
-		}
-	}
-
-	reportJSON, err := json.MarshalIndent(report, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize report: %w", err)
-	}
-
-	if err := os.WriteFile(reportPath, reportJSON, 0644); err != nil {
-		return fmt.Errorf("failed to write report: %w", err)
-	}
-
-	fmt.Printf("✓ Generated conversion report: %s\n", reportPath)
-	filesWritten++
-
 	// Print summary
-	fmt.Printf("\n=== Conversion Summary ===\n")
-	fmt.Printf("Files written: %d\n", filesWritten)
-	fmt.Printf("Total warnings: %d\n", len(result.Warnings))
+	fmt.Printf("\n✓ Conversion complete: %d files written\n", filesWritten)
 
-	// Print warnings if any
 	if len(result.Warnings) > 0 {
-		fmt.Println("\nWarnings:")
+		fmt.Printf("\nWarnings (%d):\n", len(result.Warnings))
 		for _, warning := range result.Warnings {
 			fmt.Printf("  ⚠ %s\n", warning)
-		}
-	}
-
-	// Print detailed results
-	if verbose {
-		fmt.Println("\nDetailed Results:")
-		for linterName, convResult := range result.Results {
-			fmt.Printf("\n%s:\n", strings.ToUpper(linterName))
-			fmt.Printf("  Rules: %d\n", len(convResult.Rules))
-			fmt.Printf("  Warnings: %d\n", len(convResult.Warnings))
-			fmt.Printf("  Errors: %d\n", len(convResult.Errors))
-
-			if len(convResult.Errors) > 0 {
-				fmt.Println("  Errors:")
-				for _, err := range convResult.Errors {
-					fmt.Printf("    - %v\n", err)
-				}
-			}
 		}
 	}
 
