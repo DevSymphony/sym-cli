@@ -8,11 +8,11 @@ import (
 	"io/fs"
 	"net/http"
 	"strings"
-	"symphony/internal/config"
-	"symphony/internal/git"
-	"symphony/internal/github"
-	"symphony/internal/policy"
-	"symphony/internal/roles"
+	"github.com/DevSymphony/sym-cli/internal/config"
+	"github.com/DevSymphony/sym-cli/internal/git"
+	"github.com/DevSymphony/sym-cli/internal/github"
+	"github.com/DevSymphony/sym-cli/internal/policy"
+	"github.com/DevSymphony/sym-cli/internal/roles"
 
 	"github.com/pkg/browser"
 )

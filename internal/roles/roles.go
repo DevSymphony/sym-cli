@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"symphony/internal/git"
+	"github.com/DevSymphony/sym-cli/internal/git"
 )
 
 // Roles represents a map of role names to lists of usernames

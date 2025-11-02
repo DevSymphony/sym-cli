@@ -5,8 +5,8 @@ import (
 	_ "embed"
 	"fmt"
 	"net/http"
-	"symphony/internal/config"
-	"symphony/internal/github"
+	"github.com/DevSymphony/sym-cli/internal/config"
+	"github.com/DevSymphony/sym-cli/internal/github"
 	"time"
 
 	"github.com/pkg/browser"
