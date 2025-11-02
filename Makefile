@@ -1,4 +1,5 @@
-.PHONY: build test install clean fmt lint tidy help build-all setup
+# symphonyclient integration: Added CSS build targets
+.PHONY: build test install clean fmt lint tidy help build-all setup build-css install-css watch-css
 
 BINARY_NAME=sym
 BUILD_DIR=bin
@@ -8,8 +9,10 @@ LDFLAGS=-ldflags "-X main.Version=$(VERSION)"
 
 help:
 	@echo "Available targets:"
-	@echo "  build      - Build the binary for current platform"
+	@echo "  build      - Build the binary for current platform (includes CSS)"
 	@echo "  build-all  - Build for all platforms (Linux, macOS, Windows)"
+	@echo "  build-css  - Build Tailwind CSS for dashboard"
+	@echo "  watch-css  - Watch and rebuild CSS on changes"
 	@echo "  test       - Run tests"
 	@echo "  install    - Install the binary to GOPATH/bin"
 	@echo "  clean      - Remove build artifacts"
@@ -18,13 +21,27 @@ help:
 	@echo "  tidy       - Tidy dependencies"
 	@echo "  setup      - Setup development environment"
 
-build:
+# symphonyclient integration: CSS build for dashboard
+install-css:
+	@echo "Installing CSS dependencies..."
+	@npm install
+
+build-css: install-css
+	@echo "Building Tailwind CSS..."
+	@npm run build:css
+	@echo "CSS build complete"
+
+watch-css: install-css
+	@echo "Watching CSS changes..."
+	@npm run watch:css
+
+build: build-css
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
 	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
 
-build-all:
+build-all: build-css
 	@echo "Building for all platforms..."
 	@mkdir -p $(BUILD_DIR)
 	@echo "Building Linux amd64..."
@@ -54,6 +71,7 @@ clean:
 	@echo "Cleaning..."
 	@rm -rf $(BUILD_DIR)
 	@rm -f coverage.out coverage.html
+	@rm -rf node_modules
 	@echo "Clean complete"
 
 fmt:
@@ -75,7 +93,7 @@ tidy:
 	@echo "Tidy complete"
 
 # Development helpers
-setup: tidy
+setup: tidy install-css
 	@echo "Setting up development environment..."
 	@go mod download
 	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
