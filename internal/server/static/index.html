@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symphony Policy Editor</title>
+    <link rel="stylesheet" href="/styles/output.css">
+</head>
+<body class="bg-gray-100 text-slate-700 antialiased">
+
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <main class="max-w-6xl mx-auto p-4 sm:p-6 lg:p-8">
+        <!-- Header -->
+        <header class="bg-white rounded-lg shadow-md p-6 mb-6">
+            <div class="flex justify-between items-center">
+                <div>
+                    <h1 class="text-3xl sm:text-4xl font-bold text-slate-900 flex items-center gap-2">
+                        <img src="/icons/musical-note.svg" alt="Symphony" class="w-8 h-8 sm:w-10 sm:h-10 text-purple-600">
+                        Symphony Policy Editor
+                    </h1>
+                    <p class="mt-2 text-slate-500">코딩 컨벤션 및 정책 관리 도구</p>
+                </div>
+                <div class="text-right">
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center text-white font-bold text-lg" id="user-avatar"></div>
+                        <div class="flex items-center gap-2">
+                            <div class="font-semibold text-slate-800" id="user-name">Loading...</div>
+                            <span class="badge text-xs px-2 py-1 rounded-full" id="user-role-badge">...</span>
+                        </div>
+                    </div>
+                    <div class="text-xs text-slate-500" id="repo-info">📁 Loading...</div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Action Buttons -->
+        <div class="flex gap-3 mb-6">
+            <button id="save-btn" class="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg font-semibold flex items-center gap-2 shadow-md transition-all">
+                <img src="/icons/save.svg" alt="Save" class="w-5 h-5">
+                저장
+            </button>
+            <button id="reload-btn" class="px-6 py-3 bg-gray-600 hover:bg-gray-500 text-white rounded-lg font-semibold flex items-center gap-2 shadow-md transition-all">
+                <img src="/icons/refresh.svg" alt="Refresh" class="w-5 h-5">
+                새로고침
+            </button>
+            <button id="template-btn" class="px-6 py-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-semibold flex items-center gap-2 shadow-md transition-all">
+                <img src="/icons/template.svg" alt="Template" class="w-5 h-5">
+                템플릿
+            </button>
+            <button id="history-btn" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold flex items-center gap-2 shadow-md transition-all">
+                <img src="/icons/history.svg" alt="History" class="w-5 h-5">
+                히스토리
+            </button>
+        </div>
+
+        <!-- User Management Section -->
+        <section id="user-management" class="mb-8">
+            <h2 class="text-2xl font-semibold text-slate-900 mb-4 border-b border-gray-300 pb-2 flex items-center gap-2">
+                <img src="/icons/users.svg" alt="Users" class="w-6 h-6">
+                사용자 및 역할 관리
+            </h2>
+            <details class="bg-white rounded-lg border border-gray-300" open>
+                <summary class="p-4 cursor-pointer font-semibold text-lg text-slate-800 hover:bg-gray-50 rounded-t-lg">사용자 목록</summary>
+                <div class="p-6 border-t border-gray-300">
+                    <div class="flex justify-between items-center mb-4">
+                        <input type="text" id="user-search" placeholder="🔍 사용자 검색..." class="flex-1 mr-4 px-4 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        <button id="add-user-btn" class="px-4 py-2 bg-green-600 hover:bg-green-500 text-white rounded-md text-sm font-medium">+ 새 사용자 추가</button>
+                    </div>
+                    <div id="users-container" class="space-y-2"></div>
+                </div>
+            </details>
+        </section>
+
+        <!-- Global Settings Section -->
+        <section id="global-settings" class="mb-8">
+            <h2 class="text-2xl font-semibold text-slate-900 mb-4 border-b border-gray-300 pb-2 flex items-center gap-2">
+                <img src="/icons/settings.svg" alt="Settings" class="w-6 h-6">
+                전역 설정
+            </h2>
+            <div class="space-y-4">
+                <details class="bg-white rounded-lg border border-gray-300">
+                    <summary class="p-4 cursor-pointer font-semibold text-lg text-slate-800 hover:bg-gray-50 rounded-t-lg">역할 기반 접근 제어 (RBAC)</summary>
+                    <div class="p-6 border-t border-gray-300">
+                        <div id="rbac-roles-container" class="space-y-4"></div>
+                        <button type="button" id="add-role-btn" class="mt-4 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium">역할 추가</button>
+                    </div>
+                </details>
+
+                <details class="bg-white rounded-lg border border-gray-300">
+                    <summary class="p-4 cursor-pointer font-semibold text-lg text-slate-800 hover:bg-gray-50 rounded-t-lg">전역 기본값 (Defaults)</summary>
+                    <div class="p-6 border-t border-gray-300 grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div class="form-group">
+                            <label for="defaults-languages" class="block text-sm font-medium text-slate-600 mb-1">대상 언어 (쉼표로 구분)</label>
+                            <input type="text" id="defaults-languages" placeholder="javascript, typescript" class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                        </div>
+                        <div class="form-group">
+                            <label for="defaults-severity" class="block text-sm font-medium text-slate-600 mb-1">기본 심각도</label>
+                            <select id="defaults-severity" class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                <option value="">기본값</option>
+                                <option value="error">Error</option>
+                                <option value="warning">Warning</option>
+                                <option value="info">Info</option>
+                            </select>
+                        </div>
+                        <div class="form-group md:col-span-2">
+                            <label for="defaults-autofix" class="flex items-center space-x-2 text-sm font-medium text-slate-600">
+                                <input type="checkbox" id="defaults-autofix" class="h-4 w-4 rounded bg-gray-200 border-gray-300 text-blue-600 focus:ring-blue-500">
+                                <span>자동 수정 (Autofix) 활성화</span>
+                            </label>
+                        </div>
+                    </div>
+                </details>
+
+                <details class="bg-white rounded-lg border border-gray-300">
+                    <summary class="p-4 cursor-pointer font-semibold text-lg text-slate-800 hover:bg-gray-50 rounded-t-lg">정책 편집기 설정</summary>
+                    <div class="p-6 border-t border-gray-300 space-y-4">
+                        <div>
+                            <label for="policy-path-input" class="block text-sm font-medium text-slate-600 mb-2">정책 파일 위치</label>
+                            <input type="text" id="policy-path-input" placeholder=".github/user-policy.json" class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <p class="text-xs text-slate-500 mt-1">정책 파일의 상대 경로를 지정합니다.</p>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="auto-save-checkbox" class="h-4 w-4 rounded bg-gray-200 border-gray-300 text-blue-600 focus:ring-blue-500">
+                            <label for="auto-save-checkbox" class="text-sm text-slate-600">자동 저장 (30초마다)</label>
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input type="checkbox" id="confirm-save-checkbox" class="h-4 w-4 rounded bg-gray-200 border-gray-300 text-blue-600 focus:ring-blue-500" checked>
+                            <label for="confirm-save-checkbox" class="text-sm text-slate-600">저장 전 확인 다이얼로그</label>
+                        </div>
+                    </div>
+                </details>
+            </div>
+        </section>
+
+        <!-- Rules Section -->
+        <section id="rules-section">
+            <header class="flex items-center justify-between gap-4 mb-4 pb-2 border-b border-gray-300">
+                <h2 class="text-2xl font-semibold text-slate-900 flex items-center gap-2">
+                    <img src="/icons/rules.svg" alt="Rules" class="w-6 h-6">
+                    규칙 관리
+                </h2>
+                <div class="flex gap-2">
+                    <input type="text" id="rule-search" placeholder="🔍 규칙 검색..." class="px-4 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                    <select id="category-filter" class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500">
+                        <option value="">전체 카테고리</option>
+                        <option value="naming">Naming</option>
+                        <option value="formatting">Formatting</option>
+                        <option value="error_handling">Error Handling</option>
+                        <option value="security">Security</option>
+                        <option value="testing">Testing</option>
+                        <option value="documentation">Documentation</option>
+                        <option value="performance">Performance</option>
+                        <option value="custom">Custom</option>
+                    </select>
+                    <button type="button" id="add-rule-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium">새 규칙 추가</button>
+                </div>
+            </header>
+            <div class="mb-2 text-sm text-slate-600">
+                <span>총 <strong id="total-rules-count">0</strong>개 규칙</span>
+                <span class="mx-2">|</span>
+                <span>표시 중: <strong id="filtered-rules-count">0</strong>개</span>
+            </div>
+            <div id="rules-container" class="space-y-3"></div>
+            <button type="button" id="add-rule-btn-bottom" class="mt-4 w-full flex justify-center items-center gap-2 p-3 border-2 border-dashed border-gray-300 rounded-lg text-slate-500 hover:bg-gray-200 hover:border-blue-500 hover:text-blue-600 transition-colors">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                    <path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" />
+                </svg>
+                <span>새 규칙 추가</span>
+            </button>
+        </section>
+    </main>
+
+    <!-- Template Modal -->
+    <div id="template-modal" class="fixed inset-0 modal-overlay flex items-center justify-center p-4 z-50 hidden">
+        <div class="w-full max-w-2xl bg-white rounded-lg shadow-xl border border-gray-300">
+            <header class="p-6 flex items-center justify-between border-b border-gray-300">
+                <h3 class="text-xl font-semibold text-slate-900 flex items-center gap-2">
+                    <img src="/icons/template.svg" alt="Template" class="w-6 h-6">
+                    정책 템플릿 선택
+                </h3>
+                <button id="close-template-modal" class="text-slate-500 hover:text-slate-800 text-2xl">&times;</button>
+            </header>
+            <div class="p-6 max-h-96 overflow-y-auto">
+                <div id="templates-list" class="space-y-3"></div>
+            </div>
+            <div class="p-6 border-t border-gray-300 bg-amber-50">
+                <p class="text-sm text-amber-800">⚠️ 템플릿을 적용하면 현재 정책이 덮어써집니다. 계속하시겠습니까?</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- History Modal -->
+    <div id="history-modal" class="fixed inset-0 modal-overlay flex items-center justify-center p-4 z-50 hidden">
+        <div class="w-full max-w-3xl bg-white rounded-lg shadow-xl border border-gray-300">
+            <header class="p-6 flex items-center justify-between border-b border-gray-300">
+                <h3 class="text-xl font-semibold text-slate-900 flex items-center gap-2">
+                    <img src="/icons/history.svg" alt="History" class="w-6 h-6">
+                    정책 변경 히스토리
+                </h3>
+                <button id="close-history-modal" class="text-slate-500 hover:text-slate-800 text-2xl">&times;</button>
+            </header>
+            <div class="p-6 max-h-96 overflow-y-auto">
+                <div id="history-list" class="space-y-4"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Floating Save Button -->
+    <button id="floating-save-btn" class="fixed bottom-8 right-8 w-16 h-16 bg-blue-600 hover:bg-blue-500 text-white rounded-full shadow-2xl flex items-center justify-center transition-all hover:scale-110 z-50" title="저장 (Ctrl+S)">
+        <img src="/icons/save.svg" alt="Save" class="w-8 h-8">
+    </button>
+
+    <script src="/policy-editor.js"></script>
+</body>
+</html>

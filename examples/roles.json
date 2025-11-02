@@ -1,0 +1,15 @@
+{
+  "admin": [
+    "alice",
+    "bob"
+  ],
+  "developer": [
+    "charlie",
+    "david",
+    "eve"
+  ],
+  "viewer": [
+    "frank",
+    "grace"
+  ]
+}
