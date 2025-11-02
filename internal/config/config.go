@@ -20,7 +20,7 @@ type Config struct {
 	ClientID     string `json:"client_id,omitempty"`
 	ClientSecret string `json:"client_secret,omitempty"`
 
-	PolicyPath string `json:"policy_path,omitempty"` // Custom path for user-policy.json (default: .github/user-policy.json)
+	PolicyPath string `json:"policy_path,omitempty"` // symphonyclient integration: Custom path for user-policy.json (default: .sym/user-policy.json)
 }
 
 type Token struct {
@@ -38,7 +38,8 @@ func init() {
 	if runtime.GOOS == "windows" {
 		homeDir = os.Getenv("USERPROFILE")
 	}
-	configDir = filepath.Join(homeDir, ".config", "symphony")
+	// symphonyclient integration: symphony → sym directory
+	configDir = filepath.Join(homeDir, ".config", "sym")
 	configPath = filepath.Join(configDir, "config.json")
 	tokenPath = filepath.Join(configDir, "token.json")
 }
@@ -53,7 +54,8 @@ func LoadConfig() (*Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("configuration not found. Run 'symphony config' to set up")
+			// symphonyclient integration: symphony → sym command
+			return nil, fmt.Errorf("configuration not found. Run 'sym config' to set up")
 		}
 		return nil, err
 	}
@@ -85,7 +87,8 @@ func LoadToken() (*Token, error) {
 	data, err := os.ReadFile(tokenPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("not logged in. Run 'symphony login' first")
+			// symphonyclient integration: symphony → sym command
+			return nil, fmt.Errorf("not logged in. Run 'sym login' first")
 		}
 		return nil, err
 	}
