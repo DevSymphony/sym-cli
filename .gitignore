@@ -1,3 +1,6 @@
 .claude/
 bin/
 coverage.out
+coverage.html
+node_modules/
+.sym/
