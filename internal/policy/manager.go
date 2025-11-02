@@ -45,7 +45,8 @@ type Rule struct {
 	Example   string   `json:"example,omitempty"` // Optional example code
 }
 
-var defaultPolicyPath = ".github/user-policy.json"
+// symphonyclient integration: .github → .sym directory
+var defaultPolicyPath = ".sym/user-policy.json"
 
 // GetPolicyPath returns the configured or default policy file path
 func GetPolicyPath(customPath string) (string, error) {

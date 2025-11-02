@@ -18,10 +18,11 @@ func GetRolesPath() (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(repoRoot, ".github", "roles.json"), nil
+	// symphonyclient integration: .github → .sym directory
+	return filepath.Join(repoRoot, ".sym", "roles.json"), nil
 }
 
-// LoadRoles loads the roles from the .github/roles.json file
+// LoadRoles loads the roles from the .sym/roles.json file
 func LoadRoles() (Roles, error) {
 	rolesPath, err := GetRolesPath()
 	if err != nil {
@@ -31,7 +32,8 @@ func LoadRoles() (Roles, error) {
 	data, err := os.ReadFile(rolesPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("roles.json not found. Run 'symphony init' to create it")
+			// symphonyclient integration: symphony → sym command
+			return nil, fmt.Errorf("roles.json not found. Run 'sym init' to create it")
 		}
 		return nil, err
 	}
@@ -44,16 +46,16 @@ func LoadRoles() (Roles, error) {
 	return roles, nil
 }
 
-// SaveRoles saves the roles to the .github/roles.json file
+// SaveRoles saves the roles to the .sym/roles.json file
 func SaveRoles(roles Roles) error {
 	rolesPath, err := GetRolesPath()
 	if err != nil {
 		return err
 	}
 
-	// Ensure .github directory exists
-	githubDir := filepath.Dir(rolesPath)
-	if err := os.MkdirAll(githubDir, 0755); err != nil {
+	// symphonyclient integration: Ensure .sym directory exists
+	symDir := filepath.Dir(rolesPath)
+	if err := os.MkdirAll(symDir, 0755); err != nil {
 		return err
 	}
 
