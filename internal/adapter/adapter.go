@@ -37,7 +37,7 @@ type Adapter interface {
 // InstallConfig holds tool installation settings.
 type InstallConfig struct {
 	// ToolsDir is where to install the tool.
-	// Default: ~/.symphony/tools
+	// Default: ~/.sym/tools
 	ToolsDir string
 
 	// Version is the tool version to install.

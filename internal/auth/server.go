@@ -29,7 +29,7 @@ type StatusResponse struct {
 	GithubName     string `json:"github_name,omitempty"`
 }
 
-// AuthenticateWithServer performs authentication using the Symphony auth server
+// AuthenticateWithServer performs authentication using the Sym auth server
 func AuthenticateWithServer(serverURL string) (string, string, error) {
 	// 1. Start authentication session
 	session, err := startAuthSession(serverURL)

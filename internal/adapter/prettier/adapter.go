@@ -27,7 +27,8 @@ type Adapter struct {
 func NewAdapter(toolsDir, workDir string) *Adapter {
 	if toolsDir == "" {
 		home, _ := os.UserHomeDir()
-		toolsDir = filepath.Join(home, ".symphony", "tools")
+		// symphonyclient integration: .symphony → .sym directory
+		toolsDir = filepath.Join(home, ".sym", "tools")
 	}
 
 	return &Adapter{
