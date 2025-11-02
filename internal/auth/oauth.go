@@ -16,8 +16,9 @@ import (
 var loginSuccessHTML string
 
 const (
-	callbackPort = 3000
-	redirectURI  = "http://localhost:3000/oauth/callback"
+	// symphonyclient integration: default port 3000 → 8787
+	callbackPort = 8787
+	redirectURI  = "http://localhost:8787/oauth/callback"
 )
 
 // StartOAuthFlow initiates the OAuth flow and waits for the callback

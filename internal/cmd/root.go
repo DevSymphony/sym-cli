@@ -1,35 +1,46 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
-var (
-	cfgFile string
-	verbose bool
-)
-
+// symphonyclient integration: Updated root command from symphony to sym
 var rootCmd = &cobra.Command{
 	Use:   "sym",
-	Short: "Symphony - LLM-friendly convention linter",
-	Long: `Symphony는 자연어로 정의된 컨벤션을 검증하는 LLM 친화적 linter입니다.
-코드 스타일, 아키텍처 규칙, RBAC 정책 등을 자연어로 정의하고 자동 검증할 수 있습니다.`,
+	Short: "sym - Code Convention Management Tool with RBAC",
+	Long: `sym is a unified CLI tool for code convention validation and role-based access control.
+
+Features:
+  - Natural language policy definition (A → B schema conversion)
+  - Multi-engine code validation (Pattern, Length, Style, AST)
+  - Role-based file access control with GitHub OAuth
+  - Web dashboard for policy and role management
+  - Template system for popular frameworks`,
 }
 
-func Execute() error {
-	return rootCmd.Execute()
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	// symphonyclient integration: Added symphonyclient commands
+	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(logoutCmd)
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(dashboardCmd)
+	rootCmd.AddCommand(myRoleCmd)
+	rootCmd.AddCommand(whoamiCmd)
+	rootCmd.AddCommand(policyCmd)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .sym/config.yaml)")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-}
-
-func initConfig() {
-	if cfgFile != "" {
-		// TODO: Use config file from the flag
-		_ = cfgFile // Placeholder to avoid unused variable warning
-	}
+	// sym-cli core commands
+	rootCmd.AddCommand(convertCmd)
+	rootCmd.AddCommand(validateCmd)
+	rootCmd.AddCommand(exportCmd)
 }
