@@ -148,17 +148,17 @@ function getAvailableRoles() {
 }
 
 const CATEGORY_COLORS = {
-    'naming': 'border-blue-500',
-    'formatting': 'border-purple-500',
-    'error_handling': 'border-amber-500',
-    'security': 'border-red-500',
-    'testing': 'border-teal-500',
-    'documentation': 'border-green-500',
-    'dependency': 'border-pink-500',
-    'commit': 'border-cyan-500',
-    'performance': 'border-orange-500',
-    'custom': 'border-slate-500',
-    'default': 'border-gray-300'
+    'naming': 'border-gray-400',
+    'formatting': 'border-gray-400',
+    'error_handling': 'border-gray-400',
+    'security': 'border-gray-400',
+    'testing': 'border-gray-400',
+    'documentation': 'border-gray-400',
+    'dependency': 'border-gray-400',
+    'commit': 'border-gray-400',
+    'performance': 'border-gray-400',
+    'custom': 'border-gray-400',
+    'default': 'border-gray-400'
 };
 
 function getCategoryColorClass(category) {
