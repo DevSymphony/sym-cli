@@ -6,44 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"github.com/DevSymphony/sym-cli/internal/git"
+	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration: use unified schema types
 )
-
-// Policy represents the user-policy.json structure
-type Policy struct {
-	Version  string            `json:"version,omitempty"`
-	RBAC     *RBAC             `json:"rbac,omitempty"`
-	Defaults *Defaults         `json:"defaults,omitempty"`
-	Rules    []Rule            `json:"rules"`
-}
-
-// RBAC represents role-based access control settings
-type RBAC struct {
-	Roles map[string]RBACRole `json:"roles"`
-}
-
-// RBACRole represents a single RBAC role
-type RBACRole struct {
-	AllowWrite    []string `json:"allowWrite,omitempty"`
-	DenyWrite     []string `json:"denyWrite,omitempty"`
-	CanEditPolicy bool     `json:"canEditPolicy,omitempty"` // Permission to edit policy
-	CanEditRoles  bool     `json:"canEditRoles,omitempty"`  // Permission to edit roles
-}
-
-// Defaults represents global default settings
-type Defaults struct {
-	Languages []string `json:"languages,omitempty"`
-	Severity  string   `json:"severity,omitempty"`
-	Autofix   bool     `json:"autofix,omitempty"`
-}
-
-// Rule represents a single coding rule
-type Rule struct {
-	No        int      `json:"no"`
-	Say       string   `json:"say"`
-	Category  string   `json:"category,omitempty"`
-	Languages []string `json:"languages,omitempty"`
-	Example   string   `json:"example,omitempty"` // Optional example code
-}
 
 // symphonyclient integration: .github → .sym directory
 var defaultPolicyPath = ".sym/user-policy.json"
@@ -64,7 +28,7 @@ func GetPolicyPath(customPath string) (string, error) {
 }
 
 // LoadPolicy loads the policy from the configured path
-func LoadPolicy(customPath string) (*Policy, error) {
+func LoadPolicy(customPath string) (*schema.UserPolicy, error) {
 	policyPath, err := GetPolicyPath(customPath)
 	if err != nil {
 		return nil, err
@@ -74,15 +38,16 @@ func LoadPolicy(customPath string) (*Policy, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Return empty policy if file doesn't exist
-			return &Policy{
+			// symphonyclient integration: use schema.UserRule
+			return &schema.UserPolicy{
 				Version: "1.0.0",
-				Rules:   []Rule{},
+				Rules:   []schema.UserRule{},
 			}, nil
 		}
 		return nil, err
 	}
 
-	var policy Policy
+	var policy schema.UserPolicy
 	if err := json.Unmarshal(data, &policy); err != nil {
 		return nil, fmt.Errorf("invalid policy file: %w", err)
 	}
@@ -91,7 +56,7 @@ func LoadPolicy(customPath string) (*Policy, error) {
 }
 
 // SavePolicy saves the policy to the configured path
-func SavePolicy(policy *Policy, customPath string) error {
+func SavePolicy(policy *schema.UserPolicy, customPath string) error {
 	policyPath, err := GetPolicyPath(customPath)
 	if err != nil {
 		return err
@@ -117,7 +82,7 @@ func SavePolicy(policy *Policy, customPath string) error {
 }
 
 // ValidatePolicy validates the policy structure
-func ValidatePolicy(policy *Policy) error {
+func ValidatePolicy(policy *schema.UserPolicy) error {
 	if policy == nil {
 		return fmt.Errorf("policy cannot be nil")
 	}
