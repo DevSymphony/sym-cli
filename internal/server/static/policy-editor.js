@@ -896,6 +896,21 @@ async function loadSettings() {
         const pathData = await API.getPolicyPath();
         appState.settings.policyPath = pathData.policyPath || '';
         document.getElementById('policy-path-input').value = appState.settings.policyPath;
+
+        // Load settings from localStorage
+        const savedAutoSave = localStorage.getItem('autoSave');
+        const savedConfirmSave = localStorage.getItem('confirmSave');
+
+        if (savedAutoSave !== null) {
+            appState.settings.autoSave = savedAutoSave === 'true';
+        }
+        if (savedConfirmSave !== null) {
+            appState.settings.confirmSave = savedConfirmSave === 'true';
+        }
+
+        // Update checkboxes
+        document.getElementById('auto-save-checkbox').checked = appState.settings.autoSave;
+        document.getElementById('confirm-save-checkbox').checked = appState.settings.confirmSave;
     } catch (error) {
         console.error('Failed to load settings:', error);
     }
@@ -913,6 +928,10 @@ async function saveSettings() {
 
         appState.settings.autoSave = document.getElementById('auto-save-checkbox').checked;
         appState.settings.confirmSave = document.getElementById('confirm-save-checkbox').checked;
+
+        // Save to localStorage
+        localStorage.setItem('autoSave', appState.settings.autoSave);
+        localStorage.setItem('confirmSave', appState.settings.confirmSave);
 
         hideModal('settings-modal');
     } catch (error) {
@@ -1084,6 +1103,31 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize
     init();
 
+    // Auto-save timer (30 seconds)
+    let autoSaveTimer = null;
+    function startAutoSave() {
+        if (autoSaveTimer) clearInterval(autoSaveTimer);
+        autoSaveTimer = setInterval(async () => {
+            if (appState.settings.autoSave && appState.isDirty) {
+                try {
+                    // Temporarily disable confirmation for auto-save
+                    const originalConfirmSave = appState.settings.confirmSave;
+                    appState.settings.confirmSave = false;
+
+                    await savePolicy();
+                    showToast('자동 저장되었습니다', 'info');
+
+                    // Restore confirmation setting
+                    appState.settings.confirmSave = originalConfirmSave;
+                } catch (error) {
+                    console.error('Auto-save failed:', error);
+                    showToast('자동 저장 실패: ' + error.message, 'error');
+                }
+            }
+        }, 30000); // 30 seconds
+    }
+    startAutoSave();
+
     // Save button
     document.getElementById('save-btn').addEventListener('click', savePolicy);
 
@@ -1125,6 +1169,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // RBAC management
     document.getElementById('add-role-btn').addEventListener('click', handleAddRBACRole);
+
+    // Settings checkboxes - save to localStorage on change
+    document.getElementById('auto-save-checkbox').addEventListener('change', (e) => {
+        appState.settings.autoSave = e.target.checked;
+        localStorage.setItem('autoSave', appState.settings.autoSave);
+        showToast(appState.settings.autoSave ? '자동 저장이 활성화되었습니다' : '자동 저장이 비활성화되었습니다', 'info');
+    });
+    document.getElementById('confirm-save-checkbox').addEventListener('change', (e) => {
+        appState.settings.confirmSave = e.target.checked;
+        localStorage.setItem('confirmSave', appState.settings.confirmSave);
+    });
 
     // Modal close buttons
     document.getElementById('close-template-modal').addEventListener('click', () => hideModal('template-modal'));
