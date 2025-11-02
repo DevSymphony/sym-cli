@@ -79,7 +79,7 @@ func runPolicyPath(cmd *cobra.Command, args []string) {
 		// Show current path
 		policyPath := cfg.PolicyPath
 		if policyPath == "" {
-			policyPath = ".github/user-policy.json (default)"
+			policyPath = ".sym/user-policy.json (default)"
 		}
 
 		fmt.Printf("Current policy path: %s\n", policyPath)

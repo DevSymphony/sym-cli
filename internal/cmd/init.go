@@ -16,14 +16,14 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize roles.json for the current repository",
-	Long: `Create a .github/roles.json file in the current repository and
+	Long: `Create a .sym/roles.json file in the current repository and
 automatically set the current user as the first admin.
 
 This command:
   1. Checks if you're logged in
   2. Gets your GitHub username
   3. Verifies the current directory is a git repository
-  4. Creates .github/roles.json with you as admin
+  4. Creates .sym/roles.json with you as admin
   5. Prompts you to commit and push the changes`,
 	Run: runInit,
 }
@@ -110,9 +110,9 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	fmt.Println("\nNext steps:")
 	fmt.Println("  1. Review the files:")
-	fmt.Println("     cat .github/roles.json")
-	fmt.Println("     cat .github/user-policy.json")
-	fmt.Println("  2. Commit: git add .github/ && git commit -m 'Initialize Symphony roles and policy'")
+	fmt.Println("     cat .sym/roles.json")
+	fmt.Println("     cat .sym/user-policy.json")
+	fmt.Println("  2. Commit: git add .sym/ && git commit -m 'Initialize Symphony roles and policy'")
 	fmt.Println("  3. Push: git push")
 	fmt.Println("\nAfter pushing, team members can clone and use 'sym my-role' to check their access.")
 }
@@ -143,7 +143,7 @@ func createDefaultPolicy(cfg *config.Config) error {
 				},
 				"developer": {
 					AllowWrite:    []string{"src/**", "tests/**", "docs/**"},
-					DenyWrite:     []string{".github/**", "config/**", "*.config.js", "*.config.ts"},
+					DenyWrite:     []string{".sym/**", "config/**", "*.config.js", "*.config.ts"},
 					CanEditPolicy: false,
 					CanEditRoles:  false,
 				},

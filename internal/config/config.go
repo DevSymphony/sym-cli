@@ -143,8 +143,8 @@ func GetTokenPath() string {
 // GetAuthMode returns the authentication mode (defaults to "server")
 func (c *Config) GetAuthMode() string {
 	if c.AuthMode == "" {
-		// Check environment variable
-		if mode := os.Getenv("SYMPHONY_AUTH_MODE"); mode != "" {
+		// symphonyclient integration: SYMPHONY → SYM environment variable
+		if mode := os.Getenv("SYM_AUTH_MODE"); mode != "" {
 			return mode
 		}
 		return "server" // default
@@ -155,11 +155,11 @@ func (c *Config) GetAuthMode() string {
 // GetServerURL returns the auth server URL (with defaults)
 func (c *Config) GetServerURL() string {
 	if c.ServerURL == "" {
-		// Check environment variable
-		if url := os.Getenv("SYMPHONY_SERVER_URL"); url != "" {
+		// symphonyclient integration: SYMPHONY → SYM environment variable
+		if url := os.Getenv("SYM_SERVER_URL"); url != "" {
 			return url
 		}
-		// Default server URL
+		// Default server URL (symphonyclient auth server - kept for compatibility)
 		return "https://symphony-server-98207.web.app"
 	}
 	return c.ServerURL
