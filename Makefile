@@ -38,8 +38,13 @@ watch-css: install-css
 build: build-css
 	@echo "Building $(BINARY_NAME)..."
 	@mkdir -p $(BUILD_DIR)
+ifeq ($(OS),Windows_NT)
+	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME).exe $(MAIN_PATH)
+	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME).exe"
+else
 	@go build $(LDFLAGS) -o $(BUILD_DIR)/$(BINARY_NAME) $(MAIN_PATH)
 	@echo "Build complete: $(BUILD_DIR)/$(BINARY_NAME)"
+endif
 
 build-all: build-css
 	@echo "Building for all platforms..."
