@@ -1,13 +1,10 @@
 package main
 
 import (
-	"os"
-
 	"github.com/DevSymphony/sym-cli/internal/cmd"
 )
 
 func main() {
-	if err := cmd.Execute(); err != nil {
-		os.Exit(1)
-	}
+	// symphonyclient integration: Execute() doesn't return error
+	cmd.Execute()
 }

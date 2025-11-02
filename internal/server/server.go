@@ -13,6 +13,7 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/github"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
+	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration
 
 	"github.com/pkg/browser"
 )
@@ -118,7 +119,7 @@ func (s *Server) hasPermission(username, permission string) (bool, error) {
 }
 
 // hasPermissionWithPolicy checks if a user has a specific permission based on a given policy
-func (s *Server) hasPermissionWithPolicy(username, permission string, policyData *policy.Policy) (bool, error) {
+func (s *Server) hasPermissionWithPolicy(username, permission string, policyData *schema.UserPolicy) (bool, error) {
 	// Load user's role from roles.json
 	userRole, err := roles.GetUserRole(username)
 	if err != nil {
@@ -154,7 +155,7 @@ func (s *Server) hasPermissionWithRoles(username, permission string, rolesData r
 }
 
 // checkPermissionForRole checks if a role has a specific permission in the policy
-func (s *Server) checkPermissionForRole(userRole, permission string, policyData *policy.Policy) (bool, error) {
+func (s *Server) checkPermissionForRole(userRole, permission string, policyData *schema.UserPolicy) (bool, error) {
 	// Special case: "none" role has no permissions
 	if userRole == "none" {
 		return false, nil
@@ -363,7 +364,7 @@ func (s *Server) handleSavePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var newPolicy policy.Policy
+	var newPolicy schema.UserPolicy
 	if err := json.Unmarshal(body, &newPolicy); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return

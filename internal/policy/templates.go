@@ -7,6 +7,8 @@ import (
 	"io/fs"
 	"path"
 	"strings"
+
+	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration
 )
 
 //go:embed templates/*.json
@@ -73,7 +75,7 @@ func GetTemplates() ([]Template, error) {
 }
 
 // GetTemplate returns the content of a specific template
-func GetTemplate(name string) (*Policy, error) {
+func GetTemplate(name string) (*schema.UserPolicy, error) {
 	fileName := name
 	if !strings.HasSuffix(fileName, ".json") {
 		fileName = name + ".json"
@@ -87,7 +89,7 @@ func GetTemplate(name string) (*Policy, error) {
 		return nil, fmt.Errorf("template '%s' not found", name)
 	}
 
-	var policy Policy
+	var policy schema.UserPolicy
 	if err := json.Unmarshal(data, &policy); err != nil {
 		return nil, fmt.Errorf("invalid template file: %w", err)
 	}
@@ -96,6 +98,6 @@ func GetTemplate(name string) (*Policy, error) {
 }
 
 // ApplyTemplate applies a template to create a new policy
-func ApplyTemplate(templateName string) (*Policy, error) {
+func ApplyTemplate(templateName string) (*schema.UserPolicy, error) {
 	return GetTemplate(templateName)
 }

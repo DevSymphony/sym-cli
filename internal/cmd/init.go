@@ -8,6 +8,7 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/github"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
+	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration
 
 	"github.com/spf13/cobra"
 )
@@ -130,10 +131,10 @@ func createDefaultPolicy(cfg *config.Config) error {
 	}
 
 	// Create default policy with admin, developer, viewer RBAC roles
-	defaultPolicy := &policy.Policy{
+	defaultPolicy := &schema.UserPolicy{
 		Version: "1.0.0",
-		RBAC: &policy.RBAC{
-			Roles: map[string]policy.RBACRole{
+		RBAC: &schema.UserRBAC{
+			Roles: map[string]schema.UserRole{
 				"admin": {
 					AllowWrite:    []string{"**/*"},
 					DenyWrite:     []string{},
@@ -154,12 +155,12 @@ func createDefaultPolicy(cfg *config.Config) error {
 				},
 			},
 		},
-		Defaults: &policy.Defaults{
+		Defaults: &schema.UserDefaults{
 			Languages: []string{"javascript", "typescript"},
 			Severity:  "error",
 			Autofix:   true,
 		},
-		Rules: []policy.Rule{},
+		Rules: []schema.UserRule{},
 	}
 
 	return policy.SavePolicy(defaultPolicy, cfg.PolicyPath)
