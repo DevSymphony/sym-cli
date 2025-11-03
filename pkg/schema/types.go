@@ -15,9 +15,11 @@ type UserRBAC struct {
 
 // UserRole represents a single role in user schema
 type UserRole struct {
-	AllowWrite []string `json:"allowWrite,omitempty"`
-	DenyWrite  []string `json:"denyWrite,omitempty"`
-	AllowExec  []string `json:"allowExec,omitempty"`
+	AllowWrite    []string `json:"allowWrite,omitempty"`
+	DenyWrite     []string `json:"denyWrite,omitempty"`
+	AllowExec     []string `json:"allowExec,omitempty"`
+	CanEditPolicy bool     `json:"canEditPolicy,omitempty"` // symphonyclient integration: policy editing permission
+	CanEditRoles  bool     `json:"canEditRoles,omitempty"`  // symphonyclient integration: role editing permission
 }
 
 // UserDefaults represents default values for rules
@@ -31,6 +33,7 @@ type UserDefaults struct {
 
 // UserRule represents a single rule in user schema
 type UserRule struct {
+	No        int            `json:"no,omitempty"`         // symphonyclient integration: rule number for ordering
 	ID        string         `json:"id,omitempty"`
 	Say       string         `json:"say"`
 	Category  string         `json:"category,omitempty"`
@@ -41,6 +44,7 @@ type UserRule struct {
 	Autofix   bool           `json:"autofix,omitempty"`
 	Params    map[string]any `json:"params,omitempty"`
 	Message   string         `json:"message,omitempty"`
+	Example   string         `json:"example,omitempty"`    // symphonyclient integration: example code
 }
 
 // CodePolicy represents the formal validation schema (B schema)

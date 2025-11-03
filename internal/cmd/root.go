@@ -1,41 +1,46 @@
 package cmd
 
 import (
+	"fmt"
+	"os"
+
 	"github.com/spf13/cobra"
 )
 
-var (
-	cfgFile string
-	verbose bool
-)
-
+// symphonyclient integration: Updated root command from symphony to sym
 var rootCmd = &cobra.Command{
 	Use:   "sym",
-	Short: "Symphony - LLM-friendly convention validation tool",
-	Long: `Symphony is an LLM-friendly tool for validating conventions defined in natural language.
+	Short: "sym - Code Convention Management Tool with RBAC",
+	Long: `sym is a unified CLI tool for code convention validation and role-based access control.
 
-Key features:
-- Convert natural language rules into structured policies
-- Validate code compliance with defined conventions
-- Integrate with LLM tools via MCP server
-
-Designed to help LLMs easily understand and apply conventions when writing code.`,
+Features:
+  - Natural language policy definition (A → B schema conversion)
+  - Multi-engine code validation (Pattern, Length, Style, AST)
+  - Role-based file access control with GitHub OAuth
+  - Web dashboard for policy and role management
+  - Template system for popular frameworks`,
 }
 
-func Execute() error {
-	return rootCmd.Execute()
+func Execute() {
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
 func init() {
-	cobra.OnInitialize(initConfig)
+	// symphonyclient integration: Added symphonyclient commands
+	rootCmd.AddCommand(configCmd)
+	rootCmd.AddCommand(loginCmd)
+	rootCmd.AddCommand(logoutCmd)
+	rootCmd.AddCommand(initCmd)
+	rootCmd.AddCommand(dashboardCmd)
+	rootCmd.AddCommand(myRoleCmd)
+	rootCmd.AddCommand(whoamiCmd)
+	rootCmd.AddCommand(policyCmd)
 
-	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is .sym/config.yaml)")
-	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "verbose output")
-}
-
-func initConfig() {
-	if cfgFile != "" {
-		// TODO: Use config file from the flag
-		_ = cfgFile // Placeholder to avoid unused variable warning
-	}
+	// sym-cli core commands
+	rootCmd.AddCommand(convertCmd)
+	rootCmd.AddCommand(validateCmd)
+	rootCmd.AddCommand(exportCmd)
 }

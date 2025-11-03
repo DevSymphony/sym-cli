@@ -20,7 +20,7 @@ import (
 // - AST rules: Custom rule generation
 type Adapter struct {
 	// ToolsDir is where ESLint is installed
-	// Default: ~/.symphony/tools/node_modules
+	// Default: ~/.sym/tools/node_modules
 	ToolsDir string
 
 	// WorkDir is the project root
@@ -34,7 +34,8 @@ type Adapter struct {
 func NewAdapter(toolsDir, workDir string) *Adapter {
 	if toolsDir == "" {
 		home, _ := os.UserHomeDir()
-		toolsDir = filepath.Join(home, ".symphony", "tools")
+		// symphonyclient integration: .symphony → .sym directory
+		toolsDir = filepath.Join(home, ".sym", "tools")
 	}
 
 	return &Adapter{

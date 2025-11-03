@@ -1,0 +1,13 @@
+{
+  "name": "sym-cli",
+  "version": "2.0.0",
+  "description": "Code convention management and validation tool with RBAC",
+  "scripts": {
+    "build:css": "tailwindcss -i ./internal/server/static/styles/input.css -o ./internal/server/static/styles/output.css --minify",
+    "watch:css": "tailwindcss -i ./internal/server/static/styles/input.css -o ./internal/server/static/styles/output.css --watch",
+    "build": "npm run build:css"
+  },
+  "devDependencies": {
+    "tailwindcss": "^3.4.0"
+  }
+}

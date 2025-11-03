@@ -1,0 +1,70 @@
+{
+  "version": "1.0.0",
+  "defaults": {
+    "languages": ["typescript"],
+    "severity": "error",
+    "autofix": true
+  },
+  "rbac": {
+    "roles": {
+      "library-dev": {
+        "allowWrite": ["src/**", "types/**"],
+        "denyWrite": ["dist/**", "node_modules/**"]
+      }
+    }
+  },
+  "rules": [
+    {
+      "no": 1,
+      "say": "any 타입 사용을 최소화하고 구체적인 타입을 정의합니다",
+      "category": "error_handling",
+      "example": "// ✅ 좋은 예:\ninterface User {\n  id: number;\n  name: string;\n}\nfunction processUser(user: User): void { ... }\n\n// ❌ 나쁜 예:\nfunction processUser(user: any): void { ... }"
+    },
+    {
+      "no": 2,
+      "say": "인터페이스와 타입 별칭의 이름은 PascalCase를 사용합니다",
+      "category": "naming"
+    },
+    {
+      "no": 3,
+      "say": "타입 정의 파일(.d.ts)은 types/ 폴더에 위치시킵니다",
+      "category": "formatting"
+    },
+    {
+      "no": 4,
+      "say": "제네릭 타입 파라미터는 의미 있는 이름을 사용합니다 (T보다는 TItem, TResponse)",
+      "category": "naming"
+    },
+    {
+      "no": 5,
+      "say": "유틸리티 타입(Partial, Pick, Omit 등)을 적극 활용합니다",
+      "category": "performance"
+    },
+    {
+      "no": 6,
+      "say": "strict 모드를 활성화하여 엄격한 타입 체크를 수행합니다",
+      "category": "error_handling"
+    },
+    {
+      "no": 7,
+      "say": "열거형(enum) 대신 const assertion이나 union 타입을 고려합니다",
+      "category": "performance"
+    },
+    {
+      "no": 8,
+      "say": "함수 시그니처에 반환 타입을 명시적으로 선언합니다",
+      "category": "documentation",
+      "example": "// ✅ 좋은 예:\nfunction calculateTotal(price: number, quantity: number): number {\n  return price * quantity;\n}\n\n// ❌ 나쁜 예:\nfunction calculateTotal(price: number, quantity: number) {\n  return price * quantity;\n}"
+    },
+    {
+      "no": 9,
+      "say": "readonly를 사용하여 불변성을 보장합니다",
+      "category": "error_handling"
+    },
+    {
+      "no": 10,
+      "say": "타입 가드를 사용하여 런타임 타입 안전성을 확보합니다",
+      "category": "error_handling"
+    }
+  ]
+}

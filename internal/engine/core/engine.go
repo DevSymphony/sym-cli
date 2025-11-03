@@ -39,11 +39,11 @@ type EngineConfig struct {
 	WorkDir string
 
 	// ToolsDir is where external tools are installed.
-	// Default: ~/.symphony/tools
+	// Default: ~/.sym/tools
 	ToolsDir string
 
 	// CacheDir is for caching validation results.
-	// Default: ~/.symphony/cache
+	// Default: ~/.sym/cache
 	CacheDir string
 
 	// Timeout is the max time for a single validation.
