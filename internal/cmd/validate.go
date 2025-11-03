@@ -1,77 +1,151 @@
 package cmd
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"os"
+	"path/filepath"
+	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/policy"
+	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/validator"
+	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/spf13/cobra"
 )
 
 var (
-	validatePolicyFile  string
-	validateTargetPaths []string
-	validateRole        string
+	validatePolicyFile string
+	validateStaged     bool
+	validateModel      string
+	validateTimeout    int
 )
 
 var validateCmd = &cobra.Command{
 	Use:   "validate",
-	Short: "Validate code compliance with defined conventions",
-	Long: `Validate that code at specified paths complies with conventions defined in the policy file.
-Validation results are returned to standard output, and a non-zero exit code is returned if violations are found.`,
-	Example: `  sym validate -p code-policy.json -t src/
-  sym validate -p .sym/policy.json -t main.go utils.go
-  sym validate -p policy.json -t . --role dev`,
+	Short: "Validate git changes against coding conventions",
+	Long: `Validate git changes against coding conventions using LLM.
+
+This command checks git changes (diff) against rules in code-policy.json
+that use "llm-validator" as the engine. These are typically complex rules
+that cannot be checked by traditional linters (e.g., security, architecture).
+
+Examples:
+  # Validate unstaged changes
+  sym validate
+
+  # Validate staged changes
+  sym validate --staged
+
+  # Use custom policy file
+  sym validate --policy custom-policy.json`,
 	RunE: runValidate,
 }
 
 func init() {
 	rootCmd.AddCommand(validateCmd)
 
-	validateCmd.Flags().StringVarP(&validatePolicyFile, "policy", "p", "code-policy.json", "code policy file path")
-	validateCmd.Flags().StringSliceVarP(&validateTargetPaths, "target", "t", []string{"."}, "files or directories to validate")
-	validateCmd.Flags().StringVarP(&validateRole, "role", "r", "contributor", "user role for RBAC validation")
+	validateCmd.Flags().StringVarP(&validatePolicyFile, "policy", "p", "", "Path to code-policy.json (default: .sym/code-policy.json)")
+	validateCmd.Flags().BoolVar(&validateStaged, "staged", false, "Validate staged changes instead of unstaged")
+	validateCmd.Flags().StringVar(&validateModel, "model", "gpt-4o-mini", "OpenAI model to use")
+	validateCmd.Flags().IntVar(&validateTimeout, "timeout", 30, "Timeout per rule check in seconds")
 }
 
 func runValidate(cmd *cobra.Command, args []string) error {
-	loader := policy.NewLoader(verbose)
-	codePolicy, err := loader.LoadCodePolicy(validatePolicyFile)
-	if err != nil {
-		return fmt.Errorf("failed to load policy: %w", err)
-	}
-
-	fmt.Printf("validating %d target(s) with %d rule(s)...\n", len(validateTargetPaths), len(codePolicy.Rules))
-	fmt.Printf("role: %s\n\n", validateRole)
-
-	v := validator.NewValidator(codePolicy, verbose)
-
-	for _, targetPath := range validateTargetPaths {
-		result, err := v.Validate(targetPath)
+	// Load code policy
+	policyPath := validatePolicyFile
+	if policyPath == "" {
+		symDir, err := getSymDir()
 		if err != nil {
-			return fmt.Errorf("validation failed: %w", err)
+			return fmt.Errorf("failed to find .sym directory: %w", err)
 		}
-
-		if result.Passed {
-			fmt.Printf("✓ %s: validation passed\n", targetPath)
-		} else {
-			fmt.Printf("✗ %s: found %d violation(s)\n", targetPath, len(result.Violations))
-			for _, violation := range result.Violations {
-				fmt.Printf("  [%s] %s: %s\n", violation.Severity, violation.RuleID, violation.Message)
-			}
-		}
+		policyPath = filepath.Join(symDir, "code-policy.json")
 	}
 
-	fmt.Println("\nNote: Full validation engine implementation is in progress.")
-	fmt.Println("Currently only policy structure validation and basic checks are performed.")
+	policyData, err := os.ReadFile(policyPath)
+	if err != nil {
+		return fmt.Errorf("failed to read policy file: %w", err)
+	}
 
-	fmt.Printf("\n✓ Policy loaded successfully\n")
-	fmt.Printf("  - version: %s\n", codePolicy.Version)
-	fmt.Printf("  - rules: %d\n", len(codePolicy.Rules))
-	fmt.Printf("  - enforce stages: %v\n", codePolicy.Enforce.Stages)
+	var policy schema.CodePolicy
+	if err := json.Unmarshal(policyData, &policy); err != nil {
+		return fmt.Errorf("failed to parse policy: %w", err)
+	}
 
-	if codePolicy.RBAC != nil && codePolicy.RBAC.Roles != nil {
-		fmt.Printf("  - RBAC enabled: %d role(s)\n", len(codePolicy.RBAC.Roles))
+	// Get OpenAI API key
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
+	}
+
+	// Create LLM client
+	llmClient := llm.NewClient(
+		apiKey,
+		llm.WithModel(validateModel),
+		llm.WithTimeout(time.Duration(validateTimeout)*time.Second),
+	)
+
+	// Get git changes
+	var changes []validator.GitChange
+	if validateStaged {
+		changes, err = validator.GetStagedChanges()
+		if err != nil {
+			return fmt.Errorf("failed to get staged changes: %w", err)
+		}
+		fmt.Println("Validating staged changes...")
+	} else {
+		changes, err = validator.GetGitChanges()
+		if err != nil {
+			return fmt.Errorf("failed to get git changes: %w", err)
+		}
+		fmt.Println("Validating unstaged changes...")
+	}
+
+	if len(changes) == 0 {
+		fmt.Println("No changes to validate")
+		return nil
+	}
+
+	fmt.Printf("Found %d changed file(s)\n", len(changes))
+
+	// Create validator
+	v := validator.NewLLMValidator(llmClient, &policy)
+
+	// Validate changes
+	ctx := context.Background()
+	result, err := v.Validate(ctx, changes)
+	if err != nil {
+		return fmt.Errorf("validation failed: %w", err)
+	}
+
+	// Print results
+	printValidationResult(result)
+
+	// Exit with error if violations found
+	if len(result.Violations) > 0 {
+		return fmt.Errorf("found %d violation(s)", len(result.Violations))
 	}
 
 	return nil
+}
+
+func printValidationResult(result *validator.ValidationResult) {
+	fmt.Printf("\n=== Validation Results ===\n")
+	fmt.Printf("Checked: %d\n", result.Checked)
+	fmt.Printf("Passed:  %d\n", result.Passed)
+	fmt.Printf("Failed:  %d\n\n", result.Failed)
+
+	if len(result.Violations) == 0 {
+		fmt.Println("✓ All checks passed!")
+		return
+	}
+
+	fmt.Printf("Found %d violation(s):\n\n", len(result.Violations))
+
+	for i, v := range result.Violations {
+		fmt.Printf("%d. [%s] %s\n", i+1, v.Severity, v.RuleID)
+		fmt.Printf("   File: %s\n", v.File)
+		fmt.Printf("   %s\n", v.Message)
+		fmt.Println()
+	}
 }
