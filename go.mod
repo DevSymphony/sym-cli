@@ -4,6 +4,7 @@ go 1.25.1
 
 require (
 	github.com/pkg/browser v0.0.0-20210911075715-681adbf594b8 // symphonyclient integration: browser automation for OAuth
+	github.com/bmatcuk/doublestar/v4 v4.9.1
 	github.com/spf13/cobra v1.10.1
 )
 

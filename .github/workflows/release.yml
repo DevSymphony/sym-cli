@@ -1,0 +1,226 @@
+name: Release
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  extract-version:
+    name: Extract version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      should_release: ${{ steps.check.outputs.should_release }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Extract version from package.json
+        id: version
+        run: |
+          VERSION=$(node -p "require('./npm/package.json').version")
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION"
+
+      - name: Check if release exists
+        id: check
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists, skipping release"
+            echo "should_release=false" >> $GITHUB_OUTPUT
+          else
+            echo "Tag v$VERSION does not exist, proceeding with release"
+            echo "should_release=true" >> $GITHUB_OUTPUT
+          fi
+
+  build:
+    name: Build binaries
+    needs: extract-version
+    if: needs.extract-version.outputs.should_release == 'true'
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.extract-version.outputs.version }}
+      upload-artifacts: true
+      retention-days: 1
+
+  release:
+    name: Create GitHub Release
+    needs: [extract-version, build]
+    if: needs.extract-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          find artifacts -type f -name 'sym-*' -exec mv {} release-assets/ \;
+
+          # Create compressed versions for smaller downloads
+          cd release-assets
+          for binary in sym-*; do
+            if [[ "$binary" != *.tar.gz ]]; then
+              echo "Compressing $binary..."
+              tar -czf "${binary}.tar.gz" "$binary"
+              # Show size comparison
+              ORIG_SIZE=$(stat -c%s "$binary" 2>/dev/null || stat -f%z "$binary")
+              COMP_SIZE=$(stat -c%s "${binary}.tar.gz" 2>/dev/null || stat -f%z "${binary}.tar.gz")
+              echo "  Original: $ORIG_SIZE bytes, Compressed: $COMP_SIZE bytes"
+            fi
+          done
+          cd ..
+
+          ls -lh release-assets/
+
+      - name: Import GPG key
+        if: vars.ENABLE_GPG_SIGNING == 'true'
+        run: |
+          echo "Importing GPG key for signing..."
+          echo "${{ secrets.GPG_PRIVATE_KEY }}" | gpg --batch --import
+          echo "GPG key imported successfully"
+
+      - name: Sign release assets
+        if: vars.ENABLE_GPG_SIGNING == 'true'
+        run: |
+          cd release-assets
+          echo "Signing all release assets..."
+          for file in sym-* *.tar.gz; do
+            if [[ -f "$file" ]] && [[ "$file" != *.sig ]]; then
+              echo "Signing $file..."
+              gpg --batch --yes --passphrase "${{ secrets.GPG_PASSPHRASE }}" \
+                --pinentry-mode loopback --detach-sign --armor "$file"
+              echo "  Created ${file}.asc"
+            fi
+          done
+          cd ..
+          echo "All assets signed successfully"
+          ls -lh release-assets/*.asc 2>/dev/null || echo "No signature files (GPG signing may be disabled)"
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: v${{ needs.extract-version.outputs.version }}
+          name: Release v${{ needs.extract-version.outputs.version }}
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: false
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  npm:
+    name: Publish to npm
+    needs: [extract-version, build]
+    if: needs.extract-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Verify package.json version
+        working-directory: npm
+        run: |
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          EXPECTED_VERSION="${{ needs.extract-version.outputs.version }}"
+          if [ "$PKG_VERSION" != "$EXPECTED_VERSION" ]; then
+            echo "Error: package.json version ($PKG_VERSION) does not match expected version ($EXPECTED_VERSION)"
+            exit 1
+          fi
+          echo "Version verified: $PKG_VERSION"
+
+      - name: Install dependencies
+        working-directory: npm
+        run: npm install --omit=dev
+
+      - name: Check if version already published
+        id: check_published
+        working-directory: npm
+        run: |
+          PACKAGE_NAME=$(node -p "require('./package.json').name")
+          VERSION=$(node -p "require('./package.json').version")
+
+          echo "Checking if $PACKAGE_NAME@$VERSION is already published..."
+
+          if npm view "$PACKAGE_NAME@$VERSION" version 2>/dev/null; then
+            echo "Version $VERSION is already published to npm"
+            echo "already_published=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version $VERSION is not yet published"
+            echo "already_published=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Publish to npm
+        if: steps.check_published.outputs.already_published == 'false'
+        working-directory: npm
+        run: |
+          echo "Publishing to npm..."
+          npm publish --access public
+          echo "Successfully published to npm!"
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Skip publishing
+        if: steps.check_published.outputs.already_published == 'true'
+        run: echo "Skipping npm publish - version already exists"
+
+  deploy-coverage:
+    name: Deploy Coverage to GitHub Pages
+    needs: [extract-version, build]
+    if: needs.extract-version.outputs.should_release == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+          cache: true
+
+      - name: Run tests and generate coverage
+        run: |
+          go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+          go tool cover -html=coverage.out -o coverage.html
+
+      - name: Prepare coverage for deployment
+        run: |
+          mkdir -p coverage-report
+          cp coverage.html coverage-report/index.html
+          echo "Coverage report prepared for deployment"
+
+      - name: Deploy to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./coverage-report
+          publish_branch: gh-pages
+          destination_dir: coverage
+          keep_files: true
+          enable_jekyll: false
+          commit_message: 'Deploy coverage for v${{ needs.extract-version.outputs.version }}'
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

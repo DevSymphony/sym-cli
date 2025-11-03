@@ -1,0 +1,110 @@
+name: CI
+
+on:
+  schedule:
+    # 매일 한국 시간 오전 9시 (UTC 0시)
+    - cron: '0 0 * * *'
+  pull_request:
+    branches:
+      - main
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.1'
+          cache: true
+
+      - name: Run go vet
+        run: go vet ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v4
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Run govulncheck
+        run: |
+          echo "Running Go vulnerability check..."
+          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
+
+  test:
+    name: Test
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        go-version: ['1.23', '1.25.1']
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ matrix.go-version }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run tests
+        run: go test -v -race -coverprofile=coverage.out -covermode=atomic ./...
+
+      - name: Generate coverage report
+        run: go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload coverage to Codecov
+        if: matrix.go-version == '1.25.1'
+        uses: codecov/codecov-action@v4
+        with:
+          files: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage report
+        if: matrix.go-version == '1.25.1'
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.html
+
+      - name: Build binary for E2E tests
+        if: matrix.go-version == '1.25.1'
+        run: |
+          go build -o sym-e2e ./cmd/sym
+          chmod +x sym-e2e
+
+      - name: Run E2E tests
+        if: matrix.go-version == '1.25.1'
+        run: |
+          chmod +x tests/e2e/basic_workflow_test.sh
+          export SYM_BINARY=./sym-e2e
+          tests/e2e/basic_workflow_test.sh
+
+  build:
+    name: Build and Integration Test
+    uses: ./.github/workflows/build.yml
+    with:
+      version: 'ci-build'
+      upload-artifacts: false
