@@ -6,6 +6,7 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/engine/length"
 	"github.com/DevSymphony/sym-cli/internal/engine/pattern"
 	"github.com/DevSymphony/sym-cli/internal/engine/style"
+	"github.com/DevSymphony/sym-cli/internal/engine/typechecker"
 )
 
 // init registers all built-in engines.
@@ -28,5 +29,10 @@ func init() {
 	// Register AST engine
 	MustRegister("ast", func() (core.Engine, error) {
 		return ast.NewEngine(), nil
+	})
+
+	// Register type checker engine
+	MustRegister("typechecker", func() (core.Engine, error) {
+		return typechecker.NewEngine(), nil
 	})
 }
