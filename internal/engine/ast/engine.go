@@ -3,7 +3,6 @@ package ast
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
 	"github.com/DevSymphony/sym-cli/internal/adapter/eslint"
@@ -119,93 +118,9 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-// filterFiles filters files based on the when selector.
+// filterFiles filters files based on the when selector using proper glob matching.
 func (e *Engine) filterFiles(files []string, when *core.Selector) []string {
-	if when == nil {
-		return files
-	}
-
-	var filtered []string
-	for _, file := range files {
-		if e.matchesSelector(file, when) {
-			filtered = append(filtered, file)
-		}
-	}
-	return filtered
-}
-
-// matchesSelector checks if a file matches the selector criteria.
-func (e *Engine) matchesSelector(file string, when *core.Selector) bool {
-	if when == nil {
-		return true
-	}
-
-	// Language filter
-	if len(when.Languages) > 0 {
-		ext := filepath.Ext(file)
-		matched := false
-		for _, lang := range when.Languages {
-			if matchesLanguage(ext, lang) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-
-	// Include/Exclude filters
-	if len(when.Include) > 0 {
-		matched := false
-		for _, pattern := range when.Include {
-			if matchGlob(file, pattern) {
-				matched = true
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-
-	if len(when.Exclude) > 0 {
-		for _, pattern := range when.Exclude {
-			if matchGlob(file, pattern) {
-				return false
-			}
-		}
-	}
-
-	return true
-}
-
-// matchesLanguage checks if file extension matches language.
-func matchesLanguage(ext, lang string) bool {
-	langExtMap := map[string][]string{
-		"javascript": {".js", ".mjs", ".cjs"},
-		"typescript": {".ts", ".mts", ".cts"},
-		"jsx":        {".jsx"},
-		"tsx":        {".tsx"},
-	}
-
-	exts, ok := langExtMap[lang]
-	if !ok {
-		return false
-	}
-
-	for _, e := range exts {
-		if ext == e {
-			return true
-		}
-	}
-	return false
-}
-
-// matchGlob is a simple glob matcher (simplified version).
-func matchGlob(path, pattern string) bool {
-	matched, _ := filepath.Match(pattern, path)
-	return matched
+	return core.FilterFiles(files, when)
 }
 
 // generateESLintConfigWithSelector generates ESLint config using no-restricted-syntax.

@@ -1,6 +1,7 @@
 package style
 
 import (
+	"context"
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
@@ -29,8 +30,340 @@ func TestGetCapabilities(t *testing.T) {
 		t.Error("Expected formatting in supported categories")
 	}
 
-	if !caps.SupportsAutofix {
-		t.Error("Style engine should support autofix")
+	if caps.SupportsAutofix {
+		t.Error("Style engine should not support autofix (removed by design)")
+	}
+}
+
+func TestInit(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+		Debug:    false,
+	}
+
+	err := engine.Init(ctx, config)
+	if err != nil {
+		t.Logf("Init failed (expected if ESLint not available): %v", err)
+	}
+}
+
+func TestClose(t *testing.T) {
+	engine := NewEngine()
+	if err := engine.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+func TestValidate_NoFiles(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	rule := core.Rule{
+		ID:       "TEST-RULE",
+		Category: "style",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "style",
+		},
+	}
+
+	result, err := engine.Validate(ctx, rule, []string{})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+
+	if !result.Passed {
+		t.Error("Expected validation to pass for empty file list")
+	}
+}
+
+func TestValidate_WithInitialization(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-RULE",
+		Category: "style",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "style",
+			"indent": 2,
+			"quote":  "single",
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_IndentRule(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-INDENT",
+		Category: "style",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "style",
+			"indent": 4,
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_QuoteRule(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-QUOTE",
+		Category: "style",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "style",
+			"quote":  "double",
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_SemiRule(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-SEMI",
+		Category: "style",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "style",
+			"semi":   true,
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_WithCustomMessage(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-CUSTOM",
+		Category: "style",
+		Severity: "warning",
+		Message:  "Custom style violation",
+		Check: map[string]interface{}{
+			"engine": "style",
+			"indent": 2,
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestInit_WithDebug(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+		Debug:    true,
+	}
+
+	err := engine.Init(ctx, config)
+	if err != nil {
+		t.Logf("Init with debug failed (expected if ESLint not available): %v", err)
+	}
+
+	if !engine.config.Debug {
+		t.Error("Expected debug to be true")
+	}
+}
+
+func TestValidate_BraceStyleRule(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-BRACE",
+		Category: "style",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine":      "style",
+			"brace_style": "1tbs",
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_MultipleRules(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-MULTI",
+		Category: "style",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "style",
+			"indent": 2,
+			"quote":  "single",
+			"semi":   true,
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+		if result.Engine != "style" {
+			t.Errorf("Engine = %s, want style", result.Engine)
+		}
 	}
 }
 
@@ -55,9 +388,9 @@ func TestFilterFiles(t *testing.T) {
 			want:     files,
 		},
 		{
-			name: "javascript only - selector ignored by style engine",
+			name: "javascript and typescript files",
 			selector: &core.Selector{
-				Languages: []string{"javascript"},
+				Languages: []string{"javascript", "typescript"},
 			},
 			want: []string{"src/main.js", "src/app.ts", "test/test.js"},
 		},

@@ -143,23 +143,7 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-// filterFiles filters files based on selector.
+// filterFiles filters files based on selector using proper glob matching.
 func (e *Engine) filterFiles(files []string, selector *core.Selector) []string {
-	if selector == nil {
-		return files
-	}
-
-	// Simple extension-based filter
-	var filtered []string
-	for _, file := range files {
-		// Accept .js, .ts, .jsx, .tsx
-		if len(file) > 3 {
-			ext := file[len(file)-3:]
-			if ext == ".js" || ext == ".ts" || ext == "jsx" || ext == "tsx" {
-				filtered = append(filtered, file)
-			}
-		}
-	}
-
-	return filtered
+	return core.FilterFiles(files, selector)
 }
