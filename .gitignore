@@ -1,6 +1,10 @@
 .claude/
 bin/
+
+# Test coverage
 coverage.out
 coverage.html
 node_modules/
 .sym/
+*.coverprofile
+coverage.txt

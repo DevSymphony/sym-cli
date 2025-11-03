@@ -1,5 +1,5 @@
 # symphonyclient integration: Added CSS build targets
-.PHONY: build test install clean fmt lint tidy help build-all setup build-css install-css watch-css
+.PHONY: build test install clean fmt lint tidy help build-all setup coverage-check build-css install-css watch-css
 
 BINARY_NAME=sym
 BUILD_DIR=bin
@@ -66,6 +66,20 @@ test:
 	@go test -v -race -coverprofile=coverage.out ./...
 	@go tool cover -html=coverage.out -o coverage.html
 	@echo "Test complete. Coverage report: coverage.html"
+
+coverage-check:
+	@echo "Checking coverage threshold..."
+	@go test -coverprofile=coverage.out ./... > /dev/null 2>&1
+	@COVERAGE=$$(go tool cover -func=coverage.out | grep total | awk '{print $$3}' | sed 's/%//'); \
+	THRESHOLD=80; \
+	echo "Current coverage: $$COVERAGE%"; \
+	echo "Required threshold: $$THRESHOLD%"; \
+	if [ "$$(echo "$$COVERAGE < $$THRESHOLD" | bc -l 2>/dev/null || awk "BEGIN {print ($$COVERAGE < $$THRESHOLD)}")" -eq 1 ]; then \
+		echo "❌ Coverage $$COVERAGE% is below threshold $$THRESHOLD%"; \
+		exit 1; \
+	else \
+		echo "✅ Coverage $$COVERAGE% meets threshold $$THRESHOLD%"; \
+	fi
 
 install:
 	@echo "Installing $(BINARY_NAME)..."
