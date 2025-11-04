@@ -29,7 +29,7 @@ function getPlatformBinary() {
     process.exit(1);
   }
 
-  return path.join(__dirname, '..', 'bin', binaryName);
+  return path.join(__dirname, binaryName);
 }
 
 /**
