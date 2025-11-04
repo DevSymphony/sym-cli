@@ -127,7 +127,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          find artifacts -type f -name 'sym-*' -exec mv {} release-assets/ \;
+          find artifacts -type f \( -name 'sym-darwin-*' -o -name 'sym-linux-*' -o -name 'sym-windows-*' \) -exec mv {} release-assets/ \;
 
           # Verify binary count
           BINARY_COUNT=$(ls -1 release-assets/ | wc -l)
@@ -173,10 +173,13 @@ jobs:
       - name: Copy binaries to npm package
         run: |
           mkdir -p npm/bin
-          find artifacts -type f -name 'sym-*' -exec cp {} npm/bin/ \;
+          find artifacts -type f \( -name 'sym-*' ! -name '*.js' \) -exec cp {} npm/bin/ \;
+
+          # Set executable permissions for Unix binaries
+          chmod +x npm/bin/sym-darwin-* npm/bin/sym-linux-* 2>/dev/null || true
 
           # Verify binary count
-          BINARY_COUNT=$(find npm/bin -name 'sym-*' -type f | wc -l)
+          BINARY_COUNT=$(find npm/bin -name 'sym-*' -type f ! -name '*.js' | wc -l)
           echo "Found $BINARY_COUNT binaries in npm/bin/"
 
           if [ "$BINARY_COUNT" -ne 5 ]; then
