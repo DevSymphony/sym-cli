@@ -41,13 +41,19 @@ func (e *Engine) Init(ctx context.Context, config core.EngineConfig) error {
 
 // Validate checks files against AST structure rules.
 func (e *Engine) Validate(ctx context.Context, rule core.Rule, files []string) (*core.ValidationResult, error) {
-	if e.eslint == nil {
-		return nil, fmt.Errorf("AST engine not initialized")
-	}
-
+	// Filter files first - empty file list is valid without initialization
 	files = e.filterFiles(files, rule.When)
 	if len(files) == 0 {
-		return &core.ValidationResult{Violations: []core.Violation{}}, nil
+		return &core.ValidationResult{
+			RuleID:     rule.ID,
+			Passed:     true,
+			Violations: []core.Violation{},
+		}, nil
+	}
+
+	// Check initialization only when we have files to process
+	if e.eslint == nil {
+		return nil, fmt.Errorf("AST engine not initialized")
 	}
 
 	// Parse AST query

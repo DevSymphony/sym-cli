@@ -47,7 +47,7 @@ func StartOAuthFlow() error {
 
 		// Send success message to browser using embedded HTML
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		w.Write([]byte(loginSuccessHTML))
+		_, _ = w.Write([]byte(loginSuccessHTML))
 	})
 
 	// Serve the Tailwind CSS file
@@ -87,17 +87,17 @@ func StartOAuthFlow() error {
 	case code = <-codeChan:
 		// Success
 	case err := <-errChan:
-		server.Shutdown(context.Background())
+		_ = server.Shutdown(context.Background())
 		return err
 	case <-time.After(5 * time.Minute):
-		server.Shutdown(context.Background())
+		_ = server.Shutdown(context.Background())
 		return fmt.Errorf("authentication timeout")
 	}
 
 	// Shutdown server
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	server.Shutdown(ctx)
+	_ = server.Shutdown(ctx)
 
 	// Exchange code for token
 	fmt.Println("Exchanging code for access token...")

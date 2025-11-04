@@ -99,21 +99,19 @@ func startAuthSession(serverURL string) (*SessionResponse, error) {
 func pollForToken(serverURL, sessionCode string, expiresIn int) (string, string, error) {
 	url := fmt.Sprintf("%s/authStatus/%s", serverURL, sessionCode)
 
-	// Calculate timeout
-	timeout := time.Now().Add(time.Duration(expiresIn) * time.Second)
-
 	// Poll every 3 seconds
 	ticker := time.NewTicker(3 * time.Second)
 	defer ticker.Stop()
 
+	// Setup timeout timer
+	timeoutTimer := time.After(time.Duration(expiresIn) * time.Second)
+
 	for {
 		select {
-		case <-ticker.C:
-			// Check if timeout
-			if time.Now().After(timeout) {
-				return "", "", fmt.Errorf("authentication timeout (%d초). 다시 시도해주세요", expiresIn)
-			}
+		case <-timeoutTimer:
+			return "", "", fmt.Errorf("authentication timeout (%d초). 다시 시도해주세요", expiresIn)
 
+		case <-ticker.C:
 			// Check status
 			status, err := checkAuthStatus(url)
 			if err != nil {
@@ -163,14 +161,14 @@ func checkAuthStatus(url string) (*StatusResponse, error) {
 	if resp.StatusCode == http.StatusGone {
 		// Session expired
 		var status StatusResponse
-		json.NewDecoder(resp.Body).Decode(&status)
+		_ = json.NewDecoder(resp.Body).Decode(&status)
 		return &status, nil
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
 		// Denied
 		var status StatusResponse
-		json.NewDecoder(resp.Body).Decode(&status)
+		_ = json.NewDecoder(resp.Body).Decode(&status)
 		return &status, nil
 	}
 
