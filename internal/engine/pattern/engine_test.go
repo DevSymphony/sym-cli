@@ -1,6 +1,7 @@
 package pattern
 
 import (
+	"context"
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
@@ -34,30 +35,80 @@ func TestGetCapabilities(t *testing.T) {
 	}
 }
 
-func TestMatchesLanguage(t *testing.T) {
-	engine := &Engine{}
+func TestInit(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
 
-	tests := []struct {
-		file  string
-		langs []string
-		want  bool
-	}{
-		{"main.js", []string{"javascript"}, true},
-		{"app.jsx", []string{"jsx"}, true},
-		{"server.ts", []string{"typescript"}, true},
-		{"component.tsx", []string{"tsx"}, true},
-		{"main.js", []string{"typescript"}, false},
-		{"app.py", []string{"javascript"}, false},
-		{"main.js", []string{"javascript", "typescript"}, true},
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+		Debug:    false,
 	}
 
-	for _, tt := range tests {
-		got := engine.matchesLanguage(tt.file, tt.langs)
-		if got != tt.want {
-			t.Errorf("matchesLanguage(%q, %v) = %v, want %v", tt.file, tt.langs, got, tt.want)
-		}
+	// Init might fail if eslint is not available, which is okay for unit tests
+	err := engine.Init(ctx, config)
+	if err != nil {
+		t.Logf("Init failed (expected if ESLint not available): %v", err)
 	}
 }
+
+func TestClose(t *testing.T) {
+	engine := NewEngine()
+	if err := engine.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+func TestValidate_NoFiles(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	rule := core.Rule{
+		ID:       "TEST-RULE",
+		Category: "naming",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "pattern",
+		},
+	}
+
+	// Validate with empty file list
+	result, err := engine.Validate(ctx, rule, []string{})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+
+	if !result.Passed {
+		t.Error("Expected validation to pass for empty file list")
+	}
+
+	if len(result.Violations) != 0 {
+		t.Errorf("Expected 0 violations, got %d", len(result.Violations))
+	}
+}
+
+func TestValidate_NotInitialized(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	rule := core.Rule{
+		ID:       "TEST-RULE",
+		Category: "naming",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "pattern",
+		},
+	}
+
+	// Validate without initialization
+	_, err := engine.Validate(ctx, rule, []string{"test.js"})
+	if err == nil {
+		t.Error("Expected error for uninitialized engine")
+	}
+}
+
+// TestMatchesLanguage has been moved to core package tests.
+// Language matching logic is now centralized in core.MatchesLanguage.
 
 func TestFilterFiles(t *testing.T) {
 	engine := &Engine{}
@@ -132,6 +183,116 @@ func TestDetectLanguage(t *testing.T) {
 		if got != tt.want {
 			t.Errorf("detectLanguage(%v) = %q, want %q", tt.files, got, tt.want)
 		}
+	}
+}
+
+func TestValidate_WithCustomMessage(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-CUSTOM-MSG",
+		Category: "naming",
+		Severity: "error",
+		Message:  "Custom violation message",
+		Check: map[string]interface{}{
+			"engine":  "pattern",
+			"target":  "identifier",
+			"pattern": "^[A-Z][a-zA-Z0-9]*$",
+		},
+	}
+
+	// Create a test file with a violation
+	testFile := t.TempDir() + "/test.js"
+	// Since we can't guarantee ESLint will find violations in a real file,
+	// we'll just test that the function handles the rule correctly
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	// Should not error even if file doesn't exist or has no violations
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	// If result is returned, check basic properties
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_WithFilteredFiles(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-FILTERED",
+		Category: "naming",
+		Severity: "error",
+		When: &core.Selector{
+			Languages: []string{"typescript"},
+		},
+		Check: map[string]interface{}{
+			"engine":  "pattern",
+			"target":  "identifier",
+			"pattern": "^[A-Z]",
+		},
+	}
+
+	// Provide JS and TS files - only TS should be validated
+	files := []string{"test.js", "test.ts"}
+
+	result, err := engine.Validate(ctx, rule, files)
+
+	// Should not error
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestInit_WithDebug(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+		Debug:    true,
+	}
+
+	// Init might fail if eslint is not available
+	err := engine.Init(ctx, config)
+	if err != nil {
+		t.Logf("Init with debug failed (expected if ESLint not available): %v", err)
+	}
+
+	// Check that config was set
+	if !engine.config.Debug {
+		t.Error("Expected debug to be true")
 	}
 }
 

@@ -26,8 +26,6 @@ into a structured schema (Schema B) that the validation engine can read.`,
 }
 
 func init() {
-	rootCmd.AddCommand(convertCmd)
-
 	convertCmd.Flags().StringVarP(&convertInputFile, "input", "i", "user-policy.json", "input user policy file")
 	convertCmd.Flags().StringVarP(&convertOutputFile, "output", "o", "code-policy.json", "output code policy file")
 }
