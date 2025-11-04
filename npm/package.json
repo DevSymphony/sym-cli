@@ -1,0 +1,46 @@
+{
+  "name": "@dev-symphony/sym",
+  "version": "0.1.0",
+  "description": "Symphony - LLM-friendly convention linter for AI coding assistants",
+  "keywords": [
+    "mcp",
+    "linter",
+    "conventions",
+    "llm",
+    "claude",
+    "ai-coding",
+    "code-quality"
+  ],
+  "bin": {
+    "sym": "./bin/sym.js"
+  },
+  "files": [
+    "bin/",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=16.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/DevSymphony/sym-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/DevSymphony/sym-cli/issues"
+  },
+  "homepage": "https://github.com/DevSymphony/sym-cli#readme",
+  "author": "DevSymphony",
+  "license": "MIT",
+  "dependencies": {
+    "https-proxy-agent": "^7.0.2"
+  },
+  "os": [
+    "darwin",
+    "linux",
+    "win32"
+  ],
+  "cpu": [
+    "x64",
+    "arm64"
+  ]
+}

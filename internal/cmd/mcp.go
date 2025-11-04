@@ -24,7 +24,7 @@ Tools provided by MCP server:
 By default, communicates via stdio. If --port is specified, starts HTTP server.`,
 	Example: `  sym mcp
   sym mcp --config code-policy.json
-  sym mcp --host 0.0.0.0 --port 8080`,
+  sym mcp --port 4000 --host 0.0.0.0`,
 	RunE: runMCP,
 }
 
@@ -33,7 +33,7 @@ func init() {
 
 	mcpCmd.Flags().StringVarP(&mcpConfig, "config", "c", "", "policy file path (code-policy.json)")
 	mcpCmd.Flags().StringVar(&mcpHost, "host", "127.0.0.1", "server host (HTTP mode only)")
-	mcpCmd.Flags().IntVarP(&mcpPort, "port", "p", 4000, "server port (0 = stdio mode, >0 = HTTP mode)")
+	mcpCmd.Flags().IntVarP(&mcpPort, "port", "p", 0, "server port (0 = stdio mode, >0 = HTTP mode)")
 }
 
 func runMCP(cmd *cobra.Command, args []string) error {

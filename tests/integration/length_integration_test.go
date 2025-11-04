@@ -27,7 +27,7 @@ func TestLengthEngine_LineLengthViolations_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: max line length 100
 	rule := core.Rule{
@@ -86,7 +86,7 @@ func TestLengthEngine_MaxParams_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: max 4 parameters
 	rule := core.Rule{
@@ -145,7 +145,7 @@ func TestLengthEngine_ValidFile_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: max line length 100
 	rule := core.Rule{

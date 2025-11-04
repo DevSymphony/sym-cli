@@ -45,7 +45,7 @@ func init() {
 	rootCmd.AddCommand(myRoleCmd)
 	rootCmd.AddCommand(whoamiCmd)
 	rootCmd.AddCommand(policyCmd)
-	rootCmd.AddCommand(mcpCmd)
+	// Note: mcpCmd is registered in mcp.go's init()
 
 	// sym-cli core commands (in development)
 	rootCmd.AddCommand(convertCmd)

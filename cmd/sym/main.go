@@ -4,7 +4,13 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/cmd"
 )
 
+// Version is set by build -ldflags "-X main.Version=x.y.z"
+var Version = "dev"
+
 func main() {
+	// Set version for version command
+	cmd.SetVersion(Version)
+
 	// symphonyclient integration: Execute() doesn't return error
 	cmd.Execute()
 }

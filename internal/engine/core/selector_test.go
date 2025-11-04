@@ -546,7 +546,7 @@ func TestFilterFiles(t *testing.T) {
 // Benchmark tests
 func BenchmarkMatchGlob(b *testing.B) {
 	for i := 0; i < b.N; i++ {
-		MatchGlob("src/foo/bar/baz/test.go", "src/**/*.go")
+		_, _ = MatchGlob("src/foo/bar/baz/test.go", "src/**/*.go")
 	}
 }
 

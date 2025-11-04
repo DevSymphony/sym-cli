@@ -87,10 +87,13 @@ func (s *Server) startHTTPServer() error {
 func (s *Server) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]interface{}{
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{
 		"status":  "ok",
 		"version": "1.0.0",
-	})
+	}); err != nil {
+		// Log error but don't fail - headers already sent
+		_ = err
+	}
 }
 
 // handleHTTPRequest handles HTTP JSON-RPC requests.
@@ -104,7 +107,7 @@ func (s *Server) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
-		json.NewEncoder(w).Encode(JSONRPCResponse{
+		_ = json.NewEncoder(w).Encode(JSONRPCResponse{
 			JSONRPC: "2.0",
 			Error: &RPCError{
 				Code:    -32700,
@@ -143,7 +146,7 @@ func (s *Server) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
 	} else {
 		w.WriteHeader(http.StatusOK)
 	}
-	json.NewEncoder(w).Encode(resp)
+	_ = json.NewEncoder(w).Encode(resp)
 }
 
 // JSONRPCRequest is a JSON-RPC 2.0 request.

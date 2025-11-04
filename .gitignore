@@ -1,6 +1,13 @@
 .claude/
 bin/
+!npm/bin/
+!npm/bin/*.js
+npm/bin/sym-*
+
+# Test coverage
 coverage.out
 coverage.html
 node_modules/
 .sym/
+*.coverprofile
+coverage.txt

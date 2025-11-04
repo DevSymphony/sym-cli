@@ -1,0 +1,25 @@
+# Development files
+*.log
+*.tmp
+.DS_Store
+
+# Node modules
+node_modules/
+
+# Test files
+test/
+tests/
+*.test.js
+*.spec.js
+
+# CI/CD
+.github/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Downloaded binaries (will be downloaded during postinstall)
+bin/sym-*

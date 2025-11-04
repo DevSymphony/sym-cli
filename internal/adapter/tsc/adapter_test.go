@@ -59,7 +59,7 @@ func TestInitPackageJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	adapter := NewAdapter(tmpDir, "")
 
@@ -113,7 +113,7 @@ func TestInstall_MissingNPM(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	a := NewAdapter(tmpDir, "")
 
@@ -139,7 +139,7 @@ func TestExecute_FileCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	adapter := NewAdapter("", tmpDir)
 
@@ -148,7 +148,7 @@ func TestExecute_FileCreation(t *testing.T) {
 	files := []string{"test.ts"}
 
 	// Execute (will fail because tsc not installed, but we can test config file creation)
-	_, err = adapter.Execute(ctx, config, files)
+	_, _ = adapter.Execute(ctx, config, files)
 
 	// Config file should have been created and cleaned up
 	configPath := filepath.Join(tmpDir, ".symphony-tsconfig.json")
