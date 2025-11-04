@@ -1,5 +1,5 @@
 {
-  "name": "@devsymphony/sym",
+  "name": "@dev-symphony/sym",
   "version": "0.1.0",
   "description": "Symphony - LLM-friendly convention linter for AI coding assistants",
   "keywords": [

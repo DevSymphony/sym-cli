@@ -1,5 +1,6 @@
 .claude/
 bin/
+!npm/bin/
 
 # Test coverage
 coverage.out
