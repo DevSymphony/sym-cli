@@ -97,7 +97,7 @@ jobs:
             -o "$BINARY_NAME" \
             ./cmd/sym
 
-          echo "✅ Built $BINARY_NAME"
+          echo "Built $BINARY_NAME"
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
@@ -132,12 +132,12 @@ jobs:
           echo "Found $BINARY_COUNT binaries"
 
           if [ "$BINARY_COUNT" -ne 5 ]; then
-            echo "❌ Error: Expected 5 binaries, found $BINARY_COUNT"
+            echo "Error: Expected 5 binaries, found $BINARY_COUNT"
             ls -lh release-assets/
             exit 1
           fi
 
-          echo "✅ All 5 binaries prepared successfully"
+          echo "All 5 binaries prepared successfully"
           ls -lh release-assets/
 
       - name: Create Release
@@ -178,12 +178,12 @@ jobs:
           echo "Found $BINARY_COUNT binaries in npm/bin/"
 
           if [ "$BINARY_COUNT" -ne 5 ]; then
-            echo "❌ Error: Expected 5 binaries, found $BINARY_COUNT"
+            echo "Error: Expected 5 binaries, found $BINARY_COUNT"
             ls -lh npm/bin/
             exit 1
           fi
 
-          echo "✅ All 5 binaries copied to npm package successfully"
+          echo "All 5 binaries copied to npm package successfully"
           ls -lh npm/bin/
 
       - name: Set up Node.js
