@@ -16,12 +16,8 @@
   },
   "files": [
     "bin/",
-    "lib/",
     "README.md"
   ],
-  "scripts": {
-    "postinstall": "node lib/install.js"
-  },
   "engines": {
     "node": ">=16.0.0"
   },

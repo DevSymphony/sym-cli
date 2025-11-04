@@ -90,13 +90,24 @@ jobs:
 
   npm:
     name: Publish to npm
-    needs: [extract-version, ci]
+    needs: [extract-version, ci, build]
     if: needs.extract-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Copy binaries to npm package
+        run: |
+          mkdir -p npm/bin
+          find artifacts -type f -name 'sym-*' -exec cp {} npm/bin/ \;
+          ls -lh npm/bin/
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
@@ -110,30 +121,30 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
-  deploy-coverage:
-    name: Deploy Coverage to GitHub Pages
-    needs: [extract-version, ci]
-    if: needs.extract-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
+  # deploy-coverage:
+  #   name: Deploy Coverage to GitHub Pages
+  #   needs: [extract-version, ci]
+  #   if: needs.extract-version.outputs.should_release == 'true'
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: write
 
-    steps:
-      - name: Download coverage artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: coverage-report
-          path: coverage-report
+  #   steps:
+  #     - name: Download coverage artifact
+  #       uses: actions/download-artifact@v4
+  #       with:
+  #         name: coverage-report
+  #         path: coverage-report
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          publish_dir: ./coverage-report
-          publish_branch: gh-pages
-          destination_dir: coverage
-          keep_files: true
-          enable_jekyll: false
-          commit_message: 'Deploy coverage for v${{ needs.extract-version.outputs.version }}'
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  #     - name: Deploy to GitHub Pages
+  #       uses: peaceiris/actions-gh-pages@v3
+  #       with:
+  #         github_token: ${{ secrets.GITHUB_TOKEN }}
+  #         publish_dir: ./coverage-report
+  #         publish_branch: gh-pages
+  #         destination_dir: coverage
+  #         keep_files: true
+  #         enable_jekyll: false
+  #         commit_message: 'Deploy coverage for v${{ needs.extract-version.outputs.version }}'
+  #       env:
+  #         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
