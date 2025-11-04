@@ -18,6 +18,23 @@ on:
         required: false
         type: number
         default: 1
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to embed in binary'
+        required: false
+        type: string
+        default: 'dev'
+      upload-artifacts:
+        description: 'Upload build artifacts'
+        required: false
+        type: boolean
+        default: true
+      retention-days:
+        description: 'Artifact retention days'
+        required: false
+        type: number
+        default: 1
 
 jobs:
   build:
