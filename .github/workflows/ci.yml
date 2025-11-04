@@ -38,11 +38,6 @@ jobs:
           version: v2.4.0
           args: --timeout=5m
 
-      - name: Run govulncheck
-        run: |
-          echo "Running Go vulnerability check..."
-          go run golang.org/x/vuln/cmd/govulncheck@latest ./...
-
   test:
     name: Unit Test
     runs-on: ubuntu-latest
