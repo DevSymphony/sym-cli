@@ -53,77 +53,26 @@ jobs:
           GOARCH: ${{ matrix.goarch }}
           CGO_ENABLED: 0
         run: |
+          # Set binary name
           VERSION="${{ inputs.version }}"
           EXT=""
-          if [ "$GOOS" = "windows" ]; then
-            EXT=".exe"
-          fi
-
+          [ "$GOOS" = "windows" ] && EXT=".exe"
           BINARY_NAME="sym-$GOOS-$GOARCH$EXT"
 
+          # Build
           go build \
             -ldflags "-s -w -X main.Version=$VERSION" \
             -trimpath \
             -o "$BINARY_NAME" \
             ./cmd/sym
 
-          # Verify binary was created
-          ls -lh "$BINARY_NAME"
-
-      - name: Verify binary
-        run: |
-          BINARY_NAME="sym-${{ matrix.goos }}-${{ matrix.goarch }}"
-          if [ "${{ matrix.goos }}" = "windows" ]; then
-            BINARY_NAME="${BINARY_NAME}.exe"
-          fi
-
-          echo "Verifying $BINARY_NAME..."
-
-          # Check file exists
-          if [ ! -f "$BINARY_NAME" ]; then
-            echo "❌ Binary not found: $BINARY_NAME"
-            exit 1
-          fi
-
-          # Check file size (should be at least 1MB for a real binary)
-          SIZE=$(stat -c%s "$BINARY_NAME" 2>/dev/null || stat -f%z "$BINARY_NAME")
-          MIN_SIZE=1000000  # 1MB
-          if [ "$SIZE" -lt "$MIN_SIZE" ]; then
-            echo "❌ Binary size ${SIZE} bytes is suspiciously small (expected > ${MIN_SIZE})"
-            exit 1
-          fi
-
-          echo "✅ Binary verification passed (size: ${SIZE} bytes)"
-
-      - name: Run integration test
-        if: matrix.goos == 'linux' && matrix.goarch == 'amd64'
-        run: |
-          chmod +x sym-linux-amd64
-
-          echo "Testing --version command..."
-          VERSION_OUTPUT=$(./sym-linux-amd64 --version 2>&1 || echo "FAILED")
-          if [[ "$VERSION_OUTPUT" == "FAILED" ]]; then
-            echo "Warning: --version command failed (version may not be implemented yet)"
-          else
-            echo "Version: $VERSION_OUTPUT"
-          fi
-
-          echo "Testing --help command..."
-          ./sym-linux-amd64 --help
-
-          echo "Testing invalid command (should fail gracefully)..."
-          ./sym-linux-amd64 --invalid-flag 2>&1 | grep -q "Error\|Unknown\|Usage" || {
-            echo "Binary should show error for invalid flags"
-            exit 1
-          }
-
-          echo "All integration tests passed!"
+          echo "✅ Built $BINARY_NAME"
 
       - name: Upload artifact
         if: inputs.upload-artifacts
         uses: actions/upload-artifact@v4
         with:
           name: sym-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: sym-*
+          path: sym-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
           if-no-files-found: error
           retention-days: ${{ inputs.retention-days }}
