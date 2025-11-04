@@ -28,7 +28,7 @@ func TestPatternEngine_NamingViolations_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: class names must be PascalCase
 	rule := core.Rule{
@@ -87,7 +87,7 @@ func TestPatternEngine_SecurityViolations_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: no hardcoded secrets
 	rule := core.Rule{
@@ -147,7 +147,7 @@ func TestPatternEngine_ValidFile_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: class names must be PascalCase
 	rule := core.Rule{

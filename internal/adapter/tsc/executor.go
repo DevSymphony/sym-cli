@@ -16,7 +16,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	if err := os.WriteFile(configPath, config, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write tsconfig: %w", err)
 	}
-	defer os.Remove(configPath)
+	defer func() { _ = os.Remove(configPath) }()
 
 	// Determine tsc binary path
 	tscPath := a.getTSCPath()

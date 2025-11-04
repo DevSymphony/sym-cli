@@ -27,7 +27,7 @@ func TestStyleEngine_IndentViolations_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: indent with 2 spaces
 	rule := core.Rule{
@@ -87,7 +87,7 @@ func TestStyleEngine_ValidFile_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: indent with 2 spaces
 	rule := core.Rule{

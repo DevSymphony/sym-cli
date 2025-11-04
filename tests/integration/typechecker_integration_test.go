@@ -27,7 +27,7 @@ func TestTypeChecker_TypeErrors_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: TypeScript not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: type checking with strict mode
 	rule := core.Rule{
@@ -85,7 +85,7 @@ func TestTypeChecker_StrictModeErrors_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: TypeScript not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: strict mode violations
 	rule := core.Rule{
@@ -145,7 +145,7 @@ func TestTypeChecker_ValidFile_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: TypeScript not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: type checking
 	rule := core.Rule{
