@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  actions: write
 
 jobs:
   extract-version:
@@ -36,15 +37,20 @@ jobs:
 
       - name: Check if release exists
         id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ steps.version.outputs.version }}"
-          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Tag v$VERSION already exists, skipping release"
+
+          # Check if GitHub release exists
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            echo "Release v$VERSION already exists, skipping release"
             echo "should_release=false" >> $GITHUB_OUTPUT
-          else
-            echo "Tag v$VERSION does not exist, proceeding with release"
-            echo "should_release=true" >> $GITHUB_OUTPUT
+            exit 0
           fi
+
+          echo "Release v$VERSION does not exist, proceeding with release"
+          echo "should_release=true" >> $GITHUB_OUTPUT
 
   ci:
     name: Run CI
@@ -53,60 +59,14 @@ jobs:
     uses: ./.github/workflows/ci.yml
 
   build:
-    name: Build ${{ matrix.goos }}-${{ matrix.goarch }}
+    name: Build
     needs: [extract-version, ci]
     if: needs.extract-version.outputs.should_release == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        include:
-          - goos: linux
-            goarch: amd64
-          - goos: linux
-            goarch: arm64
-          - goos: darwin
-            goarch: amd64
-          - goos: darwin
-            goarch: arm64
-          - goos: windows
-            goarch: amd64
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
-        with:
-          go-version: '1.25.1'
-          cache: true
-
-      - name: Build binary
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
-          CGO_ENABLED: 0
-        run: |
-          VERSION="${{ needs.extract-version.outputs.version }}"
-          EXT=""
-          [ "$GOOS" = "windows" ] && EXT=".exe"
-          BINARY_NAME="sym-$GOOS-$GOARCH$EXT"
-
-          go build \
-            -ldflags "-s -w -X main.Version=$VERSION" \
-            -trimpath \
-            -o "$BINARY_NAME" \
-            ./cmd/sym
-
-          echo "Built $BINARY_NAME"
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: sym-${{ matrix.goos }}-${{ matrix.goarch }}
-          path: sym-${{ matrix.goos }}-${{ matrix.goarch }}${{ matrix.goos == 'windows' && '.exe' || '' }}
-          if-no-files-found: error
-          retention-days: 1
+    uses: ./.github/workflows/build.yml
+    with:
+      version: ${{ needs.extract-version.outputs.version }}
+      upload-artifacts: true
+      retention-days: 1
 
   release:
     name: Create GitHub Release
@@ -126,7 +86,7 @@ jobs:
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
-          find artifacts -type f -name 'sym-*' -exec mv {} release-assets/ \;
+          find artifacts -type f \( -name 'sym-darwin-*' -o -name 'sym-linux-*' -o -name 'sym-windows-*' \) -exec mv {} release-assets/ \;
 
           # Verify binary count
           BINARY_COUNT=$(ls -1 release-assets/ | wc -l)
@@ -172,10 +132,13 @@ jobs:
       - name: Copy binaries to npm package
         run: |
           mkdir -p npm/bin
-          find artifacts -type f -name 'sym-*' -exec cp {} npm/bin/ \;
+          find artifacts -type f \( -name 'sym-*' ! -name '*.js' \) -exec cp {} npm/bin/ \;
+
+          # Set executable permissions for Unix binaries
+          chmod +x npm/bin/sym-darwin-* npm/bin/sym-linux-* 2>/dev/null || true
 
           # Verify binary count
-          BINARY_COUNT=$(find npm/bin -name 'sym-*' -type f | wc -l)
+          BINARY_COUNT=$(find npm/bin -name 'sym-*' -type f ! -name '*.js' | wc -l)
           echo "Found $BINARY_COUNT binaries in npm/bin/"
 
           if [ "$BINARY_COUNT" -ne 5 ]; then
