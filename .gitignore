@@ -1,6 +1,8 @@
 .claude/
 bin/
 !npm/bin/
+!npm/bin/*.js
+npm/bin/sym-*
 
 # Test coverage
 coverage.out
