@@ -71,11 +71,3 @@ jobs:
             coverage.out
             coverage.html
           retention-days: 1
-
-  build:
-    name: Build
-    needs: [lint, test]
-    uses: ./.github/workflows/build.yml
-    with:
-      version: 'ci-build'
-      upload-artifacts: false
