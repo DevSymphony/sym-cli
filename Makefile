@@ -100,11 +100,8 @@ fmt:
 
 lint:
 	@echo "Running linter..."
-	@if command -v golangci-lint > /dev/null; then \
-		golangci-lint run ./...; \
-	else \
-		echo "golangci-lint not installed. Install: https://golangci-lint.run/usage/install/"; \
-	fi
+	golangci-lint run
+	@echo "Linter complete"
 
 tidy:
 	@echo "Tidying dependencies..."
@@ -115,7 +112,7 @@ tidy:
 setup: tidy install-css
 	@echo "Setting up development environment..."
 	@go mod download
-	@go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
 	@echo "Development environment setup complete"
 
 dev-deps:
