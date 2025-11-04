@@ -26,8 +26,6 @@ Validation results are returned to standard output, and a non-zero exit code is 
 }
 
 func init() {
-	rootCmd.AddCommand(validateCmd)
-
 	validateCmd.Flags().StringVarP(&validatePolicyFile, "policy", "p", "code-policy.json", "code policy file path")
 	validateCmd.Flags().StringSliceVarP(&validateTargetPaths, "target", "t", []string{"."}, "files or directories to validate")
 	validateCmd.Flags().StringVarP(&validateRole, "role", "r", "contributor", "user role for RBAC validation")
