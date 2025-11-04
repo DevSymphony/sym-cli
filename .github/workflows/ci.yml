@@ -89,19 +89,6 @@ jobs:
             coverage.out
             coverage.html
 
-      - name: Build binary for E2E tests
-        if: matrix.go-version == '1.25.1'
-        run: |
-          go build -o sym-e2e ./cmd/sym
-          chmod +x sym-e2e
-
-      - name: Run E2E tests
-        if: matrix.go-version == '1.25.1'
-        run: |
-          chmod +x tests/e2e/basic_workflow_test.sh
-          export SYM_BINARY=./sym-e2e
-          tests/e2e/basic_workflow_test.sh
-
   build:
     name: Build and Integration Test
     uses: ./.github/workflows/build.yml

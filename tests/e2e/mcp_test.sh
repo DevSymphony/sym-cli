@@ -71,7 +71,10 @@ EOF
 echo "✅ Test policy created"
 
 # Determine how to run sym command
-if command -v sym &> /dev/null; then
+if [ -n "$SYM_BINARY" ] && [ -f "$SYM_BINARY" ]; then
+    SYM_CMD="$SYM_BINARY"
+    echo "Using SYM_BINARY: $SYM_CMD"
+elif command -v sym &> /dev/null; then
     SYM_CMD="sym"
     echo "Using installed 'sym' command"
 elif [ -f "$PROJECT_ROOT/bin/sym" ]; then
