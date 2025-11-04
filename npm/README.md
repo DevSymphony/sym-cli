@@ -2,13 +2,13 @@
 
 AI coding tools용 컨벤션 린터 MCP 서버
 
-[![npm version](https://img.shields.io/npm/v/@devsymphony/sym.svg)](https://www.npmjs.com/package/@devsymphony/sym)
+[![npm version](https://img.shields.io/npm/v/@dev-symphony/sym.svg)](https://www.npmjs.com/package/@dev-symphony/sym)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 ## 🚀 Quick Start (Claude Code)
 
 ```bash
-claude mcp add symphony npx @devsymphony/sym@latest mcp
+claude mcp add symphony npx @dev-symphony/sym@latest mcp
 ```
 
 That's it! 이제 Claude에게 "프로젝트 컨벤션이 뭐야?"라고 물어보세요.
@@ -16,7 +16,7 @@ That's it! 이제 Claude에게 "프로젝트 컨벤션이 뭐야?"라고 물어�
 ## 📦 Direct Installation
 
 ```bash
-npm install -g @devsymphony/sym
+npm install -g @dev-symphony/sym
 ```
 
 ## 🔧 Manual MCP Configuration
@@ -36,7 +36,7 @@ Claude Desktop / Cursor / Continue.dev 등에서 사용:
   "mcpServers": {
     "symphony": {
       "command": "npx",
-      "args": ["-y", "@devsymphony/sym@latest", "mcp"],
+      "args": ["-y", "@dev-symphony/sym@latest", "mcp"],
       "env": {
         "SYM_POLICY_PATH": "${workspaceFolder}/.sym/user-policy.json"
       }
@@ -137,18 +137,18 @@ Claude Desktop / Cursor / Continue.dev 등에서 사용:
 
 ```bash
 # Start MCP server in stdio mode
-npx @devsymphony/sym@latest mcp
+npx @dev-symphony/sym@latest mcp
 
 # Test with echo
 echo '{"jsonrpc":"2.0","method":"query_conventions","params":{},"id":1}' | \
-  npx @devsymphony/sym@latest mcp
+  npx @dev-symphony/sym@latest mcp
 ```
 
 ### HTTP Mode (For Testing)
 
 ```bash
 # Start HTTP server on port 4000
-npx @devsymphony/sym@latest mcp --port 4000
+npx @dev-symphony/sym@latest mcp --port 4000
 
 # Health check
 curl http://localhost:4000/health
@@ -214,7 +214,7 @@ Create `.sym/user-policy.json` in your project:
 ```bash
 # Clear npm cache and reinstall
 npm cache clean --force
-npm install -g @devsymphony/sym
+npm install -g @dev-symphony/sym
 
 # Verify installation
 sym --version
@@ -240,7 +240,7 @@ Create `.sym/user-policy.json` in your project root:
 chmod +x $(which sym)
 
 # Or reinstall with proper permissions
-sudo npm install -g @devsymphony/sym
+sudo npm install -g @dev-symphony/sym
 ```
 
 ### Binary download failed
@@ -253,7 +253,7 @@ The package automatically downloads platform-specific binaries from GitHub Relea
 
 ```bash
 export HTTPS_PROXY=http://proxy.example.com:8080
-npm install -g @devsymphony/sym
+npm install -g @dev-symphony/sym
 ```
 
 ## 🤝 Contributing
@@ -268,7 +268,7 @@ MIT License - see [LICENSE](https://github.com/DevSymphony/sym-cli/blob/main/LIC
 
 - **GitHub**: [https://github.com/DevSymphony/sym-cli](https://github.com/DevSymphony/sym-cli)
 - **Issues**: [https://github.com/DevSymphony/sym-cli/issues](https://github.com/DevSymphony/sym-cli/issues)
-- **npm**: [https://www.npmjs.com/package/@devsymphony/sym](https://www.npmjs.com/package/@devsymphony/sym)
+- **npm**: [https://www.npmjs.com/package/@dev-symphony/sym](https://www.npmjs.com/package/@dev-symphony/sym)
 
 ---
 

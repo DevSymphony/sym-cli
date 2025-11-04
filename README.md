@@ -47,7 +47,7 @@ Symphony는 GitHub OAuth 인증을 통한 역할 기반 파일 접근 권한 및
 
 **Claude Code 원클릭 설치**:
 ```bash
-claude mcp add symphony npx @devsymphony/sym@latest mcp
+claude mcp add symphony npx @dev-symphony/sym@latest mcp
 ```
 
 **수동 MCP 설정** (Claude Desktop / Cursor / Continue.dev):
@@ -63,7 +63,7 @@ config 파일 위치:
   "mcpServers": {
     "symphony": {
       "command": "npx",
-      "args": ["-y", "@devsymphony/sym@latest", "mcp"],
+      "args": ["-y", "@dev-symphony/sym@latest", "mcp"],
       "env": {
         "SYM_POLICY_PATH": "${workspaceFolder}/.sym/user-policy.json"
       }
@@ -77,7 +77,7 @@ Claude Desktop 재시작 후 사용 가능!
 ### npm 글로벌 설치
 
 ```bash
-npm install -g @devsymphony/sym
+npm install -g @dev-symphony/sym
 ```
 
 ### 바이너리 다운로드
