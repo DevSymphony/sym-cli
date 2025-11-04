@@ -18,6 +18,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
 
       - name: Extract version from package.json
         id: version
@@ -73,6 +80,18 @@ jobs:
         run: |
           mkdir -p release-assets
           find artifacts -type f -name 'sym-*' -exec mv {} release-assets/ \;
+
+          # Verify binary count
+          BINARY_COUNT=$(ls -1 release-assets/ | wc -l)
+          echo "Found $BINARY_COUNT binaries"
+
+          if [ "$BINARY_COUNT" -ne 5 ]; then
+            echo "❌ Error: Expected 5 binaries, found $BINARY_COUNT"
+            ls -lh release-assets/
+            exit 1
+          fi
+
+          echo "✅ All 5 binaries prepared successfully"
           ls -lh release-assets/
 
       - name: Create Release
@@ -90,7 +109,7 @@ jobs:
 
   npm:
     name: Publish to npm
-    needs: [extract-version, ci, build]
+    needs: [extract-version, ci, build, release]
     if: needs.extract-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
 
@@ -107,6 +126,18 @@ jobs:
         run: |
           mkdir -p npm/bin
           find artifacts -type f -name 'sym-*' -exec cp {} npm/bin/ \;
+
+          # Verify binary count
+          BINARY_COUNT=$(find npm/bin -name 'sym-*' -type f | wc -l)
+          echo "Found $BINARY_COUNT binaries in npm/bin/"
+
+          if [ "$BINARY_COUNT" -ne 5 ]; then
+            echo "❌ Error: Expected 5 binaries, found $BINARY_COUNT"
+            ls -lh npm/bin/
+            exit 1
+          fi
+
+          echo "✅ All 5 binaries copied to npm package successfully"
           ls -lh npm/bin/
 
       - name: Set up Node.js
