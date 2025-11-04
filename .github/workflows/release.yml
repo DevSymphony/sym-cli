@@ -38,9 +38,15 @@ jobs:
             echo "should_release=true" >> $GITHUB_OUTPUT
           fi
 
+  ci:
+    name: Run CI
+    needs: extract-version
+    if: needs.extract-version.outputs.should_release == 'true'
+    uses: ./.github/workflows/ci.yml
+
   build:
     name: Build binaries
-    needs: extract-version
+    needs: [extract-version, ci]
     if: needs.extract-version.outputs.should_release == 'true'
     uses: ./.github/workflows/build.yml
     with:
@@ -50,7 +56,7 @@ jobs:
 
   release:
     name: Create GitHub Release
-    needs: [extract-version, build]
+    needs: [extract-version, ci, build]
     if: needs.extract-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
 
@@ -84,7 +90,7 @@ jobs:
 
   npm:
     name: Publish to npm
-    needs: [extract-version, build]
+    needs: [extract-version, ci]
     if: needs.extract-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
 
@@ -106,27 +112,18 @@ jobs:
 
   deploy-coverage:
     name: Deploy Coverage to GitHub Pages
-    needs: [extract-version, build]
+    needs: [extract-version, ci]
     if: needs.extract-version.outputs.should_release == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
 
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Set up Go
-        uses: actions/setup-go@v5
+      - name: Download coverage artifact
+        uses: actions/download-artifact@v4
         with:
-          go-version: '1.25.1'
-          cache: true
-
-      - name: Run tests and generate coverage
-        run: |
-          go test -short -v -race -coverprofile=coverage.out -covermode=atomic ./...
-          mkdir -p coverage-report
-          go tool cover -html=coverage.out -o coverage-report/index.html
+          name: coverage-report
+          path: coverage-report
 
       - name: Deploy to GitHub Pages
         uses: peaceiris/actions-gh-pages@v3
