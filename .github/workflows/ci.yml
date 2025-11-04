@@ -35,7 +35,7 @@ jobs:
       - name: Run golangci-lint
         uses: golangci/golangci-lint-action@v4
         with:
-          version: v1.62.2
+          version: v2.4.0
           args: --timeout=5m
 
       - name: Run govulncheck
@@ -44,7 +44,7 @@ jobs:
           go run golang.org/x/vuln/cmd/govulncheck@latest ./...
 
   test:
-    name: Test
+    name: Unit Test
     runs-on: ubuntu-latest
 
     steps:
@@ -79,7 +79,7 @@ jobs:
           retention-days: 1
 
   build:
-    name: Build and Integration Test
+    name: Build
     needs: [lint, test]
     uses: ./.github/workflows/build.yml
     with:
