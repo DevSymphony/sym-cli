@@ -122,6 +122,15 @@ func (s *Server) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
 	var rpcErr *RPCError
 
 	switch req.Method {
+	case "initialize":
+		result, rpcErr = s.handleInitialize(req.Params)
+	case "initialized":
+		// Notification - no response needed, but we'll send empty result
+		result = nil
+	case "tools/list":
+		result, rpcErr = s.handleToolsList(req.Params)
+	case "tools/call":
+		result, rpcErr = s.handleToolsCall(req.Params)
 	case "query_conventions":
 		result, rpcErr = s.handleQueryConventions(req.Params)
 	case "validate_code":
@@ -188,6 +197,15 @@ func (s *Server) handleRequests(in io.Reader, out io.Writer) error {
 		var rpcErr *RPCError
 
 		switch req.Method {
+		case "initialize":
+			result, rpcErr = s.handleInitialize(req.Params)
+		case "initialized":
+			// Notification - no response needed, but we'll send empty result
+			result = nil
+		case "tools/list":
+			result, rpcErr = s.handleToolsList(req.Params)
+		case "tools/call":
+			result, rpcErr = s.handleToolsCall(req.Params)
 		case "query_conventions":
 			result, rpcErr = s.handleQueryConventions(req.Params)
 		case "validate_code":
@@ -417,4 +435,100 @@ func containsAny(haystack, needles []string) bool {
 		}
 	}
 	return false
+}
+
+// handleInitialize handles MCP initialize request.
+// This is the first request from the client to establish protocol version and capabilities.
+func (s *Server) handleInitialize(params map[string]interface{}) (interface{}, *RPCError) {
+	return map[string]interface{}{
+		"protocolVersion": "2024-11-05",
+		"capabilities": map[string]interface{}{
+			"tools": map[string]interface{}{},
+		},
+		"serverInfo": map[string]interface{}{
+			"name":    "symphony",
+			"version": "1.0.0",
+		},
+	}, nil
+}
+
+// handleToolsList handles tools/list request.
+// Returns the list of available tools that clients can call.
+func (s *Server) handleToolsList(params map[string]interface{}) (interface{}, *RPCError) {
+	tools := []map[string]interface{}{
+		{
+			"name":        "query_conventions",
+			"description": "Query conventions for given context (category, files, languages)",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"category": map[string]interface{}{
+						"type":        "string",
+						"description": "Filter by category (naming, formatting, security, etc.)",
+					},
+					"files": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]string{"type": "string"},
+						"description": "File paths to check conventions for",
+					},
+					"languages": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]string{"type": "string"},
+						"description": "Programming languages to filter by",
+					},
+				},
+			},
+		},
+		{
+			"name":        "validate_code",
+			"description": "Validate code compliance with conventions",
+			"inputSchema": map[string]interface{}{
+				"type": "object",
+				"properties": map[string]interface{}{
+					"files": map[string]interface{}{
+						"type":        "array",
+						"items":       map[string]string{"type": "string"},
+						"description": "File paths to validate",
+					},
+					"role": map[string]interface{}{
+						"type":        "string",
+						"description": "RBAC role for validation",
+					},
+				},
+			},
+		},
+	}
+
+	return map[string]interface{}{
+		"tools": tools,
+	}, nil
+}
+
+// handleToolsCall handles tools/call request.
+// This routes tool calls to the appropriate handler based on tool name.
+func (s *Server) handleToolsCall(params map[string]interface{}) (interface{}, *RPCError) {
+	toolName, ok := params["name"].(string)
+	if !ok {
+		return nil, &RPCError{
+			Code:    -32602,
+			Message: "tool name is required",
+		}
+	}
+
+	arguments, ok := params["arguments"].(map[string]interface{})
+	if !ok {
+		arguments = make(map[string]interface{})
+	}
+
+	switch toolName {
+	case "query_conventions":
+		return s.handleQueryConventions(arguments)
+	case "validate_code":
+		return s.handleValidateCode(arguments)
+	default:
+		return nil, &RPCError{
+			Code:    -32601,
+			Message: fmt.Sprintf("unknown tool: %s", toolName),
+		}
+	}
 }
