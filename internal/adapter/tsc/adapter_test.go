@@ -148,7 +148,7 @@ func TestExecute_FileCreation(t *testing.T) {
 	files := []string{"test.ts"}
 
 	// Execute (will fail because tsc not installed, but we can test config file creation)
-	_, err = adapter.Execute(ctx, config, files)
+	_, _ = adapter.Execute(ctx, config, files)
 
 	// Config file should have been created and cleaned up
 	configPath := filepath.Join(tmpDir, ".symphony-tsconfig.json")

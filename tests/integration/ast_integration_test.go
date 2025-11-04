@@ -27,7 +27,7 @@ func TestASTEngine_CallExpression_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: detect console.log calls
 	rule := core.Rule{
@@ -82,7 +82,7 @@ func TestASTEngine_ClassDeclaration_Integration(t *testing.T) {
 	if err := engine.Init(ctx, config); err != nil {
 		t.Skipf("Skipping test: ESLint not available: %v", err)
 	}
-	defer engine.Close()
+	defer func() { _ = engine.Close() }()
 
 	// Test rule: detect class declarations
 	rule := core.Rule{
