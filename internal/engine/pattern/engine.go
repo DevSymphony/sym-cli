@@ -146,53 +146,9 @@ func (e *Engine) Close() error {
 	return nil
 }
 
-// filterFiles filters files based on selector.
+// filterFiles filters files based on selector using proper glob matching.
 func (e *Engine) filterFiles(files []string, selector *core.Selector) []string {
-	if selector == nil {
-		return files
-	}
-
-	// Simple filter by extension
-	// TODO: Implement proper glob matching
-	var filtered []string
-	for _, file := range files {
-		if e.matchesLanguage(file, selector.Languages) {
-			filtered = append(filtered, file)
-		}
-	}
-
-	return filtered
-}
-
-// matchesLanguage checks if file matches language selector.
-func (e *Engine) matchesLanguage(file string, languages []string) bool {
-	if len(languages) == 0 {
-		return true // No filter
-	}
-
-	// Check by extension
-	for _, lang := range languages {
-		switch lang {
-		case "javascript", "js":
-			if len(file) > 3 && file[len(file)-3:] == ".js" {
-				return true
-			}
-		case "typescript", "ts":
-			if len(file) > 3 && file[len(file)-3:] == ".ts" {
-				return true
-			}
-		case "jsx":
-			if len(file) > 4 && file[len(file)-4:] == ".jsx" {
-				return true
-			}
-		case "tsx":
-			if len(file) > 4 && file[len(file)-4:] == ".tsx" {
-				return true
-			}
-		}
-	}
-
-	return false
+	return core.FilterFiles(files, selector)
 }
 
 // detectLanguage detects the language from file extensions.

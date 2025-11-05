@@ -32,7 +32,7 @@ func runMyRole(cmd *cobra.Command, args []string) {
 	if !config.IsLoggedIn() {
 		if myRoleJSON {
 			output := map[string]string{"error": "not logged in"}
-			json.NewEncoder(os.Stdout).Encode(output)
+			_ = json.NewEncoder(os.Stdout).Encode(output)
 		} else {
 			fmt.Println("❌ Not logged in")
 			fmt.Println("Run 'sym login' first")
@@ -44,7 +44,7 @@ func runMyRole(cmd *cobra.Command, args []string) {
 	if !git.IsGitRepo() {
 		if myRoleJSON {
 			output := map[string]string{"error": "not a git repository"}
-			json.NewEncoder(os.Stdout).Encode(output)
+			_ = json.NewEncoder(os.Stdout).Encode(output)
 		} else {
 			fmt.Println("❌ Not a git repository")
 			fmt.Println("Navigate to a git repository before running this command")
@@ -93,7 +93,7 @@ func runMyRole(cmd *cobra.Command, args []string) {
 			"owner":    owner,
 			"repo":     repo,
 		}
-		json.NewEncoder(os.Stdout).Encode(output)
+		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
 		fmt.Printf("Repository: %s/%s\n", owner, repo)
 		fmt.Printf("User: %s\n", user.Login)
@@ -109,7 +109,7 @@ func runMyRole(cmd *cobra.Command, args []string) {
 func handleError(msg string, err error, jsonMode bool) {
 	if jsonMode {
 		output := map[string]string{"error": fmt.Sprintf("%s: %v", msg, err)}
-		json.NewEncoder(os.Stdout).Encode(output)
+		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
 		fmt.Printf("❌ %s: %v\n", msg, err)
 	}

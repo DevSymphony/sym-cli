@@ -30,7 +30,7 @@ func runWhoami(cmd *cobra.Command, args []string) {
 	if !config.IsLoggedIn() {
 		if whoamiJSON {
 			output := map[string]string{"error": "not logged in"}
-			json.NewEncoder(os.Stdout).Encode(output)
+			_ = json.NewEncoder(os.Stdout).Encode(output)
 		} else {
 			fmt.Println("❌ Not logged in")
 			fmt.Println("Run 'sym login' first")
@@ -65,7 +65,7 @@ func runWhoami(cmd *cobra.Command, args []string) {
 			"email":    user.Email,
 			"id":       user.ID,
 		}
-		json.NewEncoder(os.Stdout).Encode(output)
+		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
 		fmt.Printf("Username: %s\n", user.Login)
 		if user.Name != "" {
@@ -82,7 +82,7 @@ func runWhoami(cmd *cobra.Command, args []string) {
 func handleWhoamiError(msg string, err error, jsonMode bool) {
 	if jsonMode {
 		output := map[string]string{"error": fmt.Sprintf("%s: %v", msg, err)}
-		json.NewEncoder(os.Stdout).Encode(output)
+		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
 		fmt.Printf("❌ %s: %v\n", msg, err)
 	}
