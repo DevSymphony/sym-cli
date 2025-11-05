@@ -42,5 +42,5 @@ func init() {
 	// sym-cli core commands
 	rootCmd.AddCommand(convertCmd)
 	rootCmd.AddCommand(validateCmd)
-	rootCmd.AddCommand(exportCmd)
+	// rootCmd.AddCommand(exportCmd) // TODO: implement export command
 }

@@ -44,7 +44,7 @@ map them to appropriate linter rules.`,
 
   # Use custom output directory
   sym convert -i user-policy.json --targets all --output-dir ./custom-dir
-
+  
   # Legacy mode (internal policy only)
   sym convert -i user-policy.json -o code-policy.json`,
 	RunE: runConvert,
@@ -145,7 +145,6 @@ func runMultiTargetConvert(userPolicy *schema.UserPolicy) error {
 		apiKey,
 		llm.WithModel(convertOpenAIModel),
 		llm.WithTimeout(timeout),
-		llm.WithVerbose(verbose),
 	)
 
 	// Create converter with LLM client

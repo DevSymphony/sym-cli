@@ -103,3 +103,4 @@ type Option struct {
 // func TestCalculateScoreNegative(t *testing.T) { ... }
 // func TestCalculateScoreZero(t *testing.T) { ... }
 // Should be one TestCalculateScore with table-driven approach
+// test comment
