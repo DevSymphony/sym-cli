@@ -51,8 +51,6 @@ map them to appropriate linter rules.`,
 }
 
 func init() {
-	rootCmd.AddCommand(convertCmd)
-
 	convertCmd.Flags().StringVarP(&convertInputFile, "input", "i", "user-policy.json", "input user policy file")
 	convertCmd.Flags().StringVarP(&convertOutputFile, "output", "o", "", "output code policy file (legacy mode)")
 	convertCmd.Flags().StringSliceVar(&convertTargets, "targets", []string{}, "target linters (eslint,checkstyle,pmd or 'all')")

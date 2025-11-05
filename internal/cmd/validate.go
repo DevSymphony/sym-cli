@@ -43,8 +43,6 @@ Examples:
 }
 
 func init() {
-	rootCmd.AddCommand(validateCmd)
-
 	validateCmd.Flags().StringVarP(&validatePolicyFile, "policy", "p", "", "Path to code-policy.json (default: .sym/code-policy.json)")
 	validateCmd.Flags().BoolVar(&validateStaged, "staged", false, "Validate staged changes instead of unstaged")
 	validateCmd.Flags().StringVar(&validateModel, "model", "gpt-4o-mini", "OpenAI model to use")
