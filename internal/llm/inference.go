@@ -14,23 +14,80 @@ const systemPrompt = `You are a code linting rule analyzer. Extract structured i
 
 Extract:
 1. **engine**: pattern|length|style|ast|custom
+   - Use "style" for code formatting rules (semicolons, quotes, indentation, spacing)
+   - Use "pattern" for naming conventions or content matching
+   - Use "length" for size/length constraints
+   - Use "ast" for structural complexity rules
+
 2. **category**: naming|formatting|security|error_handling|testing|documentation|dependency|commit|performance|architecture|custom
+
 3. **target**: identifier|content|import|class|method|function|variable|file|line
+
 4. **scope**: line|file|function|method|class|module|project
+
 5. **patterns**: Array of regex patterns or keywords
-6. **params**: JSON object with rule parameters
+
+6. **params**: JSON object with rule parameters. Examples:
+   - For semicolons: {"semi": true} or {"semi": false}
+   - For quotes: {"quote": "single"} or {"quote": "double"}
+   - For indentation: {"indent": 2} or {"indent": 4}
+   - For trailing commas: {"trailingComma": "always"} or {"trailingComma": "never"}
+   - For case styles: {"case": "PascalCase"} or {"case": "camelCase"} or {"case": "snake_case"}
+   - For length limits: {"max": 80}, {"min": 10}
+
 7. **confidence**: 0.0-1.0
 
-Respond with valid JSON only:
+Examples:
+
+Input: "All statements should end with semicolons"
+Output:
+{
+  "engine": "style",
+  "category": "formatting",
+  "target": "content",
+  "scope": "line",
+  "patterns": [],
+  "params": {"semi": true},
+  "confidence": 0.95
+}
+
+Input: "Use single quotes for strings"
+Output:
+{
+  "engine": "style",
+  "category": "formatting",
+  "target": "content",
+  "scope": "file",
+  "patterns": [],
+  "params": {"quote": "single"},
+  "confidence": 0.95
+}
+
+Input: "Class names must be PascalCase"
+Output:
 {
   "engine": "pattern",
   "category": "naming",
-  "target": "identifier",
+  "target": "class",
   "scope": "file",
   "patterns": ["^[A-Z][a-zA-Z0-9]*$"],
   "params": {"case": "PascalCase"},
   "confidence": 0.95
-}`
+}
+
+Input: "Lines should not exceed 80 characters"
+Output:
+{
+  "engine": "length",
+  "category": "formatting",
+  "target": "line",
+  "scope": "line",
+  "patterns": [],
+  "params": {"max": 80},
+  "confidence": 0.95
+}
+
+Respond with valid JSON only.`
 
 // Inferencer handles rule inference using LLM
 type Inferencer struct {

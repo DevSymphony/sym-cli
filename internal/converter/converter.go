@@ -340,35 +340,105 @@ func (c *Converter) convertForLinter(ctx context.Context, userPolicy *schema.Use
 	// Filter rules by language if needed
 	supportedLangs := converter.SupportedLanguages()
 
+	// Collect applicable rules
+	type ruleWithIndex struct {
+		rule  schema.UserRule
+		index int
+	}
+	var applicableRules []ruleWithIndex
+
 	for i, userRule := range userPolicy.Rules {
-		// Check if rule applies to this linter's languages
-		if !c.ruleAppliesToLanguages(userRule, supportedLangs, userPolicy.Defaults) {
-			continue
+		if c.ruleAppliesToLanguages(userRule, supportedLangs, userPolicy.Defaults) {
+			applicableRules = append(applicableRules, ruleWithIndex{rule: userRule, index: i})
 		}
+	}
 
-		// Infer rule intent using LLM
-		if c.inferencer == nil {
-			return nil, fmt.Errorf("LLM client not configured")
-		}
-
-		inferResult, err := c.inferencer.InferFromUserRule(ctx, &userRule)
+	if len(applicableRules) == 0 {
+		// No applicable rules, return empty result
+		config, err := converter.GenerateConfig(result.Rules)
 		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("Rule %d (%s): %v", i+1, userRule.ID, err))
+			return nil, fmt.Errorf("failed to generate config: %w", err)
+		}
+		result.Config = config
+		return result, nil
+	}
+
+	// Infer rule intents in parallel
+	if c.inferencer == nil {
+		return nil, fmt.Errorf("LLM client not configured")
+	}
+
+	type inferenceJob struct {
+		ruleWithIndex
+		intent  *llm.RuleIntent
+		err     error
+		warning string
+	}
+
+	// Create worker pool with concurrency limit
+	maxWorkers := 5 // Limit concurrent LLM API calls
+	jobs := make(chan ruleWithIndex, len(applicableRules))
+	results := make(chan inferenceJob, len(applicableRules))
+
+	// Start workers
+	for w := 0; w < maxWorkers; w++ {
+		go func() {
+			for job := range jobs {
+				inferResult, err := c.inferencer.InferFromUserRule(ctx, &job.rule)
+
+				jobResult := inferenceJob{
+					ruleWithIndex: job,
+				}
+
+				if err != nil {
+					jobResult.err = err
+					jobResult.warning = fmt.Sprintf("Rule %d (%s): %v", job.index+1, job.rule.ID, err)
+				} else {
+					jobResult.intent = inferResult.Intent
+
+					// Check confidence threshold
+					if inferResult.Intent.Confidence < confidenceThreshold {
+						jobResult.warning = fmt.Sprintf("Rule %d (%s): low confidence %.2f",
+							job.index+1, job.rule.ID, inferResult.Intent.Confidence)
+					}
+				}
+
+				results <- jobResult
+			}
+		}()
+	}
+
+	// Send jobs
+	for _, rule := range applicableRules {
+		jobs <- rule
+	}
+	close(jobs)
+
+	// Collect results
+	inferenceResults := make(map[int]inferenceJob)
+	for i := 0; i < len(applicableRules); i++ {
+		jobResult := <-results
+		inferenceResults[jobResult.index] = jobResult
+	}
+	close(results)
+
+	// Process results in original order
+	for _, ruleInfo := range applicableRules {
+		jobResult := inferenceResults[ruleInfo.index]
+
+		if jobResult.err != nil {
+			result.Warnings = append(result.Warnings, jobResult.warning)
 			continue
 		}
 
-		intent := inferResult.Intent
-
-		// Check confidence threshold
-		if intent.Confidence < confidenceThreshold {
-			result.Warnings = append(result.Warnings,
-				fmt.Sprintf("Rule %d (%s): low confidence %.2f", i+1, userRule.ID, intent.Confidence))
+		if jobResult.warning != "" {
+			result.Warnings = append(result.Warnings, jobResult.warning)
 		}
 
 		// Convert to linter-specific rule
-		linterRule, err := converter.Convert(&userRule, intent)
+		linterRule, err := converter.Convert(&ruleInfo.rule, jobResult.intent)
 		if err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("rule %d: %w", i+1, err))
+			result.Errors = append(result.Errors, fmt.Errorf("rule %d: %w", ruleInfo.index+1, err))
 			continue
 		}
 
@@ -403,9 +473,9 @@ func (c *Converter) convertForLinter(ctx context.Context, userPolicy *schema.Use
 		}
 
 		if hasContent {
-			result.RuleEngineMap[userRule.ID] = converter.Name()
+			result.RuleEngineMap[ruleInfo.rule.ID] = converter.Name()
 		} else {
-			result.RuleEngineMap[userRule.ID] = "llm-validator"
+			result.RuleEngineMap[ruleInfo.rule.ID] = "llm-validator"
 		}
 	}
 
