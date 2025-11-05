@@ -112,7 +112,7 @@ func launchDashboard() error {
 	url := "http://localhost:8787"
 	go func() {
 		time.Sleep(1 * time.Second)
-		browser.OpenURL(url)
+		_ = browser.OpenURL(url) // Ignore error - browser opening is best-effort
 	}()
 
 	// Start dashboard server in background

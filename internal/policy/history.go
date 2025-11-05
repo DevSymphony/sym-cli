@@ -55,7 +55,7 @@ func GetPolicyHistory(customPath string, limit int) ([]PolicyCommit, error) {
 		}
 
 		var timestamp int64
-		fmt.Sscanf(parts[3], "%d", &timestamp)
+		_, _ = fmt.Sscanf(parts[3], "%d", &timestamp)
 
 		commit := PolicyCommit{
 			Hash:    parts[0],

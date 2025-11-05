@@ -403,7 +403,7 @@ func (c *CheckstyleConverter) getIntParam(params map[string]any, key string) int
 			return int(v)
 		case string:
 			var i int
-			fmt.Sscanf(v, "%d", &i)
+			_, _ = fmt.Sscanf(v, "%d", &i)
 			return i
 		}
 	}
