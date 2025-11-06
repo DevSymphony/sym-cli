@@ -1,6 +1,7 @@
 package length
 
 import (
+	"context"
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
@@ -34,6 +35,73 @@ func TestGetCapabilities(t *testing.T) {
 	}
 }
 
+func TestInit(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+		Debug:    false,
+	}
+
+	err := engine.Init(ctx, config)
+	if err != nil {
+		t.Logf("Init failed (expected if ESLint not available): %v", err)
+	}
+}
+
+func TestClose(t *testing.T) {
+	engine := NewEngine()
+	if err := engine.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+func TestValidate_NoFiles(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	rule := core.Rule{
+		ID:       "TEST-RULE",
+		Category: "formatting",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "length",
+			"scope":  "line",
+			"max":    100,
+		},
+	}
+
+	result, err := engine.Validate(ctx, rule, []string{})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+
+	if !result.Passed {
+		t.Error("Expected validation to pass for empty file list")
+	}
+}
+
+func TestValidate_NotInitialized(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	rule := core.Rule{
+		ID:       "TEST-RULE",
+		Category: "formatting",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "length",
+		},
+	}
+
+	_, err := engine.Validate(ctx, rule, []string{"test.js"})
+	if err == nil {
+		t.Error("Expected error for uninitialized engine")
+	}
+}
+
 func TestFilterFiles(t *testing.T) {
 	engine := &Engine{}
 
@@ -57,7 +125,7 @@ func TestFilterFiles(t *testing.T) {
 		{
 			name: "with selector - filters JS/TS only",
 			selector: &core.Selector{
-				Languages: []string{"javascript"},
+				Languages: []string{"javascript", "typescript"},
 			},
 			want: []string{"src/main.js", "src/app.ts", "test/test.js"},
 		},
@@ -70,6 +138,179 @@ func TestFilterFiles(t *testing.T) {
 				t.Errorf("filterFiles() = %v, want %v", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestValidate_WithCustomMessage(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-CUSTOM-MSG",
+		Category: "formatting",
+		Severity: "error",
+		Message:  "Line is too long",
+		Check: map[string]interface{}{
+			"engine": "length",
+			"scope":  "line",
+			"max":    80,
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_FileScope(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-FILE-LENGTH",
+		Category: "formatting",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "length",
+			"scope":  "file",
+			"max":    500,
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_FunctionScope(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-FUNCTION-LENGTH",
+		Category: "formatting",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "length",
+			"scope":  "function",
+			"max":    50,
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_ParamsScope(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-PARAMS-LENGTH",
+		Category: "formatting",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "length",
+			"scope":  "params",
+			"max":    4,
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestInit_WithDebug(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+		Debug:    true,
+	}
+
+	err := engine.Init(ctx, config)
+	if err != nil {
+		t.Logf("Init with debug failed (expected if ESLint not available): %v", err)
+	}
+
+	if !engine.config.Debug {
+		t.Error("Expected debug to be true")
 	}
 }
 

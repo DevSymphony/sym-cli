@@ -7,6 +7,10 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// verbose is a global flag for verbose output
+// Used by convert and validate commands
+var verbose bool
+
 // symphonyclient integration: Updated root command from symphony to sym
 var rootCmd = &cobra.Command{
 	Use:   "sym",
@@ -29,6 +33,9 @@ func Execute() {
 }
 
 func init() {
+	// Global flags
+	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
+
 	// symphonyclient integration: Added symphonyclient commands
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(loginCmd)
@@ -38,9 +45,11 @@ func init() {
 	rootCmd.AddCommand(myRoleCmd)
 	rootCmd.AddCommand(whoamiCmd)
 	rootCmd.AddCommand(policyCmd)
+	// Note: mcpCmd is registered in mcp.go's init()
 
-	// sym-cli core commands
+	// sym-cli core commands (in development)
 	rootCmd.AddCommand(convertCmd)
 	rootCmd.AddCommand(validateCmd)
-	// rootCmd.AddCommand(exportCmd) // TODO: implement export command
+	// TODO: implement export command
+	// rootCmd.AddCommand(exportCmd)
 }

@@ -1,6 +1,7 @@
 package ast
 
 import (
+	"context"
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
@@ -34,86 +35,251 @@ func TestGetCapabilities(t *testing.T) {
 	}
 }
 
-func TestMatchesSelector(t *testing.T) {
-	engine := &Engine{}
+func TestInit(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
 
-	tests := []struct {
-		name     string
-		file     string
-		selector *core.Selector
-		want     bool
-	}{
-		{
-			name:     "nil selector",
-			file:     "src/main.js",
-			selector: nil,
-			want:     true,
-		},
-		{
-			name: "matches javascript",
-			file: "src/main.js",
-			selector: &core.Selector{
-				Languages: []string{"javascript"},
-			},
-			want: true,
-		},
-		{
-			name: "doesn't match typescript",
-			file: "src/main.js",
-			selector: &core.Selector{
-				Languages: []string{"typescript"},
-			},
-			want: false,
-		},
-		{
-			name: "matches include pattern",
-			file: "src/main.js",
-			selector: &core.Selector{
-				Include: []string{"src/*"},
-			},
-			want: true,
-		},
-		{
-			name: "excluded by pattern",
-			file: "test/main.js",
-			selector: &core.Selector{
-				Exclude: []string{"test/*"},
-			},
-			want: false,
-		},
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+		Debug:    false,
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := engine.matchesSelector(tt.file, tt.selector)
-			if got != tt.want {
-				t.Errorf("matchesSelector() = %v, want %v", got, tt.want)
-			}
-		})
+	err := engine.Init(ctx, config)
+	if err != nil {
+		t.Logf("Init failed (expected if ESLint not available): %v", err)
 	}
 }
 
-func TestMatchesLanguage(t *testing.T) {
-	tests := []struct {
-		ext  string
-		lang string
-		want bool
-	}{
-		{".js", "javascript", true},
-		{".jsx", "jsx", true},
-		{".ts", "typescript", true},
-		{".tsx", "tsx", true},
-		{".mjs", "javascript", true},
-		{".py", "javascript", false},
+func TestClose(t *testing.T) {
+	engine := NewEngine()
+	if err := engine.Close(); err != nil {
+		t.Errorf("Close() error = %v", err)
+	}
+}
+
+func TestValidate_NoFiles(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	rule := core.Rule{
+		ID:       "TEST-RULE",
+		Category: "error_handling",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "ast",
+			"node":   "CallExpression",
+		},
 	}
 
-	for _, tt := range tests {
-		got := matchesLanguage(tt.ext, tt.lang)
-		if got != tt.want {
-			t.Errorf("matchesLanguage(%q, %q) = %v, want %v", tt.ext, tt.lang, got, tt.want)
+	result, err := engine.Validate(ctx, rule, []string{})
+	if err != nil {
+		t.Fatalf("Validate() error = %v", err)
+	}
+
+	if !result.Passed {
+		t.Error("Expected validation to pass for empty file list")
+	}
+}
+
+func TestValidate_WithInitialization(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-RULE",
+		Category: "error_handling",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "ast",
+			"node":   "CallExpression",
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
 		}
 	}
 }
+
+func TestValidate_WithWhereClause(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-WHERE",
+		Category: "error_handling",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "ast",
+			"node":   "CallExpression",
+			"where": map[string]interface{}{
+				"func": map[string]interface{}{
+					"in": []string{"open", "readFile"},
+				},
+			},
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_WithHasClause(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-HAS",
+		Category: "error_handling",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "ast",
+			"node":   "CallExpression",
+			"has":    []string{"TryStatement"},
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_WithNotHasClause(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-NOT-HAS",
+		Category: "error_handling",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine": "ast",
+			"node":   "FunctionDeclaration",
+			"notHas": []string{"JSDocComment"},
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+func TestValidate_WithCustomMessage(t *testing.T) {
+	engine := NewEngine()
+	ctx := context.Background()
+
+	config := core.EngineConfig{
+		ToolsDir: t.TempDir(),
+		WorkDir:  t.TempDir(),
+	}
+
+	if err := engine.Init(ctx, config); err != nil {
+		t.Skipf("Skipping test - ESLint not available: %v", err)
+	}
+
+	rule := core.Rule{
+		ID:       "TEST-CUSTOM",
+		Category: "error_handling",
+		Severity: "error",
+		Message:  "Custom AST violation",
+		Check: map[string]interface{}{
+			"engine": "ast",
+			"node":   "CallExpression",
+		},
+	}
+
+	testFile := t.TempDir() + "/test.js"
+	result, err := engine.Validate(ctx, rule, []string{testFile})
+
+	if err != nil {
+		t.Logf("Validate returned error (may be expected): %v", err)
+	}
+
+	if result != nil {
+		if result.RuleID != rule.ID {
+			t.Errorf("RuleID = %s, want %s", result.RuleID, rule.ID)
+		}
+	}
+}
+
+// TestMatchesSelector has been moved to core package tests.
+// File filtering logic is now centralized in core.FilterFiles.
+
+// TestMatchesLanguage has been moved to core package tests.
+// Language matching logic is now centralized in core.MatchesLanguage.
 
 // Helper functions
 
