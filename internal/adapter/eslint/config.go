@@ -9,9 +9,10 @@ import (
 
 // ESLintConfig represents .eslintrc.json structure.
 type ESLintConfig struct {
-	Env   map[string]bool        `json:"env,omitempty"`
-	Rules map[string]interface{} `json:"rules"`
-	Extra map[string]interface{} `json:"-"` // For extensions
+	Env           map[string]bool        `json:"env,omitempty"`
+	ParserOptions map[string]interface{} `json:"parserOptions,omitempty"`
+	Rules         map[string]interface{} `json:"rules"`
+	Extra         map[string]interface{} `json:"-"` // For extensions
 }
 
 // generateConfig creates ESLint config from a Symphony rule.
@@ -26,6 +27,10 @@ func generateConfig(ruleInterface interface{}) ([]byte, error) {
 			"es2021":  true,
 			"node":    true,
 			"browser": true,
+		},
+		ParserOptions: map[string]interface{}{
+			"ecmaVersion": "latest",
+			"sourceType":  "module",
 		},
 		Rules: make(map[string]interface{}),
 	}
@@ -66,7 +71,7 @@ func addPatternRules(config *ESLintConfig, rule *core.Rule) error {
 	case "identifier":
 		// Use id-match rule for identifier patterns
 		config.Rules["id-match"] = []interface{}{
-			rule.Severity, // "error", "warn", "off"
+			MapSeverity(rule.Severity),
 			pattern,
 			map[string]interface{}{
 				"properties":       false,
@@ -78,7 +83,7 @@ func addPatternRules(config *ESLintConfig, rule *core.Rule) error {
 	case "content":
 		// Use no-restricted-syntax for content patterns
 		config.Rules["no-restricted-syntax"] = []interface{}{
-			rule.Severity,
+			MapSeverity(rule.Severity),
 			map[string]interface{}{
 				"selector": fmt.Sprintf("Literal[value=/%s/]", pattern),
 				"message":  rule.Message,
@@ -88,7 +93,7 @@ func addPatternRules(config *ESLintConfig, rule *core.Rule) error {
 	case "import":
 		// Use no-restricted-imports for import patterns
 		config.Rules["no-restricted-imports"] = []interface{}{
-			rule.Severity,
+			MapSeverity(rule.Severity),
 			map[string]interface{}{
 				"patterns": []string{pattern},
 			},
@@ -122,7 +127,7 @@ func addLengthRules(config *ESLintConfig, rule *core.Rule) error {
 			// For now, just enforce max
 			_ = min // Explicitly ignore min for now
 		}
-		config.Rules["max-len"] = []interface{}{rule.Severity, opts}
+		config.Rules["max-len"] = []interface{}{MapSeverity(rule.Severity), opts}
 
 	case "file":
 		// Use max-lines rule
@@ -131,7 +136,7 @@ func addLengthRules(config *ESLintConfig, rule *core.Rule) error {
 			"skipBlankLines": true,
 			"skipComments":   true,
 		}
-		config.Rules["max-lines"] = []interface{}{rule.Severity, opts}
+		config.Rules["max-lines"] = []interface{}{MapSeverity(rule.Severity), opts}
 
 	case "function":
 		// Use max-lines-per-function rule
@@ -140,11 +145,11 @@ func addLengthRules(config *ESLintConfig, rule *core.Rule) error {
 			"skipBlankLines": true,
 			"skipComments":   true,
 		}
-		config.Rules["max-lines-per-function"] = []interface{}{rule.Severity, opts}
+		config.Rules["max-lines-per-function"] = []interface{}{MapSeverity(rule.Severity), opts}
 
 	case "params":
 		// Use max-params rule
-		config.Rules["max-params"] = []interface{}{rule.Severity, max}
+		config.Rules["max-params"] = []interface{}{MapSeverity(rule.Severity), max}
 
 	default:
 		return fmt.Errorf("unsupported length scope: %s", scope)
@@ -161,20 +166,20 @@ func addStyleRules(config *ESLintConfig, rule *core.Rule) error {
 	semi := rule.GetBool("semi")
 
 	if indent > 0 {
-		config.Rules["indent"] = []interface{}{rule.Severity, indent}
+		config.Rules["indent"] = []interface{}{MapSeverity(rule.Severity), indent}
 	}
 
 	if quote != "" {
-		config.Rules["quotes"] = []interface{}{rule.Severity, quote}
+		config.Rules["quotes"] = []interface{}{MapSeverity(rule.Severity), quote}
 	}
 
 	// Semi is boolean, but we need to handle it carefully
 	// If explicitly set, add the rule
 	if _, ok := rule.Check["semi"]; ok {
 		if semi {
-			config.Rules["semi"] = []interface{}{rule.Severity, "always"}
+			config.Rules["semi"] = []interface{}{MapSeverity(rule.Severity), "always"}
 		} else {
-			config.Rules["semi"] = []interface{}{rule.Severity, "never"}
+			config.Rules["semi"] = []interface{}{MapSeverity(rule.Severity), "never"}
 		}
 	}
 

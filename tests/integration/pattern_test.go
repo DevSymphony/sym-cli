@@ -20,7 +20,7 @@ func TestPatternEngine_BadNaming(t *testing.T) {
 	// Init (this will try to install ESLint if not found)
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 
@@ -65,7 +65,7 @@ func TestPatternEngine_GoodCode(t *testing.T) {
 	engine := pattern.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 	}
 
 	if err := engine.Init(ctx, config); err != nil {
@@ -103,7 +103,7 @@ func TestPatternEngine_ContentPattern_Secrets(t *testing.T) {
 	engine := pattern.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 
@@ -154,7 +154,7 @@ func TestPatternEngine_ImportPattern_RestrictedModules(t *testing.T) {
 	engine := pattern.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 

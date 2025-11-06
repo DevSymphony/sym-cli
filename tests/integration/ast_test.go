@@ -18,7 +18,7 @@ func TestASTEngine_AsyncWithTry(t *testing.T) {
 	engine := ast.NewEngine()
 
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Timeout: 30 * time.Second,
 		Debug:   true,
 	}
@@ -84,7 +84,7 @@ func TestASTEngine_AsyncWithTryGood(t *testing.T) {
 	engine := ast.NewEngine()
 
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Timeout: 30 * time.Second,
 		Debug:   true,
 	}

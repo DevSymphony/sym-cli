@@ -17,7 +17,7 @@ func TestStyleEngine_Validation(t *testing.T) {
 	engine := style.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 
@@ -69,7 +69,7 @@ func TestStyleEngine_GoodStyle(t *testing.T) {
 	engine := style.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 

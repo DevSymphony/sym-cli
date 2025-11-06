@@ -17,7 +17,7 @@ func TestLengthEngine_LineScope(t *testing.T) {
 	engine := length.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 
@@ -69,7 +69,7 @@ func TestLengthEngine_FileScope(t *testing.T) {
 	engine := length.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 
@@ -120,7 +120,7 @@ func TestLengthEngine_FunctionScope(t *testing.T) {
 	engine := length.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 
@@ -171,7 +171,7 @@ func TestLengthEngine_ParamsScope(t *testing.T) {
 	engine := length.NewEngine()
 	ctx := context.Background()
 	config := core.EngineConfig{
-		WorkDir: "../../tests/testdata/javascript",
+		WorkDir: "../../tests",
 		Debug:   true,
 	}
 
