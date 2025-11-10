@@ -120,6 +120,10 @@ func TestMCP_GetConventionsByCategory(t *testing.T) {
 
 // TestMCP_ValidateAIGeneratedCode tests validation of AI-generated code against conventions
 func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		t.Skip("OPENAI_API_KEY not set, skipping MCP validation test")
@@ -317,6 +321,10 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 
 // TestMCP_EndToEndWorkflow tests the complete workflow with MCP integration
 func TestMCP_EndToEndWorkflow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		t.Skip("OPENAI_API_KEY not set")

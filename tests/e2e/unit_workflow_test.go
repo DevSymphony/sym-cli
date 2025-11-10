@@ -172,17 +172,24 @@ func TestUnit_ValidationResponseParsing(t *testing.T) {
 			// If not, we test via the public Validate method with mocks
 			// For now, we're testing the concept
 
-			containsViolation := contains(tt.response, "violates\": true") ||
-				contains(tt.response, "violate")
+			// Check for explicit JSON format
+			hasJSONViolation := contains(tt.response, "\"violates\": true")
+			hasJSONNoViolation := contains(tt.response, "\"violates\": false")
+
+			// Check for text-based violation (but exclude negations like "does not violate")
+			hasTextViolation := !hasJSONNoViolation && (
+				contains(tt.response, "violates the") ||
+					contains(tt.response, "violates any") ||
+					(contains(tt.response, "violate") && !contains(tt.response, "does not violate") && !contains(tt.response, "not violate")))
+
+			containsViolation := hasJSONViolation || hasTextViolation
 
 			if tt.expectViolates {
 				assert.True(t, containsViolation,
 					"Response should indicate violation")
 			} else {
-				if !contains(tt.response, "violates\": false") {
-					assert.False(t, contains(tt.response, "violate"),
-						"Response should not indicate violation")
-				}
+				assert.False(t, containsViolation,
+					"Response should not indicate violation")
 			}
 		})
 	}

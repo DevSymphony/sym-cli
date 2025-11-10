@@ -22,6 +22,10 @@ import (
 // 3. LLM coding tool queries conventions via MCP
 // 4. Generated code is validated against conventions
 func TestE2E_FullWorkflow(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		t.Skip("OPENAI_API_KEY not set, skipping E2E test")
@@ -236,6 +240,10 @@ func ProcessData(data string) error {
 
 // TestE2E_MCPToolIntegration tests MCP tool interactions
 func TestE2E_MCPToolIntegration(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		t.Skip("OPENAI_API_KEY not set")
@@ -295,6 +303,10 @@ func TestE2E_MCPToolIntegration(t *testing.T) {
 // TestE2E_CodeGenerationFeedbackLoop tests the feedback loop:
 // Generate code -> Validate -> Fix violations -> Validate again
 func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		t.Skip("OPENAI_API_KEY not set")

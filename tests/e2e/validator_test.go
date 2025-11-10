@@ -15,6 +15,10 @@ import (
 
 // TestE2E_ValidatorWithPolicy tests the full flow of LLM validator
 func TestE2E_ValidatorWithPolicy(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+
 	// Skip if no API key (this is an integration test)
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
@@ -65,6 +69,10 @@ func TestE2E_ValidatorWithPolicy(t *testing.T) {
 
 // TestE2E_ValidatorWithGoodCode tests validation against compliant code
 func TestE2E_ValidatorWithGoodCode(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		t.Skip("OPENAI_API_KEY not set, skipping E2E test")
@@ -154,6 +162,10 @@ func TestE2E_PolicyParsing(t *testing.T) {
 
 // TestE2E_ValidatorFilter tests that only appropriate rules are checked
 func TestE2E_ValidatorFilter(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping E2E test in short mode")
+	}
+
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		t.Skip("OPENAI_API_KEY not set, skipping E2E test")
