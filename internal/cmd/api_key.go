@@ -145,7 +145,7 @@ func hasAPIKeyInEnvFile(envPath string) bool {
 	if err != nil {
 		return false
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {
@@ -181,7 +181,7 @@ func saveToEnvFile(envPath, key, value string) error {
 				lines = append(lines, line)
 			}
 		}
-		existingFile.Close()
+		_ = existingFile.Close()
 	}
 
 	// Add new key
@@ -210,11 +210,11 @@ func ensureGitignore(path string) error {
 			lines = append(lines, line)
 			// Check if already exists
 			if strings.TrimSpace(line) == path {
-				existingFile.Close()
+				_ = existingFile.Close()
 				return nil // Already in .gitignore
 			}
 		}
-		existingFile.Close()
+		_ = existingFile.Close()
 	}
 
 	// Add to .gitignore
@@ -252,7 +252,7 @@ func loadFromEnvFile(envPath, key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 
 	scanner := bufio.NewScanner(file)
 	for scanner.Scan() {

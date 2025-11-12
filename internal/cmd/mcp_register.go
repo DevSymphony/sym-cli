@@ -176,14 +176,20 @@ func registerMCP(app string) error {
 			if err := json.Unmarshal(existingData, &vscodeConfig); err != nil {
 				// Invalid JSON, create backup
 				backupPath := configPath + ".bak"
-				os.WriteFile(backupPath, existingData, 0644)
-				fmt.Printf("  ⚠ Invalid JSON, backup created: %s\n", filepath.Base(backupPath))
+				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
+					fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+				} else {
+					fmt.Printf("  ⚠ Invalid JSON, backup created: %s\n", filepath.Base(backupPath))
+				}
 				vscodeConfig = VSCodeMCPConfig{}
 			} else {
 				// Valid JSON, create backup
 				backupPath := configPath + ".bak"
-				os.WriteFile(backupPath, existingData, 0644)
-				fmt.Printf("  Backup: %s\n", filepath.Base(backupPath))
+				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
+					fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+				} else {
+					fmt.Printf("  Backup: %s\n", filepath.Base(backupPath))
+				}
 			}
 		} else {
 			fmt.Printf("  Creating new configuration file\n")
@@ -214,14 +220,20 @@ func registerMCP(app string) error {
 			if err := json.Unmarshal(existingData, &config); err != nil {
 				// Invalid JSON, create backup
 				backupPath := configPath + ".bak"
-				os.WriteFile(backupPath, existingData, 0644)
-				fmt.Printf("  ⚠ Invalid JSON, backup created: %s\n", filepath.Base(backupPath))
+				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
+					fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+				} else {
+					fmt.Printf("  ⚠ Invalid JSON, backup created: %s\n", filepath.Base(backupPath))
+				}
 				config = MCPRegistrationConfig{}
 			} else {
 				// Valid JSON, create backup
 				backupPath := configPath + ".bak"
-				os.WriteFile(backupPath, existingData, 0644)
-				fmt.Printf("  Backup: %s\n", filepath.Base(backupPath))
+				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
+					fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+				} else {
+					fmt.Printf("  Backup: %s\n", filepath.Base(backupPath))
+				}
 			}
 		} else {
 			fmt.Printf("  Creating new configuration file\n")
