@@ -1,18 +1,13 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/git"
-	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/mcp"
-	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )
@@ -55,19 +50,22 @@ func runMCP(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not in a git repository: %w", err)
 	}
 
-	userPolicyPath := filepath.Join(repoRoot, ".sym", "user-policy.json")
-	codePolicyPath := filepath.Join(repoRoot, ".sym", "code-policy.json")
+	symDir := filepath.Join(repoRoot, ".sym")
+	userPolicyPath := filepath.Join(symDir, "user-policy.json")
 
 	// If custom config path is specified, use it directly
+	var configPath string
 	if mcpConfig != "" {
-		codePolicyPath = mcpConfig
+		configPath = mcpConfig
+	} else {
+		// Use .sym directory as config path for auto-detection
+		configPath = symDir
 	}
 
 	// Check if user-policy.json exists
 	userPolicyExists := fileExists(userPolicyPath)
-	codePolicyExists := fileExists(codePolicyPath)
 
-	// Case 1: No user-policy.json → Launch dashboard
+	// If no user-policy.json → Launch dashboard
 	if !userPolicyExists {
 		fmt.Println("❌ User policy not found at:", userPolicyPath)
 		fmt.Println("📝 Opening dashboard to create policy...")
@@ -82,21 +80,8 @@ func runMCP(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Case 2: user-policy.json exists but code-policy.json doesn't → Auto-convert
-	if userPolicyExists && !codePolicyExists {
-		fmt.Println("✓ User policy found at:", userPolicyPath)
-		fmt.Println("⚙️  Code policy not found. Converting user policy...")
-
-		if err := autoConvertPolicy(userPolicyPath, codePolicyPath); err != nil {
-			return fmt.Errorf("failed to convert policy: %w", err)
-		}
-
-		fmt.Println("✓ Policy converted successfully:", codePolicyPath)
-	}
-
-	// Case 3: Both exist → Start MCP server normally
-	fmt.Println("✓ Policy loaded from:", codePolicyPath)
-	server := mcp.NewServer(mcpHost, mcpPort, codePolicyPath)
+	// Start MCP server - it will handle conversion automatically if needed
+	server := mcp.NewServer(mcpHost, mcpPort, configPath)
 	return server.Start()
 }
 
@@ -120,72 +105,6 @@ func launchDashboard() error {
 	// For now, we just inform the user to run it manually
 	fmt.Println("Please run in another terminal:")
 	fmt.Println("  sym dashboard")
-
-	return nil
-}
-
-// autoConvertPolicy converts user-policy.json to code-policy.json
-func autoConvertPolicy(userPolicyPath, codePolicyPath string) error {
-	// Load user policy
-	data, err := os.ReadFile(userPolicyPath)
-	if err != nil {
-		return fmt.Errorf("failed to read user policy: %w", err)
-	}
-
-	var userPolicy schema.UserPolicy
-	if err := json.Unmarshal(data, &userPolicy); err != nil {
-		return fmt.Errorf("failed to parse user policy: %w", err)
-	}
-
-	// Setup LLM client
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
-	}
-
-	llmClient := llm.NewClient(apiKey,
-		llm.WithModel("gpt-4o-mini"),
-		llm.WithTimeout(30*time.Second),
-	)
-
-	// Create converter
-	conv := converter.NewConverter(converter.WithLLMClient(llmClient))
-
-	// Setup context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(userPolicy.Rules)*30)*time.Second)
-	defer cancel()
-
-	fmt.Printf("Converting %d rules...\n", len(userPolicy.Rules))
-
-	// Convert to all targets
-	result, err := conv.ConvertMultiTarget(ctx, &userPolicy, converter.MultiTargetConvertOptions{
-		Targets:             []string{"all"},
-		OutputDir:           filepath.Dir(codePolicyPath),
-		ConfidenceThreshold: 0.7,
-	})
-	if err != nil {
-		return fmt.Errorf("conversion failed: %w", err)
-	}
-
-	// Write code policy
-	codePolicyJSON, err := json.MarshalIndent(result.CodePolicy, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize code policy: %w", err)
-	}
-
-	if err := os.WriteFile(codePolicyPath, codePolicyJSON, 0644); err != nil {
-		return fmt.Errorf("failed to write code policy: %w", err)
-	}
-
-	// Write linter configs
-	for linterName, config := range result.LinterConfigs {
-		outputPath := filepath.Join(filepath.Dir(codePolicyPath), config.Filename)
-		if err := os.WriteFile(outputPath, config.Content, 0644); err != nil {
-			fmt.Printf("Warning: failed to write %s config: %v\n", linterName, err)
-		} else {
-			fmt.Printf("  ✓ Generated %s: %s\n", linterName, outputPath)
-		}
-	}
 
 	return nil
 }

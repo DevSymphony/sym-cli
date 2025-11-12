@@ -1,23 +1,90 @@
 package mcp
 
 import (
-	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"time"
 
+	"github.com/DevSymphony/sym-cli/internal/converter"
+	"github.com/DevSymphony/sym-cli/internal/git"
+	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// ConvertPolicyWithLLM converts user policy to code policy using LLM.
+// This is extracted from cmd/mcp.go's autoConvertPolicy for reuse.
+func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
+	// Load user policy
+	data, err := os.ReadFile(userPolicyPath)
+	if err != nil {
+		return fmt.Errorf("failed to read user policy: %w", err)
+	}
+
+	var userPolicy schema.UserPolicy
+	if err := json.Unmarshal(data, &userPolicy); err != nil {
+		return fmt.Errorf("failed to parse user policy: %w", err)
+	}
+
+	// Setup LLM client
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
+	}
+
+	llmClient := llm.NewClient(apiKey,
+		llm.WithModel("gpt-4o-mini"),
+		llm.WithTimeout(30*time.Second),
+	)
+
+	// Create converter
+	conv := converter.NewConverter(converter.WithLLMClient(llmClient))
+
+	// Setup context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(userPolicy.Rules)*30)*time.Second)
+	defer cancel()
+
+	fmt.Fprintf(os.Stderr, "Converting %d rules...\n", len(userPolicy.Rules))
+
+	// Convert to all targets
+	result, err := conv.ConvertMultiTarget(ctx, &userPolicy, converter.MultiTargetConvertOptions{
+		Targets:             []string{"all"},
+		OutputDir:           filepath.Dir(codePolicyPath),
+		ConfidenceThreshold: 0.7,
+	})
+	if err != nil {
+		return fmt.Errorf("conversion failed: %w", err)
+	}
+
+	// Write code policy
+	codePolicyJSON, err := json.MarshalIndent(result.CodePolicy, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to serialize code policy: %w", err)
+	}
+
+	if err := os.WriteFile(codePolicyPath, codePolicyJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write code policy: %w", err)
+	}
+
+	// Write linter configs
+	for linterName, config := range result.LinterConfigs {
+		outputPath := filepath.Join(filepath.Dir(codePolicyPath), config.Filename)
+		if err := os.WriteFile(outputPath, config.Content, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write %s config: %v\n", linterName, err)
+		} else {
+			fmt.Fprintf(os.Stderr, "  ✓ Generated %s: %s\n", linterName, outputPath)
+		}
+	}
+
+	return nil
+}
 
 // Server is a MCP (Model Context Protocol) server.
 // It communicates via JSON-RPC over stdio or HTTP.
@@ -43,10 +110,31 @@ func NewServer(host string, port int, configPath string) *Server {
 // Start starts the MCP server.
 // It communicates via JSON-RPC over stdio or HTTP.
 func (s *Server) Start() error {
-	if s.configPath != "" {
-		// Determine the directory and try to load both user-policy and code-policy
-		dir := filepath.Dir(s.configPath)
+	// Determine the directory to look for policy files
+	var dir string
 
+	if s.configPath != "" {
+		// If configPath is provided, check if it's a directory or file
+		fileInfo, err := os.Stat(s.configPath)
+		if err == nil && fileInfo.IsDir() {
+			// If it's a directory, use it directly
+			dir = s.configPath
+		} else {
+			// If it's a file, use its parent directory
+			dir = filepath.Dir(s.configPath)
+		}
+	} else {
+		// No configPath provided, auto-detect .sym folder from git root
+		repoRoot, err := git.GetRepoRoot()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  Warning: Not in a git repository, MCP server starting without policies\n")
+		} else {
+			dir = filepath.Join(repoRoot, ".sym")
+		}
+	}
+
+	// Only try to load policies if we have a directory
+	if dir != "" {
 		// Try to load user-policy.json for natural language descriptions
 		userPolicyPath := filepath.Join(dir, "user-policy.json")
 		if userPolicy, err := s.loader.LoadUserPolicy(userPolicyPath); err == nil {
@@ -59,6 +147,24 @@ func (s *Server) Start() error {
 		if codePolicy, err := s.loader.LoadCodePolicy(codePolicyPath); err == nil {
 			s.codePolicy = codePolicy
 			fmt.Fprintf(os.Stderr, "✓ Code policy loaded: %s (%d rules)\n", codePolicyPath, len(codePolicy.Rules))
+		}
+
+		// Check if conversion is needed
+		if s.userPolicy != nil {
+			needsConversion := s.needsConversion(codePolicyPath)
+			if needsConversion {
+				fmt.Fprintf(os.Stderr, "⚙️  User policy has been updated. Converting to code policy...\n")
+				if err := s.convertUserPolicy(userPolicyPath, codePolicyPath); err != nil {
+					fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to convert policy: %v\n", err)
+					fmt.Fprintf(os.Stderr, "   Continuing with existing policies...\n")
+				} else {
+					// Reload code policy after conversion
+					if codePolicy, err := s.loader.LoadCodePolicy(codePolicyPath); err == nil {
+						s.codePolicy = codePolicy
+						fmt.Fprintf(os.Stderr, "✓ Code policy updated: %s (%d rules)\n", codePolicyPath, len(codePolicy.Rules))
+					}
+				}
+			}
 		}
 
 		// At least one policy must be loaded
@@ -257,129 +363,6 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	return server.Run(ctx, &sdkmcp.StdioTransport{})
 }
 
-// handleRequests handles incoming requests via stdio.
-func (s *Server) handleRequests(in io.Reader, out io.Writer) error {
-	// MCP over stdio uses LSP-style framing:
-	//   Content-Length: <n>\r\n
-	//   [other headers...]\r\n
-	//   \r\n
-	//   <n bytes JSON>
-	reader := bufio.NewReader(in)
-	writer := bufio.NewWriter(out)
-
-	for {
-		// Parse headers
-		var contentLength int = -1
-		for {
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				if err == io.EOF {
-					_ = writer.Flush()
-				}
-				return err
-			}
-			line = strings.TrimRight(line, "\r\n")
-			if line == "" {
-				// End of headers
-				break
-			}
-			lower := strings.ToLower(line)
-			if strings.HasPrefix(lower, "content-length:") {
-				parts := strings.SplitN(line, ":", 2)
-				if len(parts) == 2 {
-					nStr := strings.TrimSpace(parts[1])
-					if n, err := strconv.Atoi(nStr); err == nil {
-						contentLength = n
-					}
-				}
-			}
-			// Ignore other headers
-		}
-
-		if contentLength < 0 {
-			// No content-length provided → ignore and continue
-			// (Some clients might send keep-alive pings without body)
-			continue
-		}
-
-		// Read body
-		body := make([]byte, contentLength)
-		if _, err := io.ReadFull(reader, body); err != nil {
-			return fmt.Errorf("failed to read request body: %w", err)
-		}
-
-		// Decode JSON-RPC request
-		var req JSONRPCRequest
-		if err := json.Unmarshal(body, &req); err != nil {
-			// Send parse error
-			resp := JSONRPCResponse{
-				JSONRPC: "2.0",
-				Error: &RPCError{
-					Code:    -32700,
-					Message: "parse error",
-				},
-				ID: nil,
-			}
-			respBytes, _ := json.Marshal(resp)
-			if _, err := fmt.Fprintf(writer, "Content-Length: %d\r\n\r\n", len(respBytes)); err != nil {
-				return err
-			}
-			if _, err := writer.Write(respBytes); err != nil {
-				return err
-			}
-			if err := writer.Flush(); err != nil {
-				return err
-			}
-			continue
-		}
-
-		var result interface{}
-		var rpcErr *RPCError
-
-		switch req.Method {
-		case "initialize":
-			result, rpcErr = s.handleInitialize(req.Params)
-		case "initialized":
-			// Notification - no response needed, but we'll send empty result
-			result = nil
-		case "tools/list":
-			result, rpcErr = s.handleToolsList(req.Params)
-		case "tools/call":
-			result, rpcErr = s.handleToolsCall(req.Params)
-		case "query_conventions":
-			result, rpcErr = s.handleQueryConventions(req.Params)
-		case "validate_code":
-			result, rpcErr = s.handleValidateCode(req.Params)
-		default:
-			rpcErr = &RPCError{
-				Code:    -32601,
-				Message: fmt.Sprintf("method not found: %s", req.Method),
-			}
-		}
-
-		// Encode response
-		resp := JSONRPCResponse{
-			JSONRPC: "2.0",
-			Result:  result,
-			Error:   rpcErr,
-			ID:      req.ID,
-		}
-		respBytes, err := json.Marshal(resp)
-		if err != nil {
-			return fmt.Errorf("failed to marshal response: %w", err)
-		}
-		if _, err := fmt.Fprintf(writer, "Content-Length: %d\r\n\r\n", len(respBytes)); err != nil {
-			return err
-		}
-		if _, err := writer.Write(respBytes); err != nil {
-			return err
-		}
-		if err := writer.Flush(); err != nil {
-			return err
-		}
-	}
-}
-
 // QueryConventionsRequest is a request to query conventions.
 type QueryConventionsRequest struct {
 	Category  string   `json:"category"`  // optional; use "all" or empty to fetch all categories
@@ -482,7 +465,6 @@ func (s *Server) filterConventions(req QueryConventionsRequest) []ConventionItem
 			}
 			// If req.Languages is empty, include all rules (more user-friendly)
 
-			// Apply defaults if not specified in rule
 			severity := rule.Severity
 			if severity == "" && s.userPolicy.Defaults.Severity != "" {
 				severity = s.userPolicy.Defaults.Severity
@@ -822,4 +804,47 @@ func (s *Server) handleToolsCall(params map[string]interface{}) (interface{}, *R
 			Message: fmt.Sprintf("unknown tool: %s", toolName),
 		}
 	}
+}
+
+// needsConversion checks if user policy needs to be converted to code policy.
+// Returns true if:
+// 1. code-policy.json doesn't exist, OR
+// 2. user policy has more rules than code policy (indicating new rules added), OR
+// 3. user policy has rule IDs that don't exist in code policy
+func (s *Server) needsConversion(codePolicyPath string) bool {
+	// If no code policy exists, conversion is needed
+	if s.codePolicy == nil {
+		return true
+	}
+
+	// If no user policy, no conversion needed
+	if s.userPolicy == nil {
+		return false
+	}
+
+	// Check if user policy has more rules
+	if len(s.userPolicy.Rules) > len(s.codePolicy.Rules) {
+		return true
+	}
+
+	// Check if all user policy rule IDs exist in code policy
+	codePolicyRuleIDs := make(map[string]bool)
+	for _, rule := range s.codePolicy.Rules {
+		codePolicyRuleIDs[rule.ID] = true
+	}
+
+	for _, userRule := range s.userPolicy.Rules {
+		if !codePolicyRuleIDs[userRule.ID] {
+			// Found a user rule that doesn't exist in code policy
+			return true
+		}
+	}
+
+	return false
+}
+
+// convertUserPolicy converts user policy to code policy using LLM.
+// This is a wrapper that calls the shared conversion logic.
+func (s *Server) convertUserPolicy(userPolicyPath, codePolicyPath string) error {
+	return ConvertPolicyWithLLM(userPolicyPath, codePolicyPath)
 }
