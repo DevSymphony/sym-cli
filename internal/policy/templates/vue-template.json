@@ -15,54 +15,54 @@
   },
   "rules": [
     {
-      "id": 1,
+      "id": "1",
       "say": "컴포넌트 이름은 PascalCase를 사용합니다 (예: UserProfile.vue)",
       "category": "naming",
       "example": "<!-- ✅ 좋은 예: -->\n<script setup>\nimport UserProfile from './UserProfile.vue'\nimport NavMenu from './NavMenu.vue'\n</script>\n\n<!-- ❌ 나쁜 예: -->\n<script setup>\nimport userProfile from './user-profile.vue'\nimport navMenu from './nav_menu.vue'\n</script>"
     },
     {
-      "id": 2,
+      "id": "2",
       "say": "Composition API를 사용할 때 setup() 함수 또는 <script setup>을 사용합니다",
       "category": "formatting",
       "example": "<!-- ✅ 좋은 예: -->\n<script setup>\nimport { ref, computed } from 'vue'\nconst count = ref(0)\nconst doubled = computed(() => count.value * 2)\n</script>\n\n<!-- ❌ 나쁜 예: Options API와 혼용 -->\n<script>\nexport default {\n  data() { return { count: 0 } },\n  setup() { ... }\n}\n</script>"
     },
     {
-      "id": 3,
+      "id": "3",
       "say": "Props는 타입과 기본값을 명시합니다",
       "category": "documentation"
     },
     {
-      "id": 4,
+      "id": "4",
       "say": "이벤트 이름은 kebab-case를 사용합니다 (예: @user-updated, @item-deleted)",
       "category": "naming"
     },
     {
-      "id": 5,
+      "id": "5",
       "say": "v-for에는 항상 :key를 지정합니다",
       "category": "error_handling"
     },
     {
-      "id": 6,
+      "id": "6",
       "say": "computed는 부수 효과 없이 순수 함수로 작성합니다",
       "category": "performance"
     },
     {
-      "id": 7,
+      "id": "7",
       "say": "composables 함수 이름은 'use' 접두사를 사용합니다 (예: useUser, useFetch)",
       "category": "naming"
     },
     {
-      "id": 8,
+      "id": "8",
       "say": "템플릿 내 복잡한 표현식은 computed 속성으로 분리합니다",
       "category": "formatting"
     },
     {
-      "id": 9,
+      "id": "9",
       "say": "글로벌 상태는 Pinia 또는 Vuex를 사용하여 관리합니다",
       "category": "formatting"
     },
     {
-      "id": 10,
+      "id": "10",
       "say": "컴포넌트는 단일 책임 원칙을 따르며 200줄 이하로 유지합니다",
       "category": "formatting"
     }
