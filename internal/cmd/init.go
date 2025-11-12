@@ -32,12 +32,16 @@ var (
 	initForce        bool
 	skipMCPRegister  bool
 	registerMCPOnly  bool
+	skipAPIKey       bool
+	setupAPIKeyOnly  bool
 )
 
 func init() {
 	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing roles.json")
 	initCmd.Flags().BoolVar(&skipMCPRegister, "skip-mcp", false, "Skip MCP server registration prompt")
 	initCmd.Flags().BoolVar(&registerMCPOnly, "register-mcp", false, "Register MCP server only (skip roles/policy init)")
+	initCmd.Flags().BoolVar(&skipAPIKey, "skip-api-key", false, "Skip OpenAI API key configuration prompt")
+	initCmd.Flags().BoolVar(&setupAPIKeyOnly, "setup-api-key", false, "Setup OpenAI API key only (skip roles/policy init)")
 }
 
 func runInit(cmd *cobra.Command, args []string) {
@@ -45,6 +49,13 @@ func runInit(cmd *cobra.Command, args []string) {
 	if registerMCPOnly {
 		fmt.Println("🔧 Registering Symphony MCP server...\n")
 		promptMCPRegistration()
+		return
+	}
+
+	// API key setup only mode
+	if setupAPIKeyOnly {
+		fmt.Println("🔑 Setting up OpenAI API key...\n")
+		promptAPIKeySetup()
 		return
 	}
 
@@ -132,6 +143,11 @@ func runInit(cmd *cobra.Command, args []string) {
 	// MCP registration prompt
 	if !skipMCPRegister {
 		promptMCPRegistration()
+	}
+
+	// API key configuration prompt
+	if !skipAPIKey {
+		promptAPIKeyIfNeeded()
 	}
 }
 

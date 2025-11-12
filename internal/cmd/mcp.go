@@ -138,9 +138,9 @@ func autoConvertPolicy(userPolicyPath, codePolicyPath string) error {
 	}
 
 	// Setup LLM client
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
+	apiKey, err := getAPIKey()
+	if err != nil {
+		return fmt.Errorf("OpenAI API key not configured: %w\nTip: Run 'sym init' or set OPENAI_API_KEY in .sym/.env", err)
 	}
 
 	llmClient := llm.NewClient(apiKey,

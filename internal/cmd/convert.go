@@ -133,9 +133,10 @@ func runMultiTargetConvert(userPolicy *schema.UserPolicy) error {
 	}
 
 	// Setup OpenAI client
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		fmt.Println("Warning: OPENAI_API_KEY not set, using fallback inference")
+	apiKey, err := getAPIKey()
+	if err != nil {
+		fmt.Printf("Warning: %v, using fallback inference\n", err)
+		apiKey = ""
 	}
 
 	timeout := time.Duration(convertTimeout) * time.Second
