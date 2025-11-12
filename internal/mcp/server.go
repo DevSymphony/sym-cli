@@ -426,7 +426,7 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 			textContent += fmt.Sprintf("%d. [%s] %s\n", i+1, conv.Severity, conv.ID)
 			textContent += fmt.Sprintf("   Category: %s\n", conv.Category)
 			textContent += fmt.Sprintf("   Description: %s\n", conv.Description)
-			if conv.Message != "" {
+			if conv.Message != "" && conv.Message != conv.Description {
 				textContent += fmt.Sprintf("   Message: %s\n", conv.Message)
 			}
 			textContent += "\n"
