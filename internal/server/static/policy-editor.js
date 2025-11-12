@@ -381,8 +381,6 @@ function renderRules() {
 }
 
 function createRuleElement(rule, index) {
-    const actualIndex = appState.policy.rules.findIndex(r => r.id === rule.id);
-
     return `
         <details class="rule-details bg-white rounded-lg border border-l-4 ${getCategoryColorClass(rule.category)} transition-shadow hover:shadow-md" data-rule-id="${rule.id}">
             <summary class="p-4 cursor-pointer font-semibold flex justify-between items-center text-slate-800">
@@ -454,18 +452,18 @@ function handleDeleteRule(e) {
 
     appState.policy.rules = appState.policy.rules.filter(r => r.id !== ruleId);
 
-    // Renumber rules
-    appState.policy.rules.forEach((rule, index) => {
-        rule.id = String(index + 1);
-    });
-
     renderRules();
     showToast('규칙이 삭제되었습니다');
     markDirty();
 }
 
 function handleAddRule() {
-    const newId = String(appState.policy.rules.length + 1);
+    // Generate a unique ID by finding the maximum existing ID and adding 1
+    const maxId = appState.policy.rules.reduce((max, rule) => {
+        const ruleId = parseInt(rule.id, 10);
+        return isNaN(ruleId) ? max : Math.max(max, ruleId);
+    }, 0);
+    const newId = String(maxId + 1);
     const newRule = { id: newId, say: '', category: '', languages: [], example: '' };
     appState.policy.rules.push(newRule);
     renderRules();
