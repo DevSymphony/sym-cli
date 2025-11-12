@@ -12,8 +12,9 @@ import (
 )
 
 var dashboardCmd = &cobra.Command{
-	Use:   "dashboard",
-	Short: "Start the web dashboard",
+	Use:     "dashboard",
+	Aliases: []string{"dash"},
+	Short:   "Start the web dashboard",
 	Long: `Start a local web server to manage roles through a browser interface.
 
 The dashboard provides a visual interface for:

@@ -317,9 +317,15 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 		Rules: []schema.PolicyRule{
 			{
 				ID:		"SEC-001",
+				Enabled:	true,
 				Category:	"security",
 				Severity:	"error",
 				Message:	"No hardcoded API keys",
+				Desc:		"API keys should not be hardcoded in source code",
+				Check: map[string]any{
+					"engine": "llm-validator",
+					"desc":   "API keys should not be hardcoded in source code",
+				},
 			},
 		},
 	}

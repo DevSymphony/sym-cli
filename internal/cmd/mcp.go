@@ -1,18 +1,13 @@
 package cmd
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/git"
-	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/mcp"
-	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )
@@ -55,19 +50,22 @@ func runMCP(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("not in a git repository: %w", err)
 	}
 
-	userPolicyPath := filepath.Join(repoRoot, ".sym", "user-policy.json")
-	codePolicyPath := filepath.Join(repoRoot, ".sym", "code-policy.json")
+	symDir := filepath.Join(repoRoot, ".sym")
+	userPolicyPath := filepath.Join(symDir, "user-policy.json")
 
 	// If custom config path is specified, use it directly
+	var configPath string
 	if mcpConfig != "" {
-		codePolicyPath = mcpConfig
+		configPath = mcpConfig
+	} else {
+		// Use .sym directory as config path for auto-detection
+		configPath = symDir
 	}
 
 	// Check if user-policy.json exists
 	userPolicyExists := fileExists(userPolicyPath)
-	codePolicyExists := fileExists(codePolicyPath)
 
-	// Case 1: No user-policy.json → Launch dashboard
+	// If no user-policy.json → Launch dashboard
 	if !userPolicyExists {
 		fmt.Println("❌ User policy not found at:", userPolicyPath)
 		fmt.Println("📝 Opening dashboard to create policy...")
@@ -82,21 +80,8 @@ func runMCP(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	// Case 2: user-policy.json exists but code-policy.json doesn't → Auto-convert
-	if userPolicyExists && !codePolicyExists {
-		fmt.Println("✓ User policy found at:", userPolicyPath)
-		fmt.Println("⚙️  Code policy not found. Converting user policy...")
-
-		if err := autoConvertPolicy(userPolicyPath, codePolicyPath); err != nil {
-			return fmt.Errorf("failed to convert policy: %w", err)
-		}
-
-		fmt.Println("✓ Policy converted successfully:", codePolicyPath)
-	}
-
-	// Case 3: Both exist → Start MCP server normally
-	fmt.Println("✓ Policy loaded from:", codePolicyPath)
-	server := mcp.NewServer(mcpHost, mcpPort, codePolicyPath)
+	// Start MCP server - it will handle conversion automatically if needed
+	server := mcp.NewServer(mcpHost, mcpPort, configPath)
 	return server.Start()
 }
 

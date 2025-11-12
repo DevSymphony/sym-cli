@@ -19,60 +19,60 @@
   },
   "rules": [
     {
-      "no": 1,
+      "id": "1",
       "say": "컴포넌트 이름은 PascalCase를 사용합니다 (예: UserProfile, NavBar)",
       "category": "naming",
       "languages": ["javascript", "typescript", "jsx", "tsx"],
       "example": "// ✅ 좋은 예:\nfunction UserProfile() { ... }\nfunction NavBar() { ... }\n\n// ❌ 나쁜 예:\nfunction userProfile() { ... }\nfunction nav_bar() { ... }"
     },
     {
-      "no": 2,
+      "id": "2",
       "say": "React Hooks는 함수 컴포넌트 최상단에서만 호출합니다",
       "category": "error_handling",
       "languages": ["javascript", "typescript", "jsx", "tsx"],
       "example": "// ✅ 좋은 예:\nfunction MyComponent() {\n  const [count, setCount] = useState(0);\n  const value = useMemo(() => count * 2, [count]);\n  return <div>{value}</div>;\n}\n\n// ❌ 나쁜 예:\nfunction MyComponent() {\n  if (condition) {\n    const [count, setCount] = useState(0); // 조건부 호출 금지\n  }\n}"
     },
     {
-      "no": 3,
+      "id": "3",
       "say": "useEffect의 의존성 배열을 정확히 명시하여 무한 루프를 방지합니다",
       "category": "error_handling",
       "languages": ["javascript", "typescript"]
     },
     {
-      "no": 4,
+      "id": "4",
       "say": "Props는 구조 분해 할당으로 받습니다 (예: function Button({ label, onClick }) {...})",
       "category": "formatting",
       "languages": ["javascript", "typescript", "jsx", "tsx"],
       "example": "// ✅ 좋은 예:\nfunction Button({ label, onClick, disabled = false }) {\n  return <button onClick={onClick} disabled={disabled}>{label}</button>;\n}\n\n// ❌ 나쁜 예:\nfunction Button(props) {\n  return <button onClick={props.onClick}>{props.label}</button>;\n}"
     },
     {
-      "no": 5,
+      "id": "5",
       "say": "컴포넌트 파일 하나당 하나의 컴포넌트만 export합니다",
       "category": "formatting"
     },
     {
-      "no": 6,
+      "id": "6",
       "say": "이벤트 핸들러 함수는 'handle' 접두사를 사용합니다 (예: handleClick, handleSubmit)",
       "category": "naming"
     },
     {
-      "no": 7,
+      "id": "7",
       "say": "boolean 타입의 Props는 'is', 'has', 'should' 접두사를 사용합니다 (예: isOpen, hasError)",
       "category": "naming"
     },
     {
-      "no": 8,
+      "id": "8",
       "say": "인라인 스타일 대신 CSS 모듈 또는 styled-components를 사용합니다",
       "category": "formatting"
     },
     {
-      "no": 9,
+      "id": "9",
       "say": "Key prop에 배열 인덱스를 사용하지 않습니다. 고유한 ID를 사용하세요",
       "category": "performance",
       "example": "// ✅ 좋은 예:\n{users.map(user => <UserCard key={user.id} user={user} />)}\n\n// ❌ 나쁜 예:\n{users.map((user, index) => <UserCard key={index} user={user} />)}"
     },
     {
-      "no": 10,
+      "id": "10",
       "say": "큰 리스트는 React.memo 또는 useMemo로 최적화합니다",
       "category": "performance"
     }

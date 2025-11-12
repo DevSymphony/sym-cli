@@ -1,19 +1,90 @@
 package mcp
 
 import (
-	"bufio"
+	"context"
 	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
+	"github.com/DevSymphony/sym-cli/internal/converter"
+	"github.com/DevSymphony/sym-cli/internal/git"
+	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
+	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
 )
+
+// ConvertPolicyWithLLM converts user policy to code policy using LLM.
+// This is extracted from cmd/mcp.go's autoConvertPolicy for reuse.
+func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
+	// Load user policy
+	data, err := os.ReadFile(userPolicyPath)
+	if err != nil {
+		return fmt.Errorf("failed to read user policy: %w", err)
+	}
+
+	var userPolicy schema.UserPolicy
+	if err := json.Unmarshal(data, &userPolicy); err != nil {
+		return fmt.Errorf("failed to parse user policy: %w", err)
+	}
+
+	// Setup LLM client
+	apiKey := os.Getenv("OPENAI_API_KEY")
+	if apiKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
+	}
+
+	llmClient := llm.NewClient(apiKey,
+		llm.WithModel("gpt-4o-mini"),
+		llm.WithTimeout(30*time.Second),
+	)
+
+	// Create converter
+	conv := converter.NewConverter(converter.WithLLMClient(llmClient))
+
+	// Setup context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(userPolicy.Rules)*30)*time.Second)
+	defer cancel()
+
+	fmt.Fprintf(os.Stderr, "Converting %d rules...\n", len(userPolicy.Rules))
+
+	// Convert to all targets
+	result, err := conv.ConvertMultiTarget(ctx, &userPolicy, converter.MultiTargetConvertOptions{
+		Targets:             []string{"all"},
+		OutputDir:           filepath.Dir(codePolicyPath),
+		ConfidenceThreshold: 0.7,
+	})
+	if err != nil {
+		return fmt.Errorf("conversion failed: %w", err)
+	}
+
+	// Write code policy
+	codePolicyJSON, err := json.MarshalIndent(result.CodePolicy, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to serialize code policy: %w", err)
+	}
+
+	if err := os.WriteFile(codePolicyPath, codePolicyJSON, 0644); err != nil {
+		return fmt.Errorf("failed to write code policy: %w", err)
+	}
+
+	// Write linter configs
+	for linterName, config := range result.LinterConfigs {
+		outputPath := filepath.Join(filepath.Dir(codePolicyPath), config.Filename)
+		if err := os.WriteFile(outputPath, config.Content, 0644); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to write %s config: %v\n", linterName, err)
+		} else {
+			fmt.Fprintf(os.Stderr, "  ✓ Generated %s: %s\n", linterName, outputPath)
+		}
+	}
+
+	return nil
+}
 
 // Server is a MCP (Model Context Protocol) server.
 // It communicates via JSON-RPC over stdio or HTTP.
@@ -21,7 +92,8 @@ type Server struct {
 	host       string
 	port       int
 	configPath string
-	policy     *schema.CodePolicy
+	userPolicy *schema.UserPolicy
+	codePolicy *schema.CodePolicy
 	loader     *policy.Loader
 }
 
@@ -38,13 +110,67 @@ func NewServer(host string, port int, configPath string) *Server {
 // Start starts the MCP server.
 // It communicates via JSON-RPC over stdio or HTTP.
 func (s *Server) Start() error {
+	// Determine the directory to look for policy files
+	var dir string
+
 	if s.configPath != "" {
-		codePolicy, err := s.loader.LoadCodePolicy(s.configPath)
-		if err != nil {
-			return fmt.Errorf("failed to load policy: %w", err)
+		// If configPath is provided, check if it's a directory or file
+		fileInfo, err := os.Stat(s.configPath)
+		if err == nil && fileInfo.IsDir() {
+			// If it's a directory, use it directly
+			dir = s.configPath
+		} else {
+			// If it's a file, use its parent directory
+			dir = filepath.Dir(s.configPath)
 		}
-		s.policy = codePolicy
-		fmt.Fprintf(os.Stderr, "policy loaded: %s\n", s.configPath)
+	} else {
+		// No configPath provided, auto-detect .sym folder from git root
+		repoRoot, err := git.GetRepoRoot()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "⚠️  Warning: Not in a git repository, MCP server starting without policies\n")
+		} else {
+			dir = filepath.Join(repoRoot, ".sym")
+		}
+	}
+
+	// Only try to load policies if we have a directory
+	if dir != "" {
+		// Try to load user-policy.json for natural language descriptions
+		userPolicyPath := filepath.Join(dir, "user-policy.json")
+		if userPolicy, err := s.loader.LoadUserPolicy(userPolicyPath); err == nil {
+			s.userPolicy = userPolicy
+			fmt.Fprintf(os.Stderr, "✓ User policy loaded: %s (%d rules)\n", userPolicyPath, len(userPolicy.Rules))
+		}
+
+		// Try to load code-policy.json for validation
+		codePolicyPath := filepath.Join(dir, "code-policy.json")
+		if codePolicy, err := s.loader.LoadCodePolicy(codePolicyPath); err == nil {
+			s.codePolicy = codePolicy
+			fmt.Fprintf(os.Stderr, "✓ Code policy loaded: %s (%d rules)\n", codePolicyPath, len(codePolicy.Rules))
+		}
+
+		// Check if conversion is needed
+		if s.userPolicy != nil {
+			needsConversion := s.needsConversion(codePolicyPath)
+			if needsConversion {
+				fmt.Fprintf(os.Stderr, "⚙️  User policy has been updated. Converting to code policy...\n")
+				if err := s.convertUserPolicy(userPolicyPath, codePolicyPath); err != nil {
+					fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to convert policy: %v\n", err)
+					fmt.Fprintf(os.Stderr, "   Continuing with existing policies...\n")
+				} else {
+					// Reload code policy after conversion
+					if codePolicy, err := s.loader.LoadCodePolicy(codePolicyPath); err == nil {
+						s.codePolicy = codePolicy
+						fmt.Fprintf(os.Stderr, "✓ Code policy updated: %s (%d rules)\n", codePolicyPath, len(codePolicy.Rules))
+					}
+				}
+			}
+		}
+
+		// At least one policy must be loaded
+		if s.userPolicy == nil && s.codePolicy == nil {
+			return fmt.Errorf("no policy found in %s", dir)
+		}
 	}
 
 	if s.port > 0 {
@@ -55,7 +181,8 @@ func (s *Server) Start() error {
 	fmt.Fprintf(os.Stderr, "Listening on: %s:%d\n", s.host, s.port)
 	fmt.Fprintln(os.Stderr, "Available tools: query_conventions, validate_code")
 
-	return s.handleRequests(os.Stdin, os.Stdout)
+	// Use official MCP go-sdk for stdio to ensure spec-compliant framing and lifecycle
+	return s.runStdioWithSDK(context.Background())
 }
 
 // startHTTPServer starts HTTP server for JSON-RPC.
@@ -180,63 +307,66 @@ type RPCError struct {
 	Message string `json:"message"`
 }
 
-// handleRequests handles incoming requests via stdio.
-func (s *Server) handleRequests(in io.Reader, out io.Writer) error {
-	scanner := bufio.NewScanner(in)
-	encoder := json.NewEncoder(out)
+// QueryConventionsInput represents the input schema for the query_conventions tool (go-sdk).
+type QueryConventionsInput struct {
+	Category  string   `json:"category,omitempty" jsonschema:"Filter by category (optional). Use 'all' or leave empty to fetch all categories. Options: security, style, documentation, error_handling, architecture, performance, testing"`
+	Languages []string `json:"languages,omitempty" jsonschema:"Programming languages to filter by (optional). Leave empty to get conventions for all languages. Examples: go, javascript, typescript, python, java"`
+}
 
-	for scanner.Scan() {
-		line := scanner.Bytes()
+// ValidateCodeInput represents the input schema for the validate_code tool (go-sdk).
+type ValidateCodeInput struct {
+	Files []string `json:"files" jsonschema:"File paths to validate"`
+	Role  string   `json:"role,omitempty" jsonschema:"RBAC role for validation (optional)"`
+}
 
-		var req JSONRPCRequest
-		if err := json.Unmarshal(line, &req); err != nil {
-			continue
+// runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
+func (s *Server) runStdioWithSDK(ctx context.Context) error {
+	server := sdkmcp.NewServer(&sdkmcp.Implementation{
+		Name:    "symphony",
+		Version: "1.0.0",
+	}, nil)
+
+	// Tool: query_conventions
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "query_conventions",
+		Description: "Query coding conventions before you start coding.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input QueryConventionsInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		params := map[string]any{
+			"category":  input.Category,
+			"languages": input.Languages,
 		}
-
-		var result interface{}
-		var rpcErr *RPCError
-
-		switch req.Method {
-		case "initialize":
-			result, rpcErr = s.handleInitialize(req.Params)
-		case "initialized":
-			// Notification - no response needed, but we'll send empty result
-			result = nil
-		case "tools/list":
-			result, rpcErr = s.handleToolsList(req.Params)
-		case "tools/call":
-			result, rpcErr = s.handleToolsCall(req.Params)
-		case "query_conventions":
-			result, rpcErr = s.handleQueryConventions(req.Params)
-		case "validate_code":
-			result, rpcErr = s.handleValidateCode(req.Params)
-		default:
-			rpcErr = &RPCError{
-				Code:    -32601,
-				Message: fmt.Sprintf("method not found: %s", req.Method),
-			}
+		result, rpcErr := s.handleQueryConventions(params)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
+		// result is already MCP-shaped: { content: [{type:"text", text:"..."}] }
+		return nil, result.(map[string]any), nil
+	})
 
-		resp := JSONRPCResponse{
-			JSONRPC: "2.0",
-			Result:  result,
-			Error:   rpcErr,
-			ID:      req.ID,
+	// Tool: validate_code
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "validate_code",
+		Description: "Validate that your code complies with all project conventions.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ValidateCodeInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		params := map[string]any{
+			"files": input.Files,
+			"role":  input.Role,
 		}
-
-		if err := encoder.Encode(resp); err != nil {
-			return fmt.Errorf("failed to encode response: %w", err)
+		result, rpcErr := s.handleValidateCode(params)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
-	}
+		return nil, result.(map[string]any), nil
+	})
 
-	return scanner.Err()
+	// Run the server over stdio until the client disconnects
+	return server.Run(ctx, &sdkmcp.StdioTransport{})
 }
 
 // QueryConventionsRequest is a request to query conventions.
 type QueryConventionsRequest struct {
-	Category  string   `json:"category"` // filter by category
-	Files     []string `json:"files"`
-	Languages []string `json:"languages"`
+	Category  string   `json:"category"`  // optional; use "all" or empty to fetch all categories
+	Languages []string `json:"languages"` // optional; empty means all languages
 }
 
 // ConventionItem is a convention item.
@@ -251,7 +381,10 @@ type ConventionItem struct {
 // handleQueryConventions handles convention query requests.
 // It finds and returns relevant conventions by category.
 func (s *Server) handleQueryConventions(params map[string]interface{}) (interface{}, *RPCError) {
-	if s.policy == nil {
+	fmt.Fprintf(os.Stderr, "[DEBUG] handleQueryConventions called with params: %+v\n", params)
+
+	if s.userPolicy == nil && s.codePolicy == nil {
+		fmt.Fprintf(os.Stderr, "[DEBUG] No policy loaded\n")
 		return map[string]interface{}{
 			"conventions": []ConventionItem{},
 			"message":     "policy not loaded",
@@ -261,17 +394,54 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 	var req QueryConventionsRequest
 	paramBytes, _ := json.Marshal(params)
 	if err := json.Unmarshal(paramBytes, &req); err != nil {
+		fmt.Fprintf(os.Stderr, "[ERROR] Failed to parse parameters: %v\n", err)
 		return nil, &RPCError{
 			Code:    -32602,
 			Message: fmt.Sprintf("failed to parse parameters: %v", err),
 		}
 	}
 
-	conventions := s.filterConventions(req)
+	// Apply defaults for missing parameters
+	// If category is empty or "all", return all categories
+	if strings.TrimSpace(req.Category) == "" || strings.EqualFold(req.Category, "all") {
+		req.Category = ""
+	}
 
+	// If languages is empty, return all languages
+	// This is more user-friendly than requiring the parameter
+
+	fmt.Fprintf(os.Stderr, "[DEBUG] Parsed request: category=%s, languages=%v\n",
+		req.Category, req.Languages)
+
+	conventions := s.filterConventions(req)
+	fmt.Fprintf(os.Stderr, "[DEBUG] Found %d conventions\n", len(conventions))
+
+	// Format conventions as readable text for MCP response
+	var textContent string
+	if len(conventions) == 0 {
+		textContent = "No conventions found for the specified criteria."
+	} else {
+		textContent = fmt.Sprintf("Found %d convention(s):\n\n", len(conventions))
+		for i, conv := range conventions {
+			textContent += fmt.Sprintf("%d. [%s] %s\n", i+1, conv.Severity, conv.ID)
+			textContent += fmt.Sprintf("   Category: %s\n", conv.Category)
+			textContent += fmt.Sprintf("   Description: %s\n", conv.Description)
+			if conv.Message != "" {
+				textContent += fmt.Sprintf("   Message: %s\n", conv.Message)
+			}
+			textContent += "\n"
+		}
+		textContent += "\n✓ Next Step: Implement your code following these conventions. After completion, MUST call validate_code to verify compliance."
+	}
+
+	// Return MCP-compliant response with content array
 	return map[string]interface{}{
-		"conventions": conventions,
-		"total":       len(conventions),
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": textContent,
+			},
+		},
 	}, nil
 }
 
@@ -279,26 +449,69 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 func (s *Server) filterConventions(req QueryConventionsRequest) []ConventionItem {
 	var conventions []ConventionItem
 
-	for _, rule := range s.policy.Rules {
-		if !rule.Enabled {
-			continue
-		}
+	// If UserPolicy is loaded, use natural language rules
+	if s.userPolicy != nil {
+		for _, rule := range s.userPolicy.Rules {
+			if req.Category != "" && rule.Category != req.Category {
+				continue
+			}
 
-		if req.Category != "" && rule.Category != req.Category {
-			continue
-		}
+			// Check language relevance
+			// Only filter by language if both req.Languages and rule.Languages are specified
+			if len(req.Languages) > 0 && len(rule.Languages) > 0 {
+				if !containsAny(rule.Languages, req.Languages) {
+					continue
+				}
+			}
+			// If req.Languages is empty, include all rules (more user-friendly)
 
-		if !s.isRuleRelevant(rule, req) {
-			continue
-		}
+			severity := rule.Severity
+			if severity == "" && s.userPolicy.Defaults.Severity != "" {
+				severity = s.userPolicy.Defaults.Severity
+			}
+			if severity == "" {
+				severity = "warning" // fallback default
+			}
 
-		conventions = append(conventions, ConventionItem{
-			ID:          rule.ID,
-			Category:    rule.Category,
-			Description: rule.Desc,
-			Message:     rule.Message,
-			Severity:    rule.Severity,
-		})
+			message := rule.Message
+			if message == "" {
+				message = rule.Say // Use description as message if no explicit message
+			}
+
+			conventions = append(conventions, ConventionItem{
+				ID:          rule.ID,
+				Category:    rule.Category,
+				Description: rule.Say, // Use natural language description
+				Message:     message,
+				Severity:    severity,
+			})
+		}
+		return conventions
+	}
+
+	// Fallback to CodePolicy if UserPolicy not available
+	if s.codePolicy != nil {
+		for _, rule := range s.codePolicy.Rules {
+			if !rule.Enabled {
+				continue
+			}
+
+			if req.Category != "" && rule.Category != req.Category {
+				continue
+			}
+
+			if !s.isRuleRelevant(rule, req) {
+				continue
+			}
+
+			conventions = append(conventions, ConventionItem{
+				ID:          rule.ID,
+				Category:    rule.Category,
+				Description: rule.Desc,
+				Message:     rule.Message,
+				Severity:    rule.Severity,
+			})
+		}
 	}
 
 	return conventions
@@ -315,35 +528,6 @@ func (s *Server) isRuleRelevant(rule schema.PolicyRule, req QueryConventionsRequ
 			return false
 		}
 	}
-
-	if len(rule.When.Include) > 0 && len(req.Files) > 0 {
-		matched := false
-		for _, file := range req.Files {
-			for _, pattern := range rule.When.Include {
-				if match, _ := filepath.Match(pattern, file); match {
-					matched = true
-					break
-				}
-			}
-			if matched {
-				break
-			}
-		}
-		if !matched {
-			return false
-		}
-	}
-
-	if len(rule.When.Exclude) > 0 && len(req.Files) > 0 {
-		for _, file := range req.Files {
-			for _, pattern := range rule.When.Exclude {
-				if match, _ := filepath.Match(pattern, file); match {
-					return false
-				}
-			}
-		}
-	}
-
 	return true
 }
 
@@ -367,10 +551,12 @@ type ViolationItem struct {
 // handleValidateCode handles code validation requests.
 // It uses the existing validator to validate code.
 func (s *Server) handleValidateCode(params map[string]interface{}) (interface{}, *RPCError) {
-	if s.policy == nil {
+	// Get policy for validation (convert UserPolicy if needed)
+	validationPolicy, err := s.getValidationPolicy()
+	if err != nil {
 		return nil, &RPCError{
 			Code:    -32000,
-			Message: "policy not loaded",
+			Message: fmt.Sprintf("policy not available: %v", err),
 		}
 	}
 
@@ -387,7 +573,7 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 		req.Files = []string{"."}
 	}
 
-	v := validator.NewValidator(s.policy, false) // verbose = false for MCP
+	v := validator.NewValidator(validationPolicy, false) // verbose = false for MCP
 
 	var allViolations []ViolationItem
 	var hasErrors bool
@@ -418,10 +604,43 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 		}
 	}
 
+	// Format validation results as readable text for MCP response
+	var textContent string
+	if hasErrors {
+		textContent = "❌ VALIDATION FAILED: Found error-level violations. You MUST fix these issues and re-validate before proceeding.\n\n"
+	} else if len(allViolations) > 0 {
+		textContent = "⚠️  VALIDATION WARNING: Found non-critical violations. Consider fixing these warnings for better code quality.\n\n"
+	} else {
+		textContent = "✓ VALIDATION PASSED: Code complies with all conventions. Task can be marked as complete.\n\n"
+	}
+
+	if len(allViolations) > 0 {
+		textContent += fmt.Sprintf("Total violations: %d\n\n", len(allViolations))
+		for i, violation := range allViolations {
+			textContent += fmt.Sprintf("%d. [%s] %s\n", i+1, violation.Severity, violation.RuleID)
+			if violation.File != "" {
+				textContent += fmt.Sprintf("   File: %s", violation.File)
+				if violation.Line > 0 {
+					textContent += fmt.Sprintf(":%d", violation.Line)
+					if violation.Column > 0 {
+						textContent += fmt.Sprintf(":%d", violation.Column)
+					}
+				}
+				textContent += "\n"
+			}
+			textContent += fmt.Sprintf("   Message: %s\n\n", violation.Message)
+		}
+	}
+
+	// Return MCP-compliant response with content array
 	return map[string]interface{}{
-		"valid":      !hasErrors,
-		"violations": allViolations,
-		"total":      len(allViolations),
+		"content": []map[string]interface{}{
+			{
+				"type": "text",
+				"text": textContent,
+			},
+		},
+		"isError": hasErrors,
 	}, nil
 }
 
@@ -437,6 +656,14 @@ func containsAny(haystack, needles []string) bool {
 	return false
 }
 
+// getValidationPolicy returns CodePolicy for validation.
+func (s *Server) getValidationPolicy() (*schema.CodePolicy, error) {
+	if s.codePolicy != nil {
+		return s.codePolicy, nil
+	}
+	return nil, fmt.Errorf("no code policy loaded - validation requires code policy")
+}
+
 // handleInitialize handles MCP initialize request.
 // This is the first request from the client to establish protocol version and capabilities.
 func (s *Server) handleInitialize(params map[string]interface{}) (interface{}, *RPCError) {
@@ -449,6 +676,27 @@ func (s *Server) handleInitialize(params map[string]interface{}) (interface{}, *
 			"name":    "symphony",
 			"version": "1.0.0",
 		},
+		"instructions": `Symphony Code Convention Enforcer
+
+MANDATORY WORKFLOW for all coding tasks:
+
+STEP 1 [BEFORE CODE]: Query Conventions
+→ Call query_conventions tool FIRST before writing any code
+→ Filter by category (security, style, architecture, etc.)
+→ Filter by language/files you'll work with
+→ Review and understand the conventions
+
+STEP 2 [DURING CODE]: Write Code
+→ Implement your code following the conventions from Step 1
+→ Keep security, style, and architecture guidelines in mind
+
+STEP 3 [AFTER CODE]: Validate Code
+→ Call validate_code tool LAST after completing implementation
+→ MANDATORY: Must validate before marking task complete
+→ Fix any violations found and re-validate
+→ Only proceed when validation passes with no errors
+
+This 3-step workflow ensures all code meets project standards. Never skip steps 1 and 3.`,
 	}, nil
 }
 
@@ -457,44 +705,69 @@ func (s *Server) handleInitialize(params map[string]interface{}) (interface{}, *
 func (s *Server) handleToolsList(params map[string]interface{}) (interface{}, *RPCError) {
 	tools := []map[string]interface{}{
 		{
-			"name":        "query_conventions",
-			"description": "Query conventions for given context (category, files, languages)",
+			"name": "query_conventions",
+			"description": `[STEP 1 - ALWAYS CALL FIRST] Query coding conventions and best practices before writing any code.
+
+CRITICAL WORKFLOW:
+1. ALWAYS call this tool FIRST when starting any coding task
+2. Query relevant conventions by category (security, style, architecture, etc.)
+3. Query conventions for specific files/languages you'll be working with
+4. Use the returned conventions to guide your code implementation
+
+This ensures your code follows project standards from the start. Never skip this step.
+
+Categories available: security, style, documentation, error_handling, architecture, performance, testing
+
+Example: Before implementing authentication, query security conventions first.`,
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
 					"category": map[string]interface{}{
 						"type":        "string",
-						"description": "Filter by category (naming, formatting, security, etc.)",
-					},
-					"files": map[string]interface{}{
-						"type":        "array",
-						"items":       map[string]string{"type": "string"},
-						"description": "File paths to check conventions for",
+						"description": "Filter by category (optional). Leave empty or use 'all' to fetch all categories. Options: security, style, documentation, error_handling, architecture, performance, testing",
 					},
 					"languages": map[string]interface{}{
 						"type":        "array",
 						"items":       map[string]string{"type": "string"},
-						"description": "Programming languages to filter by",
+						"description": "Programming languages to filter by (optional). Leave empty to get conventions for all languages. Examples: go, javascript, typescript, python, java",
 					},
 				},
 			},
 		},
 		{
-			"name":        "validate_code",
-			"description": "Validate code compliance with conventions",
+			"name": "validate_code",
+			"description": `[STEP 3 - ALWAYS CALL LAST] Validate that your code complies with all project conventions.
+
+CRITICAL WORKFLOW:
+1. Call this tool AFTER you have written or modified code
+2. MANDATORY: Always validate before considering the task complete
+3. If violations are found, fix them and validate again
+4. Only mark the task as done after validation passes with no errors
+
+This is the final quality gate. Never skip this validation step.
+
+The tool will check:
+- Security violations (hardcoded secrets, SQL injection, XSS, etc.)
+- Style violations (formatting, naming, documentation)
+- Architecture violations (separation of concerns, patterns)
+- Error handling violations (missing error checks, empty catch blocks)
+
+If violations are found, you MUST fix them before proceeding.`,
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
 					"files": map[string]interface{}{
 						"type":        "array",
 						"items":       map[string]string{"type": "string"},
-						"description": "File paths to validate",
+						"description": "File paths to validate (required)",
+						"required":    true,
 					},
 					"role": map[string]interface{}{
 						"type":        "string",
-						"description": "RBAC role for validation",
+						"description": "RBAC role for validation (optional)",
 					},
 				},
+				"required": []string{"files"},
 			},
 		},
 	}
@@ -531,4 +804,47 @@ func (s *Server) handleToolsCall(params map[string]interface{}) (interface{}, *R
 			Message: fmt.Sprintf("unknown tool: %s", toolName),
 		}
 	}
+}
+
+// needsConversion checks if user policy needs to be converted to code policy.
+// Returns true if:
+// 1. code-policy.json doesn't exist, OR
+// 2. user policy has more rules than code policy (indicating new rules added), OR
+// 3. user policy has rule IDs that don't exist in code policy
+func (s *Server) needsConversion(codePolicyPath string) bool {
+	// If no code policy exists, conversion is needed
+	if s.codePolicy == nil {
+		return true
+	}
+
+	// If no user policy, no conversion needed
+	if s.userPolicy == nil {
+		return false
+	}
+
+	// Check if user policy has more rules
+	if len(s.userPolicy.Rules) > len(s.codePolicy.Rules) {
+		return true
+	}
+
+	// Check if all user policy rule IDs exist in code policy
+	codePolicyRuleIDs := make(map[string]bool)
+	for _, rule := range s.codePolicy.Rules {
+		codePolicyRuleIDs[rule.ID] = true
+	}
+
+	for _, userRule := range s.userPolicy.Rules {
+		if !codePolicyRuleIDs[userRule.ID] {
+			// Found a user rule that doesn't exist in code policy
+			return true
+		}
+	}
+
+	return false
+}
+
+// convertUserPolicy converts user policy to code policy using LLM.
+// This is a wrapper that calls the shared conversion logic.
+func (s *Server) convertUserPolicy(userPolicyPath, codePolicyPath string) error {
+	return ConvertPolicyWithLLM(userPolicyPath, codePolicyPath)
 }
