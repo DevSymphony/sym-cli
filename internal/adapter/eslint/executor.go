@@ -24,7 +24,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to write config: %w", err)
 	}
-	defer os.Remove(configPath)
+	defer func() { _ = os.Remove(configPath) }()
 
 	// Get command and arguments
 	eslintCmd, args := a.getExecutionArgs(configPath, files)
@@ -87,10 +87,10 @@ func (a *Adapter) writeConfigFile(config []byte) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	defer tmpFile.Close()
+	defer func() { _ = tmpFile.Close() }()
 
 	if _, err := tmpFile.Write(config); err != nil {
-		os.Remove(tmpFile.Name())
+		_ = os.Remove(tmpFile.Name())
 		return "", err
 	}
 

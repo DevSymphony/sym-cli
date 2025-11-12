@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter/eslint"
-	"github.com/DevSymphony/sym-cli/internal/adapter/prettier"
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
 )
 
@@ -14,12 +13,10 @@ import (
 //
 // Strategy:
 // - Validation: Use ESLint (indent, quotes, semi rules)
-// - Autofix: Use Prettier (--write mode)
-// - Prettier is opinionated, so we validate with ESLint to respect user config
+// - Autofix is not supported (removed by design)
 type Engine struct {
-	eslint   *eslint.Adapter
-	prettier *prettier.Adapter
-	config   core.EngineConfig
+	eslint *eslint.Adapter
+	config core.EngineConfig
 }
 
 // NewEngine creates a new style engine.
@@ -31,9 +28,8 @@ func NewEngine() *Engine {
 func (e *Engine) Init(ctx context.Context, config core.EngineConfig) error {
 	e.config = config
 
-	// Initialize adapters
+	// Initialize ESLint adapter
 	e.eslint = eslint.NewAdapter(config.ToolsDir, config.WorkDir)
-	e.prettier = prettier.NewAdapter(config.ToolsDir, config.WorkDir)
 
 	// Check ESLint availability
 	if err := e.eslint.CheckAvailability(ctx); err != nil {
@@ -49,13 +45,6 @@ func (e *Engine) Init(ctx context.Context, config core.EngineConfig) error {
 
 		if err := e.eslint.Install(ctx, installConfig); err != nil {
 			return fmt.Errorf("failed to install ESLint: %w", err)
-		}
-	}
-
-	// Prettier is optional (can validate with ESLint only)
-	if err := e.prettier.CheckAvailability(ctx); err != nil {
-		if config.Debug {
-			fmt.Printf("Prettier not found, autofix will be limited\n")
 		}
 	}
 
@@ -110,13 +99,6 @@ func (e *Engine) Validate(ctx context.Context, rule core.Rule, files []string) (
 		if rule.Message != "" {
 			violations[i].Message = rule.Message
 		}
-
-		// Add autofix suggestion if Prettier available and remedy enabled
-		if rule.Remedy != nil && rule.Remedy.Autofix {
-			violations[i].Suggestion = &core.Suggestion{
-				Desc: "Run prettier --write to auto-fix style issues",
-			}
-		}
 	}
 
 	return &core.ValidationResult{
@@ -135,7 +117,7 @@ func (e *Engine) GetCapabilities() core.EngineCapabilities {
 		Name:                "style",
 		SupportedLanguages:  []string{"javascript", "typescript", "jsx", "tsx"},
 		SupportedCategories: []string{"style", "formatting"},
-		SupportsAutofix:     true,
+		SupportsAutofix:     false, // Autofix removed by design
 		RequiresCompilation: false,
 		ExternalTools: []core.ToolRequirement{
 			{
@@ -143,12 +125,6 @@ func (e *Engine) GetCapabilities() core.EngineCapabilities {
 				Version:        "^8.0.0",
 				Optional:       false,
 				InstallCommand: "npm install -g eslint",
-			},
-			{
-				Name:           "prettier",
-				Version:        "^3.0.0",
-				Optional:       true,
-				InstallCommand: "npm install -g prettier",
 			},
 		},
 	}
@@ -159,20 +135,7 @@ func (e *Engine) Close() error {
 	return nil
 }
 
+// filterFiles filters files based on selector using proper glob matching.
 func (e *Engine) filterFiles(files []string, selector *core.Selector) []string {
-	if selector == nil {
-		return files
-	}
-
-	var filtered []string
-	for _, file := range files {
-		if len(file) > 3 {
-			ext := file[len(file)-3:]
-			if ext == ".js" || ext == ".ts" || ext == "jsx" || ext == "tsx" {
-				filtered = append(filtered, file)
-			}
-		}
-	}
-
-	return filtered
+	return core.FilterFiles(files, selector)
 }

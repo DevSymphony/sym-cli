@@ -3,6 +3,9 @@
 GitHub Repository Role & Policy Management Tool with Code Convention Validation
 
 Symphony는 GitHub OAuth 인증을 통한 역할 기반 파일 접근 권한 및 코딩 정책 관리를 위한 하이브리드 CLI/Web 애플리케이션입니다. 자연어로 정의된 컨벤션을 검증하는 LLM 친화적 linter 기능을 포함합니다.
+[![Test Coverage](https://img.shields.io/badge/coverage-view%20report-blue)](https://devsymphony.github.io/sym-cli/coverage.html)
+
+## 개요
 
 > **✨ 빠른 시작:** `sym login` 한 번이면 끝! OAuth App 설정 불필요.
 
@@ -23,6 +26,13 @@ Symphony는 GitHub OAuth 인증을 통한 역할 기반 파일 접근 권한 및
 - **자동 저장**: 30초마다 자동 저장 (선택 가능)
 - **안전장치**: 최소 1명의 정책 편집자 보장, 역할 삭제 보호
 - **권한 기반 UI**: 권한에 따른 읽기 전용 모드 자동 적용
+- 자연어 기반 컨벤션 정의
+- **LLM 기반 자동 변환**: OpenAI API로 자연어 규칙을 linter 설정으로 자동 변환
+- **다중 Linter 지원**: ESLint, Checkstyle, PMD 등 여러 linter 설정 파일 동시 생성
+- 코드 스타일 및 아키텍처 규칙 검증
+- RBAC 기반 파일 접근 제어
+- JSON 출력을 통한 LLM 도구 연동
+- 컨텍스트 기반 컨벤션 추출
 
 ### 🔍 코드 컨벤션 검증 (개발 중)
 - **자연어 기반 컨벤션 정의**: `.sym/user-policy.json`에 자연어로 규칙 작성
@@ -39,6 +49,61 @@ Symphony는 GitHub OAuth 인증을 통한 역할 기반 파일 접근 권한 및
 - **UTF-8 지원**: 한글 및 이모티콘 완벽 지원
 
 ## 📦 설치
+
+### MCP 서버로 설치 (권장 - AI 코딩 도구)
+
+**Claude Code 원클릭 설치**:
+```bash
+claude mcp add symphony npx @dev-symphony/sym@latest mcp
+```
+
+**수동 MCP 설정** (Claude Desktop / Cursor / Continue.dev):
+
+config 파일 위치:
+- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
+- Windows: `%APPDATA%/Claude/claude_desktop_config.json`
+- Linux: `~/.config/Claude/claude_desktop_config.json`
+
+설정 추가:
+```json
+{
+  "mcpServers": {
+    "symphony": {
+      "command": "npx",
+      "args": ["-y", "@dev-symphony/sym@latest", "mcp"],
+      "env": {
+        "SYM_POLICY_PATH": "${workspaceFolder}/.sym/user-policy.json"
+      }
+    }
+  }
+}
+```
+
+Claude Desktop 재시작 후 사용 가능!
+
+### npm 글로벌 설치
+
+```bash
+npm install -g @dev-symphony/sym
+```
+
+### 바이너리 다운로드
+
+GitHub Releases 페이지에서 플랫폼에 맞는 바이너리를 다운로드할 수 있습니다.
+
+#### GPG 서명 검증 (권장)
+
+릴리스 바이너리는 GPG로 서명됩니다. 다운로드한 파일의 무결성을 검증하려면:
+
+```bash
+# 1. GPG 공개키 가져오기 (최초 1회)
+gpg --keyserver keys.openpgp.org --recv-keys [GPG_KEY_ID]
+
+# 2. 서명 검증
+gpg --verify sym-linux-amd64.asc sym-linux-amd64
+```
+
+서명이 유효하면 `Good signature from "DevSymphony"` 메시지가 표시됩니다.
 
 ### 소스에서 빌드
 
@@ -74,6 +139,30 @@ go install github.com/DevSymphony/sym-cli/cmd/sym@latest
 
 ## 🚀 빠른 시작
 
+### MCP 서버 모드 (AI 코딩 도구와 함께)
+
+Symphony를 MCP 서버로 실행하여 Claude, Cursor, Continue.dev 등과 함께 사용:
+
+```bash
+# stdio 모드 (기본 - AI 도구 연동용)
+sym mcp
+
+# HTTP 모드 (디버깅/테스트용)
+sym mcp --port 4000
+
+# 커스텀 정책 파일 지정
+sym mcp --config ./custom-policy.json
+```
+
+**Claude에게 물어보기**:
+- "이 프로젝트의 네이밍 컨벤션은 뭐야?"
+- "이 코드가 컨벤션을 지키는지 검증해줘"
+- "Go 코드 작성 시 주의할 점은?"
+
+MCP 설치 방법은 [설치](#-설치) 섹션 참고.
+
+---
+
 ### 1. 초기 설정 및 로그인
 
 ```bash
@@ -88,6 +177,31 @@ sym whoami
 ```
 
 ### 2. 리포지토리 초기화
+자연어 정책을 linter 설정 파일로 자동 변환합니다.
+
+```bash
+# 모든 지원 linter 설정 파일 생성 (출력: <git-root>/.sym)
+sym convert -i user-policy.json --targets all
+
+# JavaScript/TypeScript만
+sym convert -i user-policy.json --targets eslint
+
+# Java만
+sym convert -i user-policy.json --targets checkstyle,pmd
+
+# 생성되는 파일들:
+# - .sym/.eslintrc.json      (JavaScript/TypeScript)
+# - .sym/checkstyle.xml      (Java)
+# - .sym/pmd-ruleset.xml     (Java)
+# - .sym/code-policy.json    (내부 검증용)
+# - .sym/conversion-report.json
+```
+
+**참고**: [Convert 명령어 상세 가이드](docs/CONVERT_USAGE.md)
+
+### 3. 코드 검증
+
+작성한 코드가 컨벤션을 준수하는지 검증합니다.
 
 ```bash
 # Git 리포지토리로 이동
@@ -220,6 +334,8 @@ go test ./internal/engine/pattern/... -v
 # 통합 테스트
 go test ./tests/integration/... -v
 ```
+
+테스트 커버리지 리포트는 [여기](https://devsymphony.github.io/sym-cli/coverage.html)에서 확인할 수 있습니다.
 
 ### 코드 품질
 

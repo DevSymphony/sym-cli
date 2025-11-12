@@ -227,7 +227,7 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // handleRoles handles GET and POST requests for roles
@@ -251,7 +251,7 @@ func (s *Server) handleGetRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(rolesData)
+	_ = json.NewEncoder(w).Encode(rolesData)
 }
 
 // handleUpdateRoles updates the roles (requires editRoles permission)
@@ -296,7 +296,7 @@ func (s *Server) handleUpdateRoles(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status": "success",
 		"message": "Roles updated successfully",
 	})
@@ -321,7 +321,7 @@ func (s *Server) handleRepoInfo(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(response)
+	_ = json.NewEncoder(w).Encode(response)
 }
 
 // handlePolicy handles GET and POST requests for policy
@@ -345,7 +345,7 @@ func (s *Server) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(policyData)
+	_ = json.NewEncoder(w).Encode(policyData)
 }
 
 // handleSavePolicy saves the policy (requires editPolicy permission)
@@ -390,7 +390,7 @@ func (s *Server) handleSavePolicy(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",
 		"message": "Policy saved successfully",
 	})
@@ -401,7 +401,7 @@ func (s *Server) handlePolicyPath(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]string{
+		_ = json.NewEncoder(w).Encode(map[string]string{
 			"policyPath": s.cfg.PolicyPath,
 		})
 	case http.MethodPost:
@@ -449,7 +449,7 @@ func (s *Server) handleSetPolicyPath(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{
+	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",
 		"message": "Policy path updated successfully",
 	})
@@ -469,7 +469,7 @@ func (s *Server) handlePolicyHistory(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(history)
+	_ = json.NewEncoder(w).Encode(history)
 }
 
 // handlePolicyTemplates returns the list of available templates
@@ -486,7 +486,7 @@ func (s *Server) handlePolicyTemplates(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(templates)
+	_ = json.NewEncoder(w).Encode(templates)
 }
 
 // handlePolicyTemplateDetail returns a specific template
@@ -510,7 +510,7 @@ func (s *Server) handlePolicyTemplateDetail(w http.ResponseWriter, r *http.Reque
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(template)
+	_ = json.NewEncoder(w).Encode(template)
 }
 
 // handleUsers returns all users from roles.json
@@ -553,5 +553,5 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(users)
+	_ = json.NewEncoder(w).Encode(users)
 }

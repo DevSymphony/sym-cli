@@ -96,3 +96,139 @@ func TestGenerateConfig_Style(t *testing.T) {
 		t.Error("expected semi rule to be set")
 	}
 }
+
+func TestGenerateConfig_PatternContent(t *testing.T) {
+	rule := &core.Rule{
+		ID:       "TEST-PATTERN-CONTENT",
+		Category: "security",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine":  "pattern",
+			"target":  "content",
+			"pattern": "password",
+		},
+		Message: "No hardcoded passwords",
+	}
+
+	config, err := generateConfig(rule)
+	if err != nil {
+		t.Fatalf("generateConfig failed: %v", err)
+	}
+
+	var eslintConfig ESLintConfig
+	if err := json.Unmarshal(config, &eslintConfig); err != nil {
+		t.Fatalf("failed to parse config: %v", err)
+	}
+
+	if _, ok := eslintConfig.Rules["no-restricted-syntax"]; !ok {
+		t.Error("expected no-restricted-syntax rule to be set")
+	}
+}
+
+func TestGenerateConfig_PatternImport(t *testing.T) {
+	rule := &core.Rule{
+		ID:       "TEST-PATTERN-IMPORT",
+		Category: "dependency",
+		Severity: "error",
+		Check: map[string]interface{}{
+			"engine":  "pattern",
+			"target":  "import",
+			"pattern": "^forbidden-package",
+		},
+	}
+
+	config, err := generateConfig(rule)
+	if err != nil {
+		t.Fatalf("generateConfig failed: %v", err)
+	}
+
+	var eslintConfig ESLintConfig
+	if err := json.Unmarshal(config, &eslintConfig); err != nil {
+		t.Fatalf("failed to parse config: %v", err)
+	}
+
+	if _, ok := eslintConfig.Rules["no-restricted-imports"]; !ok {
+		t.Error("expected no-restricted-imports rule to be set")
+	}
+}
+
+func TestGenerateConfig_LengthFile(t *testing.T) {
+	rule := &core.Rule{
+		ID:       "TEST-LENGTH-FILE",
+		Category: "formatting",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "length",
+			"scope":  "file",
+			"max":    500,
+		},
+	}
+
+	config, err := generateConfig(rule)
+	if err != nil {
+		t.Fatalf("generateConfig failed: %v", err)
+	}
+
+	var eslintConfig ESLintConfig
+	if err := json.Unmarshal(config, &eslintConfig); err != nil {
+		t.Fatalf("failed to parse config: %v", err)
+	}
+
+	if _, ok := eslintConfig.Rules["max-lines"]; !ok {
+		t.Error("expected max-lines rule to be set")
+	}
+}
+
+func TestGenerateConfig_LengthFunction(t *testing.T) {
+	rule := &core.Rule{
+		ID:       "TEST-LENGTH-FUNCTION",
+		Category: "formatting",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "length",
+			"scope":  "function",
+			"max":    50,
+		},
+	}
+
+	config, err := generateConfig(rule)
+	if err != nil {
+		t.Fatalf("generateConfig failed: %v", err)
+	}
+
+	var eslintConfig ESLintConfig
+	if err := json.Unmarshal(config, &eslintConfig); err != nil {
+		t.Fatalf("failed to parse config: %v", err)
+	}
+
+	if _, ok := eslintConfig.Rules["max-lines-per-function"]; !ok {
+		t.Error("expected max-lines-per-function rule to be set")
+	}
+}
+
+func TestGenerateConfig_LengthParams(t *testing.T) {
+	rule := &core.Rule{
+		ID:       "TEST-LENGTH-PARAMS",
+		Category: "formatting",
+		Severity: "warning",
+		Check: map[string]interface{}{
+			"engine": "length",
+			"scope":  "params",
+			"max":    4,
+		},
+	}
+
+	config, err := generateConfig(rule)
+	if err != nil {
+		t.Fatalf("generateConfig failed: %v", err)
+	}
+
+	var eslintConfig ESLintConfig
+	if err := json.Unmarshal(config, &eslintConfig); err != nil {
+		t.Fatalf("failed to parse config: %v", err)
+	}
+
+	if _, ok := eslintConfig.Rules["max-params"]; !ok {
+		t.Error("expected max-params rule to be set")
+	}
+}
