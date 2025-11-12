@@ -15,54 +15,54 @@
   },
   "rules": [
     {
-      "no": 1,
+      "id": "1",
       "say": "패키지 이름은 소문자 한 단어로 작성합니다 (예: http, json, user)",
       "category": "naming",
       "example": "// ✅ 좋은 예:\npackage user\npackage database\npackage httputil\n\n// ❌ 나쁜 예:\npackage UserManagement\npackage data_base\npackage HTTP_Util"
     },
     {
-      "no": 2,
+      "id": "2",
       "say": "변수와 함수 이름은 camelCase 또는 PascalCase를 사용합니다 (public은 대문자 시작)",
       "category": "naming"
     },
     {
-      "no": 3,
+      "id": "3",
       "say": "에러는 항상 처리하고, 무시하는 경우 명시적으로 _ 를 사용합니다",
       "category": "error_handling",
       "example": "// ✅ 좋은 예:\nfile, err := os.Open(\"config.json\")\nif err != nil {\n    return fmt.Errorf(\"failed to open config: %w\", err)\n}\ndefer file.Close()\n\n// ❌ 나쁜 예:\nfile, _ := os.Open(\"config.json\")\ndefer file.Close()"
     },
     {
-      "no": 4,
+      "id": "4",
       "say": "함수는 에러를 마지막 반환값으로 반환합니다",
       "category": "error_handling"
     },
     {
-      "no": 5,
+      "id": "5",
       "say": "인터페이스 이름은 -er 접미사를 사용합니다 (예: Reader, Writer, Handler)",
       "category": "naming"
     },
     {
-      "no": 6,
+      "id": "6",
       "say": "gofmt로 코드를 포맷팅합니다",
       "category": "formatting"
     },
     {
-      "no": 7,
+      "id": "7",
       "say": "공개(exported) 함수와 타입에는 주석을 작성합니다",
       "category": "documentation"
     },
     {
-      "no": 8,
+      "id": "8",
       "say": "context.Context를 함수의 첫 번째 파라미터로 전달합니다",
       "category": "error_handling"
     },
     {
-      "no": 9,
+      "id": "9",
       "say": "goroutine 사용 시 적절한 동기화(sync, channel)를 사용합니다",
       "category": "error_handling"
     },
     {
-      "no": 10,
+      "id": "10",
       "say": "defer를 사용하여 리소스 정리를 보장합니다",
       "category": "error_handling"
     }

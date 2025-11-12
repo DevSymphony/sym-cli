@@ -33,8 +33,7 @@ type UserDefaults struct {
 
 // UserRule represents a single rule in user schema
 type UserRule struct {
-	No        int            `json:"no,omitempty"`         // symphonyclient integration: rule number for ordering
-	ID        string         `json:"id,omitempty"`
+	ID        string         `json:"id"`                   // Rule ID (required, can be number or string)
 	Say       string         `json:"say"`
 	Category  string         `json:"category,omitempty"`
 	Languages []string       `json:"languages,omitempty"`
@@ -44,7 +43,7 @@ type UserRule struct {
 	Autofix   bool           `json:"autofix,omitempty"`
 	Params    map[string]any `json:"params,omitempty"`
 	Message   string         `json:"message,omitempty"`
-	Example   string         `json:"example,omitempty"`    // symphonyclient integration: example code
+	Example   string         `json:"example,omitempty"`
 }
 
 // CodePolicy represents the formal validation schema (B schema)

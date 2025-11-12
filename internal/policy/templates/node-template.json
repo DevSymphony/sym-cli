@@ -19,55 +19,55 @@
   },
   "rules": [
     {
-      "no": 1,
+      "id": 1,
       "say": "환경 변수는 process.env가 아닌 설정 파일(config.js)을 통해 접근합니다",
       "category": "security"
     },
     {
-      "no": 2,
+      "id": 2,
       "say": "민감한 정보(API 키, 비밀번호)는 절대 하드코딩하지 않습니다",
       "category": "security",
       "example": "// ✅ 좋은 예:\nconst apiKey = process.env.API_KEY;\nconst dbPassword = config.get('database.password');\n\n// ❌ 나쁜 예:\nconst apiKey = 'sk-1234567890abcdef';\nconst dbPassword = 'mySecretPassword123';"
     },
     {
-      "no": 3,
+      "id": 3,
       "say": "모든 비동기 함수는 try-catch 블록으로 에러를 처리합니다",
       "category": "error_handling",
       "example": "// ✅ 좋은 예:\nasync function fetchUser(id) {\n  try {\n    const user = await db.users.findById(id);\n    return user;\n  } catch (error) {\n    logger.error('Failed to fetch user:', error);\n    throw new ApiError('User not found', 404);\n  }\n}\n\n// ❌ 나쁜 예:\nasync function fetchUser(id) {\n  const user = await db.users.findById(id);\n  return user;\n}"
     },
     {
-      "no": 4,
+      "id": 4,
       "say": "API 라우트 핸들러는 항상 적절한 HTTP 상태 코드를 반환합니다",
       "category": "error_handling"
     },
     {
-      "no": 5,
+      "id": 5,
       "say": "데이터베이스 쿼리는 SQL injection을 방지하기 위해 parameterized query를 사용합니다",
       "category": "security",
       "example": "// ✅ 좋은 예:\nconst result = await db.query('SELECT * FROM users WHERE id = ?', [userId]);\n\n// ❌ 나쁜 예:\nconst result = await db.query(`SELECT * FROM users WHERE id = ${userId}`);"
     },
     {
-      "no": 6,
+      "id": 6,
       "say": "파일 이름은 kebab-case를 사용합니다 (예: user-controller.js, auth-service.js)",
       "category": "naming"
     },
     {
-      "no": 7,
+      "id": 7,
       "say": "클래스 이름은 PascalCase, 함수/변수는 camelCase를 사용합니다",
       "category": "naming"
     },
     {
-      "no": 8,
+      "id": 8,
       "say": "미들웨어 함수는 next()를 명시적으로 호출하거나 응답을 보냅니다",
       "category": "error_handling"
     },
     {
-      "no": 9,
+      "id": 9,
       "say": "큰 의존성 패키지는 필요한 부분만 import합니다 (tree-shaking)",
       "category": "performance"
     },
     {
-      "no": 10,
+      "id": 10,
       "say": "로그 메시지는 적절한 레벨(debug, info, warn, error)을 사용합니다",
       "category": "documentation"
     }

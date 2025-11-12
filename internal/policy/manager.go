@@ -92,18 +92,18 @@ func ValidatePolicy(policy *schema.UserPolicy) error {
 	}
 
 	// Validate rules
-	ruleNumbers := make(map[int]bool)
+	ruleIDs := make(map[string]bool)
 	for i, rule := range policy.Rules {
 		if rule.Say == "" {
 			return fmt.Errorf("rule %d: 'say' field is required", i+1)
 		}
-		if rule.No <= 0 {
-			return fmt.Errorf("rule %d: 'no' field must be positive", i+1)
+		if rule.ID == "" {
+			return fmt.Errorf("rule %d: 'id' field is required", i+1)
 		}
-		if ruleNumbers[rule.No] {
-			return fmt.Errorf("duplicate rule number: %d", rule.No)
+		if ruleIDs[rule.ID] {
+			return fmt.Errorf("duplicate rule id: %s", rule.ID)
 		}
-		ruleNumbers[rule.No] = true
+		ruleIDs[rule.ID] = true
 	}
 
 	// Validate RBAC roles
