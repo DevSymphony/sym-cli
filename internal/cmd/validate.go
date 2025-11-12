@@ -71,9 +71,9 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	}
 
 	// Get OpenAI API key
-	apiKey := os.Getenv("OPENAI_API_KEY")
-	if apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
+	apiKey, err := getAPIKey()
+	if err != nil {
+		return fmt.Errorf("OpenAI API key not configured: %w\nTip: Run 'sym init' or set OPENAI_API_KEY in .sym/.env", err)
 	}
 
 	// Create LLM client
