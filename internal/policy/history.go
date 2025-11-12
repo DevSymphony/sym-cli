@@ -9,12 +9,12 @@ import (
 
 // PolicyCommit represents a single commit in policy history
 type PolicyCommit struct {
-	Hash      string    `json:"hash"`
-	Author    string    `json:"author"`
-	Email     string    `json:"email"`
-	Date      time.Time `json:"date"`
-	Message   string    `json:"message"`
-	FilesChanged int    `json:"filesChanged"`
+	Hash         string    `json:"hash"`
+	Author       string    `json:"author"`
+	Email        string    `json:"email"`
+	Date         time.Time `json:"date"`
+	Message      string    `json:"message"`
+	FilesChanged int       `json:"filesChanged"`
 }
 
 // GetPolicyHistory returns the git commit history for the policy file
@@ -56,7 +56,6 @@ func GetPolicyHistory(customPath string, limit int) ([]PolicyCommit, error) {
 
 		var timestamp int64
 		if _, err := fmt.Sscanf(parts[3], "%d", &timestamp); err != nil {
-			// Skip malformed timestamp
 			continue
 		}
 
