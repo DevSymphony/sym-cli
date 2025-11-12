@@ -47,14 +47,14 @@ func init() {
 func runInit(cmd *cobra.Command, args []string) {
 	// MCP registration only mode
 	if registerMCPOnly {
-		fmt.Println("🔧 Registering Symphony MCP server...\n")
+		fmt.Println("🔧 Registering Symphony MCP server...")
 		promptMCPRegistration()
 		return
 	}
 
 	// API key setup only mode
 	if setupAPIKeyOnly {
-		fmt.Println("🔑 Setting up OpenAI API key...\n")
+		fmt.Println("🔑 Setting up OpenAI API key...")
 		promptAPIKeySetup()
 		return
 	}
