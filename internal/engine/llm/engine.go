@@ -225,8 +225,9 @@ func parseValidationResponse(response string) validationResponse {
 		if lineStr := extractJSONField(response, "line"); lineStr != "" {
 			// Parse line number
 			var line int
-			fmt.Sscanf(lineStr, "%d", &line)
-			result.Line = line
+			if _, err := fmt.Sscanf(lineStr, "%d", &line); err == nil {
+				result.Line = line
+			}
 		}
 	}
 
