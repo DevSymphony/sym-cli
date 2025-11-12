@@ -11,3 +11,6 @@ node_modules/
 .sym/
 *.coverprofile
 coverage.txt
+
+# Symphony API key configuration
+.sym/.env

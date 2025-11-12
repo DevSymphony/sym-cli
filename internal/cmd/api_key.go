@@ -107,25 +107,37 @@ func promptAPIKeyConfiguration(checkExisting bool) {
 	}
 }
 
-// promptForAPIKey prompts user to enter API key with masking
+// promptForAPIKey prompts user to enter API key
 func promptForAPIKey() (string, error) {
-	prompt := promptui.Prompt{
-		Label: "Enter your OpenAI API key",
-		Mask:  '*',
-		Validate: func(input string) error {
-			if len(input) == 0 {
-				return fmt.Errorf("API key cannot be empty")
-			}
-			return nil
-		},
-	}
+	fmt.Print("Enter your OpenAI API key: ")
 
-	result, err := prompt.Run()
+	// Use bufio reader for better paste support
+	reader := bufio.NewReader(os.Stdin)
+	input, err := reader.ReadString('\n')
 	if err != nil {
-		return "", err
+		return "", fmt.Errorf("failed to read API key: %w", err)
 	}
 
-	return strings.TrimSpace(result), nil
+	// Clean the input: remove all whitespace, control characters, and non-printable characters
+	apiKey := cleanAPIKey(input)
+
+	if len(apiKey) == 0 {
+		return "", fmt.Errorf("API key cannot be empty")
+	}
+
+	return apiKey, nil
+}
+
+// cleanAPIKey removes whitespace, control characters, and non-printable characters from API key
+func cleanAPIKey(input string) string {
+	var result strings.Builder
+	for _, r := range input {
+		// Only keep printable ASCII characters (excluding space)
+		if r >= 33 && r <= 126 {
+			result.WriteRune(r)
+		}
+	}
+	return result.String()
 }
 
 // validateAPIKey performs basic validation on API key format
