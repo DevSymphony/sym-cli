@@ -13,11 +13,12 @@ import (
 const systemPrompt = `You are a code linting rule analyzer. Extract structured information from natural language coding rules.
 
 Extract:
-1. **engine**: pattern|length|style|ast|custom
+1. **engine**: pattern|length|style|ast|llm-validator
    - Use "style" for code formatting rules (semicolons, quotes, indentation, spacing)
    - Use "pattern" for naming conventions or content matching
    - Use "length" for size/length constraints
    - Use "ast" for structural complexity rules
+   - Use "llm-validator" for complex semantic rules that cannot be expressed with simple patterns
 
 2. **category**: naming|formatting|security|error_handling|testing|documentation|dependency|commit|performance|architecture|custom
 
