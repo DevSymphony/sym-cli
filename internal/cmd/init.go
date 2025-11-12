@@ -28,13 +28,26 @@ This command:
 	Run: runInit,
 }
 
-var initForce bool
+var (
+	initForce        bool
+	skipMCPRegister  bool
+	registerMCPOnly  bool
+)
 
 func init() {
 	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing roles.json")
+	initCmd.Flags().BoolVar(&skipMCPRegister, "skip-mcp", false, "Skip MCP server registration prompt")
+	initCmd.Flags().BoolVar(&registerMCPOnly, "register-mcp", false, "Register MCP server only (skip roles/policy init)")
 }
 
 func runInit(cmd *cobra.Command, args []string) {
+	// MCP registration only mode
+	if registerMCPOnly {
+		fmt.Println("🔧 Registering Symphony MCP server...\n")
+		promptMCPRegistration()
+		return
+	}
+
 	// Check if logged in
 	if !config.IsLoggedIn() {
 		fmt.Println("❌ Not logged in")
@@ -115,6 +128,11 @@ func runInit(cmd *cobra.Command, args []string) {
 	fmt.Println("  2. Commit: git add .sym/ && git commit -m 'Initialize Symphony roles and policy'")
 	fmt.Println("  3. Push: git push")
 	fmt.Println("\nAfter pushing, team members can clone and use 'sym my-role' to check their access.")
+
+	// MCP registration prompt
+	if !skipMCPRegister {
+		promptMCPRegistration()
+	}
 }
 
 // createDefaultPolicy creates a default policy file with RBAC roles
