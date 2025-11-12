@@ -14,7 +14,7 @@ func main() {
 		return
 	}
 
-	fmt.Println("🧪 RBAC 검증 테스트 시작\n")
+	fmt.Println("🧪 RBAC 검증 테스트 시작")
 	fmt.Println("================================================================")
 
 	// Test scenarios

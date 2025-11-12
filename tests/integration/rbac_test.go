@@ -55,7 +55,7 @@ func TestMatchPattern(t *testing.T) {
 	}
 }
 
-// Test complex RBAC scenarios
+// Test complex RBAC scenarios with admin, developer, viewer roles
 func TestComplexRBACPatterns(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -65,8 +65,20 @@ func TestComplexRBACPatterns(t *testing.T) {
 		expectDenied []string
 	}{
 		{
-			name:     "Frontend dev can modify component files",
-			username: "frontend-dev",
+			name:     "Admin can modify all files",
+			username: "alice", // alice is admin
+			files: []string{
+				"src/components/Button.js",
+				"src/core/engine.js",
+				"src/api/client.js",
+				"config/settings.json",
+			},
+			expectAllow:  true,
+			expectDenied: []string{},
+		},
+		{
+			name:     "Developer can modify source files",
+			username: "charlie", // charlie is developer
 			files: []string{
 				"src/components/Button.js",
 				"src/components/ui/Modal.js",
@@ -76,8 +88,8 @@ func TestComplexRBACPatterns(t *testing.T) {
 			expectDenied: []string{},
 		},
 		{
-			name:     "Frontend dev cannot modify core files",
-			username: "frontend-dev",
+			name:     "Developer cannot modify core/api files",
+			username: "david", // david is developer
 			files: []string{
 				"src/components/Button.js",
 				"src/core/engine.js",
@@ -90,15 +102,17 @@ func TestComplexRBACPatterns(t *testing.T) {
 			},
 		},
 		{
-			name:     "Senior dev can modify all files",
-			username: "senior-dev",
+			name:     "Viewer cannot modify any files",
+			username: "frank", // frank is viewer
 			files: []string{
 				"src/components/Button.js",
-				"src/core/engine.js",
-				"src/api/client.js",
+				"README.md",
 			},
-			expectAllow:  true,
-			expectDenied: []string{},
+			expectAllow: false,
+			expectDenied: []string{
+				"src/components/Button.js",
+				"README.md",
+			},
 		},
 	}
 
