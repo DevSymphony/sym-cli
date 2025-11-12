@@ -50,6 +50,11 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 		}
 
 		addedLines := ExtractAddedLines(change.Diff)
+		// If no git diff format detected, treat entire diff as code to validate
+		if len(addedLines) == 0 && strings.TrimSpace(change.Diff) != "" {
+			addedLines = strings.Split(change.Diff, "\n")
+		}
+
 		if len(addedLines) == 0 {
 			continue
 		}

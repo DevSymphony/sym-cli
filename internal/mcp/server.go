@@ -272,6 +272,7 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 	return map[string]interface{}{
 		"conventions": conventions,
 		"total":       len(conventions),
+		"next_step":   "Now implement your code following these conventions. After completion, MUST call validate_code to verify compliance.",
 	}, nil
 }
 
@@ -418,10 +419,20 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 		}
 	}
 
+	var message string
+	if hasErrors {
+		message = "VALIDATION FAILED: Found error-level violations. You MUST fix these issues and re-validate before proceeding."
+	} else if len(allViolations) > 0 {
+		message = "VALIDATION WARNING: Found non-critical violations. Consider fixing these warnings for better code quality."
+	} else {
+		message = "✓ VALIDATION PASSED: Code complies with all conventions. Task can be marked as complete."
+	}
+
 	return map[string]interface{}{
 		"valid":      !hasErrors,
 		"violations": allViolations,
 		"total":      len(allViolations),
+		"message":    message,
 	}, nil
 }
 
@@ -449,6 +460,27 @@ func (s *Server) handleInitialize(params map[string]interface{}) (interface{}, *
 			"name":    "symphony",
 			"version": "1.0.0",
 		},
+		"instructions": `Symphony Code Convention Enforcer
+
+MANDATORY WORKFLOW for all coding tasks:
+
+STEP 1 [BEFORE CODE]: Query Conventions
+→ Call query_conventions tool FIRST before writing any code
+→ Filter by category (security, style, architecture, etc.)
+→ Filter by language/files you'll work with
+→ Review and understand the conventions
+
+STEP 2 [DURING CODE]: Write Code
+→ Implement your code following the conventions from Step 1
+→ Keep security, style, and architecture guidelines in mind
+
+STEP 3 [AFTER CODE]: Validate Code
+→ Call validate_code tool LAST after completing implementation
+→ MANDATORY: Must validate before marking task complete
+→ Fix any violations found and re-validate
+→ Only proceed when validation passes with no errors
+
+This 3-step workflow ensures all code meets project standards. Never skip steps 1 and 3.`,
 	}, nil
 }
 
@@ -457,14 +489,26 @@ func (s *Server) handleInitialize(params map[string]interface{}) (interface{}, *
 func (s *Server) handleToolsList(params map[string]interface{}) (interface{}, *RPCError) {
 	tools := []map[string]interface{}{
 		{
-			"name":        "query_conventions",
-			"description": "Query conventions for given context (category, files, languages)",
+			"name": "query_conventions",
+			"description": `[STEP 1 - ALWAYS CALL FIRST] Query coding conventions and best practices before writing any code.
+
+CRITICAL WORKFLOW:
+1. ALWAYS call this tool FIRST when starting any coding task
+2. Query relevant conventions by category (security, style, architecture, etc.)
+3. Query conventions for specific files/languages you'll be working with
+4. Use the returned conventions to guide your code implementation
+
+This ensures your code follows project standards from the start. Never skip this step.
+
+Categories available: security, style, documentation, error_handling, architecture, performance, testing
+
+Example: Before implementing authentication, query security conventions first.`,
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
 					"category": map[string]interface{}{
 						"type":        "string",
-						"description": "Filter by category (naming, formatting, security, etc.)",
+						"description": "Filter by category (security, style, documentation, error_handling, architecture, performance, testing)",
 					},
 					"files": map[string]interface{}{
 						"type":        "array",
@@ -474,27 +518,45 @@ func (s *Server) handleToolsList(params map[string]interface{}) (interface{}, *R
 					"languages": map[string]interface{}{
 						"type":        "array",
 						"items":       map[string]string{"type": "string"},
-						"description": "Programming languages to filter by",
+						"description": "Programming languages to filter by (go, javascript, python, java, etc.)",
 					},
 				},
 			},
 		},
 		{
-			"name":        "validate_code",
-			"description": "Validate code compliance with conventions",
+			"name": "validate_code",
+			"description": `[STEP 3 - ALWAYS CALL LAST] Validate that your code complies with all project conventions.
+
+CRITICAL WORKFLOW:
+1. Call this tool AFTER you have written or modified code
+2. MANDATORY: Always validate before considering the task complete
+3. If violations are found, fix them and validate again
+4. Only mark the task as done after validation passes with no errors
+
+This is the final quality gate. Never skip this validation step.
+
+The tool will check:
+- Security violations (hardcoded secrets, SQL injection, XSS, etc.)
+- Style violations (formatting, naming, documentation)
+- Architecture violations (separation of concerns, patterns)
+- Error handling violations (missing error checks, empty catch blocks)
+
+If violations are found, you MUST fix them before proceeding.`,
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
 					"files": map[string]interface{}{
 						"type":        "array",
 						"items":       map[string]string{"type": "string"},
-						"description": "File paths to validate",
+						"description": "File paths to validate (required)",
+						"required":    true,
 					},
 					"role": map[string]interface{}{
 						"type":        "string",
-						"description": "RBAC role for validation",
+						"description": "RBAC role for validation (optional)",
 					},
 				},
+				"required": []string{"files"},
 			},
 		},
 	}
