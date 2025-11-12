@@ -21,7 +21,8 @@ type Server struct {
 	host       string
 	port       int
 	configPath string
-	policy     *schema.CodePolicy
+	userPolicy *schema.UserPolicy  // Original user-written policy
+	codePolicy *schema.CodePolicy  // Converted validation policy
 	loader     *policy.Loader
 }
 
@@ -39,12 +40,27 @@ func NewServer(host string, port int, configPath string) *Server {
 // It communicates via JSON-RPC over stdio or HTTP.
 func (s *Server) Start() error {
 	if s.configPath != "" {
-		codePolicy, err := s.loader.LoadCodePolicy(s.configPath)
-		if err != nil {
-			return fmt.Errorf("failed to load policy: %w", err)
+		// Determine the directory and try to load both user-policy and code-policy
+		dir := filepath.Dir(s.configPath)
+
+		// Try to load user-policy.json for natural language descriptions
+		userPolicyPath := filepath.Join(dir, "user-policy.json")
+		if userPolicy, err := s.loader.LoadUserPolicy(userPolicyPath); err == nil {
+			s.userPolicy = userPolicy
+			fmt.Fprintf(os.Stderr, "✓ User policy loaded: %s (%d rules)\n", userPolicyPath, len(userPolicy.Rules))
 		}
-		s.policy = codePolicy
-		fmt.Fprintf(os.Stderr, "policy loaded: %s\n", s.configPath)
+
+		// Try to load code-policy.json for validation
+		codePolicyPath := filepath.Join(dir, "code-policy.json")
+		if codePolicy, err := s.loader.LoadCodePolicy(codePolicyPath); err == nil {
+			s.codePolicy = codePolicy
+			fmt.Fprintf(os.Stderr, "✓ Code policy loaded: %s (%d rules)\n", codePolicyPath, len(codePolicy.Rules))
+		}
+
+		// At least one policy must be loaded
+		if s.userPolicy == nil && s.codePolicy == nil {
+			return fmt.Errorf("no policy found in %s", dir)
+		}
 	}
 
 	if s.port > 0 {
@@ -251,7 +267,7 @@ type ConventionItem struct {
 // handleQueryConventions handles convention query requests.
 // It finds and returns relevant conventions by category.
 func (s *Server) handleQueryConventions(params map[string]interface{}) (interface{}, *RPCError) {
-	if s.policy == nil {
+	if s.userPolicy == nil && s.codePolicy == nil {
 		return map[string]interface{}{
 			"conventions": []ConventionItem{},
 			"message":     "policy not loaded",
@@ -280,26 +296,54 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 func (s *Server) filterConventions(req QueryConventionsRequest) []ConventionItem {
 	var conventions []ConventionItem
 
-	for _, rule := range s.policy.Rules {
-		if !rule.Enabled {
-			continue
-		}
+	// If UserPolicy is loaded, use natural language rules
+	if s.userPolicy != nil {
+		for _, rule := range s.userPolicy.Rules {
+			if req.Category != "" && rule.Category != req.Category {
+				continue
+			}
 
-		if req.Category != "" && rule.Category != req.Category {
-			continue
-		}
+			// Check language relevance
+			if len(req.Languages) > 0 && len(rule.Languages) > 0 {
+				if !containsAny(rule.Languages, req.Languages) {
+					continue
+				}
+			}
 
-		if !s.isRuleRelevant(rule, req) {
-			continue
+			conventions = append(conventions, ConventionItem{
+				ID:          rule.ID,
+				Category:    rule.Category,
+				Description: rule.Say,      // Use natural language description
+				Message:     rule.Message,
+				Severity:    rule.Severity,
+			})
 		}
+		return conventions
+	}
 
-		conventions = append(conventions, ConventionItem{
-			ID:          rule.ID,
-			Category:    rule.Category,
-			Description: rule.Desc,
-			Message:     rule.Message,
-			Severity:    rule.Severity,
-		})
+	// Fallback to CodePolicy if UserPolicy not available
+	if s.codePolicy != nil {
+		for _, rule := range s.codePolicy.Rules {
+			if !rule.Enabled {
+				continue
+			}
+
+			if req.Category != "" && rule.Category != req.Category {
+				continue
+			}
+
+			if !s.isRuleRelevant(rule, req) {
+				continue
+			}
+
+			conventions = append(conventions, ConventionItem{
+				ID:          rule.ID,
+				Category:    rule.Category,
+				Description: rule.Desc,
+				Message:     rule.Message,
+				Severity:    rule.Severity,
+			})
+		}
 	}
 
 	return conventions
@@ -368,10 +412,12 @@ type ViolationItem struct {
 // handleValidateCode handles code validation requests.
 // It uses the existing validator to validate code.
 func (s *Server) handleValidateCode(params map[string]interface{}) (interface{}, *RPCError) {
-	if s.policy == nil {
+	// Get policy for validation (convert UserPolicy if needed)
+	validationPolicy, err := s.getValidationPolicy()
+	if err != nil {
 		return nil, &RPCError{
 			Code:    -32000,
-			Message: "policy not loaded",
+			Message: fmt.Sprintf("policy not available: %v", err),
 		}
 	}
 
@@ -388,7 +434,7 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 		req.Files = []string{"."}
 	}
 
-	v := validator.NewValidator(s.policy, false) // verbose = false for MCP
+	v := validator.NewValidator(validationPolicy, false) // verbose = false for MCP
 
 	var allViolations []ViolationItem
 	var hasErrors bool
@@ -446,6 +492,14 @@ func containsAny(haystack, needles []string) bool {
 		}
 	}
 	return false
+}
+
+// getValidationPolicy returns CodePolicy for validation.
+func (s *Server) getValidationPolicy() (*schema.CodePolicy, error) {
+	if s.codePolicy != nil {
+		return s.codePolicy, nil
+	}
+	return nil, fmt.Errorf("no code policy loaded - validation requires code policy")
 }
 
 // handleInitialize handles MCP initialize request.
