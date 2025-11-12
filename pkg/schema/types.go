@@ -33,8 +33,7 @@ type UserDefaults struct {
 
 // UserRule represents a single rule in user schema
 type UserRule struct {
-	No        int            `json:"no,omitempty"`         // symphonyclient integration: rule number for ordering
-	ID        string         `json:"id,omitempty"`
+	ID        string         `json:"id,omitempty"`         // symphonyclient integration: rule number for ordering
 	Say       string         `json:"say"`
 	Category  string         `json:"category,omitempty"`
 	Languages []string       `json:"languages,omitempty"`

@@ -381,27 +381,27 @@ function renderRules() {
 }
 
 function createRuleElement(rule, index) {
-    const actualIndex = appState.policy.rules.findIndex(r => r.no === rule.no);
+    const actualIndex = appState.policy.rules.findIndex(r => r.id === rule.id);
 
     return `
-        <details class="rule-details bg-white rounded-lg border border-l-4 ${getCategoryColorClass(rule.category)} transition-shadow hover:shadow-md" data-rule-no="${rule.no}">
+        <details class="rule-details bg-white rounded-lg border border-l-4 ${getCategoryColorClass(rule.category)} transition-shadow hover:shadow-md" data-rule-id="${rule.id}">
             <summary class="p-4 cursor-pointer font-semibold flex justify-between items-center text-slate-800">
                 <div class="flex items-center overflow-hidden min-w-0">
-                    <span class="font-mono text-slate-400 mr-3">${rule.no}.</span>
+                    <span class="font-mono text-slate-400 mr-3">${rule.id}.</span>
                     <span class="rule-summary-text truncate">${rule.say || '새 규칙 (내용을 입력하세요)'}</span>
                 </div>
-                <button type="button" class="delete-rule-btn ml-4 text-gray-500 hover:text-red-500 text-xl font-bold flex-shrink-0" data-rule-no="${rule.no}">&times;</button>
+                <button type="button" class="delete-rule-btn ml-4 text-gray-500 hover:text-red-500 text-xl font-bold flex-shrink-0" data-rule-id="${rule.id}">&times;</button>
             </summary>
             <div class="p-6 border-t border-gray-200">
                 <div class="space-y-4">
                     <div class="form-group">
                         <label class="block text-sm font-medium text-slate-600 mb-1">자연어 규칙 (필수)</label>
-                        <input type="text" value="${rule.say || ''}" placeholder="예: 한 줄은 120자 이하" class="say-input w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-no="${rule.no}">
+                        <input type="text" value="${rule.say || ''}" placeholder="예: 한 줄은 120자 이하" class="say-input w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-id="${rule.id}">
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div class="form-group">
                             <label class="block text-sm font-medium text-slate-600 mb-1">카테고리</label>
-                            <select class="category-select w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-no="${rule.no}">
+                            <select class="category-select w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-id="${rule.id}">
                                 <option value="">선택 안함</option>
                                 ${Object.keys(CATEGORY_COLORS).filter(c => c !== 'default').map(cat => `
                                     <option value="${cat}" ${rule.category === cat ? 'selected' : ''}>${cat}</option>
@@ -410,12 +410,12 @@ function createRuleElement(rule, index) {
                         </div>
                         <div class="form-group">
                             <label class="block text-sm font-medium text-slate-600 mb-1">대상 언어</label>
-                            <input type="text" value="${(rule.languages || []).join(', ')}" placeholder="javascript, python" class="languages-input w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-no="${rule.no}">
+                            <input type="text" value="${(rule.languages || []).join(', ')}" placeholder="javascript, python" class="languages-input w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-id="${rule.id}">
                         </div>
                     </div>
                     <div class="form-group">
                         <label class="block text-sm font-medium text-slate-600 mb-1">예시 코드 (선택사항)</label>
-                        <textarea class="example-input w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 font-mono" rows="4" placeholder="// 좋은 예:\nconst userName = 'John';\n\n// 나쁜 예:\nconst user_name = 'John';" data-rule-no="${rule.no}">${rule.example || ''}</textarea>
+                        <textarea class="example-input w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 font-mono" rows="4" placeholder="// 좋은 예:\nconst userName = 'John';\n\n// 나쁜 예:\nconst user_name = 'John';" data-rule-id="${rule.id}">${rule.example || ''}</textarea>
                     </div>
                 </div>
             </div>
@@ -424,11 +424,11 @@ function createRuleElement(rule, index) {
 }
 
 function handleRuleUpdate(e) {
-    const ruleNo = parseInt(e.target.dataset.ruleNo);
-    const rule = appState.policy.rules.find(r => r.no === ruleNo);
+    const ruleId = e.target.dataset.ruleId;
+    const rule = appState.policy.rules.find(r => r.id === ruleId);
     if (!rule) return;
 
-    const ruleElement = document.querySelector(`.rule-details[data-rule-no="${ruleNo}"]`);
+    const ruleElement = document.querySelector(`.rule-details[data-rule-id="${ruleId}"]`);
 
     if (e.target.classList.contains('say-input')) {
         rule.say = e.target.value.trim();
@@ -448,15 +448,15 @@ function handleRuleUpdate(e) {
 
 function handleDeleteRule(e) {
     e.preventDefault();
-    const ruleNo = parseInt(e.target.dataset.ruleNo);
+    const ruleId = e.target.dataset.ruleId;
 
     if (!confirm('이 규칙을 정말 삭제하시겠습니까?')) return;
 
-    appState.policy.rules = appState.policy.rules.filter(r => r.no !== ruleNo);
+    appState.policy.rules = appState.policy.rules.filter(r => r.id !== ruleId);
 
     // Renumber rules
     appState.policy.rules.forEach((rule, index) => {
-        rule.no = index + 1;
+        rule.id = String(index + 1);
     });
 
     renderRules();
@@ -465,14 +465,14 @@ function handleDeleteRule(e) {
 }
 
 function handleAddRule() {
-    const newNo = appState.policy.rules.length + 1;
-    const newRule = { no: newNo, say: '', category: '', languages: [], example: '' };
+    const newId = String(appState.policy.rules.length + 1);
+    const newRule = { id: newId, say: '', category: '', languages: [], example: '' };
     appState.policy.rules.push(newRule);
     renderRules();
 
     // Open the new rule details
     setTimeout(() => {
-        const newRuleElement = document.querySelector(`.rule-details[data-rule-no="${newNo}"]`);
+        const newRuleElement = document.querySelector(`.rule-details[data-rule-id="${newId}"]`);
         if (newRuleElement) {
             newRuleElement.setAttribute('open', '');
             newRuleElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
