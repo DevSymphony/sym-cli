@@ -13,12 +13,16 @@ type GitChange struct {
 	Diff     string
 }
 
-// GetGitChanges returns all changed files in the current git repository
+// GetGitChanges returns all changed files in the current git repository (unstaged changes)
 func GetGitChanges() ([]GitChange, error) {
-	// Get list of changed files
-	cmd := exec.Command("git", "diff", "--name-status", "HEAD")
+	// Get list of unstaged changed files (working directory vs index)
+	cmd := exec.Command("git", "diff", "--name-status")
 	output, err := cmd.Output()
 	if err != nil {
+		// Try to get more detailed error information
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("failed to get git changes: %w (stderr: %s)", err, string(exitErr.Stderr))
+		}
 		return nil, fmt.Errorf("failed to get git changes: %w", err)
 	}
 
@@ -37,8 +41,8 @@ func GetGitChanges() ([]GitChange, error) {
 		status := parts[0]
 		filePath := parts[1]
 
-		// Get diff for this file
-		diffCmd := exec.Command("git", "diff", "HEAD", "--", filePath)
+		// Get diff for this file (working directory vs index)
+		diffCmd := exec.Command("git", "diff", "--", filePath)
 		diffOutput, err := diffCmd.Output()
 		if err != nil {
 			continue

@@ -130,6 +130,12 @@ func (s *Server) Start() error {
 			fmt.Fprintf(os.Stderr, "⚠️  Warning: Not in a git repository, MCP server starting without policies\n")
 		} else {
 			dir = filepath.Join(repoRoot, ".sym")
+			// Change working directory to project root for git operations
+			if err := os.Chdir(repoRoot); err != nil {
+				fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to change to project root: %v\n", err)
+			} else {
+				fmt.Fprintf(os.Stderr, "✓ Working directory set to project root: %s\n", repoRoot)
+			}
 		}
 	}
 
