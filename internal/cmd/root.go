@@ -7,6 +7,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// Global flags
+var verbose bool
+
 // symphonyclient integration: Updated root command from symphony to sym
 var rootCmd = &cobra.Command{
 	Use:   "sym",
@@ -29,6 +32,8 @@ func Execute() {
 }
 
 func init() {
+	// Global flags
+
 	// symphonyclient integration: Added symphonyclient commands
 	rootCmd.AddCommand(configCmd)
 	rootCmd.AddCommand(loginCmd)
