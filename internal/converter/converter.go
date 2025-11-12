@@ -200,10 +200,9 @@ func (c *Converter) convertRule(userRule *schema.UserRule, defaults *schema.User
 		}
 	}
 
-	// TODO: Implement intelligent rule inference based on userRule.Say
-	// For now, create a basic check structure
+	// For now, create a basic check structure with llm-validator as default engine
 	check := map[string]any{
-		"engine": "custom",
+		"engine": "llm-validator",
 		"desc":   userRule.Say,
 	}
 
@@ -252,10 +251,10 @@ type MultiTargetConvertOptions struct {
 
 // MultiTargetConvertResult represents the result of multi-target conversion
 type MultiTargetConvertResult struct {
-	CodePolicy   *schema.CodePolicy                  // Internal policy
-	LinterConfigs map[string]*linters.LinterConfig   // Linter-specific configs
-	Results      map[string]*linters.ConversionResult // Detailed results per linter
-	Warnings     []string                             // Overall warnings
+	CodePolicy    *schema.CodePolicy                   // Internal policy
+	LinterConfigs map[string]*linters.LinterConfig     // Linter-specific configs
+	Results       map[string]*linters.ConversionResult // Detailed results per linter
+	Warnings      []string                             // Overall warnings
 }
 
 // ConvertMultiTarget converts user policy to multiple linter configurations
@@ -330,10 +329,10 @@ func (c *Converter) ConvertMultiTarget(ctx context.Context, userPolicy *schema.U
 // convertForLinter converts rules for a specific linter
 func (c *Converter) convertForLinter(ctx context.Context, userPolicy *schema.UserPolicy, converter linters.LinterConverter, confidenceThreshold float64) (*linters.ConversionResult, error) {
 	result := &linters.ConversionResult{
-		LinterName: converter.Name(),
-		Rules:      []*linters.LinterRule{},
-		Warnings:   []string{},
-		Errors:     []error{},
+		LinterName:    converter.Name(),
+		Rules:         []*linters.LinterRule{},
+		Warnings:      []string{},
+		Errors:        []error{},
 		RuleEngineMap: make(map[string]string), // Track which engine handles each rule
 	}
 
