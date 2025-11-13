@@ -4,6 +4,7 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/engine/ast"
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
 	"github.com/DevSymphony/sym-cli/internal/engine/length"
+	"github.com/DevSymphony/sym-cli/internal/engine/llm"
 	"github.com/DevSymphony/sym-cli/internal/engine/pattern"
 	"github.com/DevSymphony/sym-cli/internal/engine/style"
 	"github.com/DevSymphony/sym-cli/internal/engine/typechecker"
@@ -34,5 +35,10 @@ func init() {
 	// Register type checker engine
 	MustRegister("typechecker", func() (core.Engine, error) {
 		return typechecker.NewEngine(), nil
+	})
+
+	// Register LLM validator engine
+	MustRegister("llm-validator", func() (core.Engine, error) {
+		return llm.NewEngine(), nil
 	})
 }

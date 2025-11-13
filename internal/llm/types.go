@@ -2,7 +2,7 @@ package llm
 
 // RuleIntent represents the structured interpretation of a natural language rule
 type RuleIntent struct {
-	Engine     string         // "pattern", "length", "style", "ast", "custom"
+	Engine     string         // "pattern", "length", "style", "ast", "llm-validator"
 	Category   string         // "naming", "formatting", "security", "error_handling", etc.
 	Target     string         // "identifier", "content", "import", "class", "method", etc.
 	Scope      string         // "line", "file", "function", "method", "class", etc.

@@ -17,21 +17,27 @@ type ValidationResult struct {
 	Failed     int
 }
 
-// LLMValidator validates code changes against LLM-based rules
+// LLMValidator validates code changes against LLM-based rules.
+// This validator is specifically for Git diff validation.
+// For regular file validation, use Validator which orchestrates all engines including LLM.
 type LLMValidator struct {
-	client *llm.Client
-	policy *schema.CodePolicy
+	client    *llm.Client
+	policy    *schema.CodePolicy
+	validator *Validator
 }
 
 // NewLLMValidator creates a new LLM validator
 func NewLLMValidator(client *llm.Client, policy *schema.CodePolicy) *LLMValidator {
 	return &LLMValidator{
-		client: client,
-		policy: policy,
+		client:    client,
+		policy:    policy,
+		validator: NewValidator(policy, false), // Use main validator for orchestration
 	}
 }
 
-// Validate validates git changes against LLM-based rules
+// Validate validates git changes against LLM-based rules.
+// This method is for diff-based validation (pre-commit hooks, PR validation).
+// For regular file validation, use validator.Validate() which orchestrates all engines.
 func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*ValidationResult, error) {
 	result := &ValidationResult{
 		Violations: make([]Violation, 0),

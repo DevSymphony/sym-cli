@@ -130,6 +130,12 @@ func (s *Server) Start() error {
 			fmt.Fprintf(os.Stderr, "⚠️  Warning: Not in a git repository, MCP server starting without policies\n")
 		} else {
 			dir = filepath.Join(repoRoot, ".sym")
+			// Change working directory to project root for git operations
+			if err := os.Chdir(repoRoot); err != nil {
+				fmt.Fprintf(os.Stderr, "⚠️  Warning: Failed to change to project root: %v\n", err)
+			} else {
+				fmt.Fprintf(os.Stderr, "✓ Working directory set to project root: %s\n", repoRoot)
+			}
 		}
 	}
 
@@ -315,8 +321,7 @@ type QueryConventionsInput struct {
 
 // ValidateCodeInput represents the input schema for the validate_code tool (go-sdk).
 type ValidateCodeInput struct {
-	Files []string `json:"files" jsonschema:"File paths to validate"`
-	Role  string   `json:"role,omitempty" jsonschema:"RBAC role for validation (optional)"`
+	Role string `json:"role,omitempty" jsonschema:"RBAC role for validation (optional)"`
 }
 
 // runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
@@ -329,7 +334,7 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	// Tool: query_conventions
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "query_conventions",
-		Description: "Query coding conventions before you start coding.",
+		Description: "[MANDATORY BEFORE CODING] Query project conventions BEFORE writing any code to ensure compliance from the start.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input QueryConventionsInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		params := map[string]any{
 			"category":  input.Category,
@@ -346,11 +351,10 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	// Tool: validate_code
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "validate_code",
-		Description: "Validate that your code complies with all project conventions.",
+		Description: "Validate git changes (staged + unstaged) against all project conventions.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ValidateCodeInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		params := map[string]any{
-			"files": input.Files,
-			"role":  input.Role,
+			"role": input.Role,
 		}
 		result, rpcErr := s.handleValidateCode(params)
 		if rpcErr != nil {
@@ -426,7 +430,7 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 			textContent += fmt.Sprintf("%d. [%s] %s\n", i+1, conv.Severity, conv.ID)
 			textContent += fmt.Sprintf("   Category: %s\n", conv.Category)
 			textContent += fmt.Sprintf("   Description: %s\n", conv.Description)
-			if conv.Message != "" {
+			if conv.Message != "" && conv.Message != conv.Description {
 				textContent += fmt.Sprintf("   Message: %s\n", conv.Message)
 			}
 			textContent += "\n"
@@ -533,8 +537,7 @@ func (s *Server) isRuleRelevant(rule schema.PolicyRule, req QueryConventionsRequ
 
 // ValidateCodeRequest is a code validation request.
 type ValidateCodeRequest struct {
-	Files []string `json:"files"` // file paths to validate
-	Role  string   `json:"role"`  // RBAC role
+	Role string `json:"role"` // RBAC role (optional)
 }
 
 // ViolationItem is a violation item.
@@ -549,7 +552,7 @@ type ViolationItem struct {
 }
 
 // handleValidateCode handles code validation requests.
-// It uses the existing validator to validate code.
+// It validates git changes (diff) instead of entire files for efficiency.
 func (s *Server) handleValidateCode(params map[string]interface{}) (interface{}, *RPCError) {
 	// Get policy for validation (convert UserPolicy if needed)
 	validationPolicy, err := s.getValidationPolicy()
@@ -569,49 +572,95 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 		}
 	}
 
-	if len(req.Files) == 0 {
-		req.Files = []string{"."}
-	}
-
-	v := validator.NewValidator(validationPolicy, false) // verbose = false for MCP
-
 	var allViolations []ViolationItem
 	var hasErrors bool
 
-	for _, filePath := range req.Files {
-		result, err := v.Validate(filePath)
-		if err != nil {
-			return nil, &RPCError{
-				Code:    -32000,
-				Message: fmt.Sprintf("validation failed: %v", err),
-			}
+	// Always validate git changes (staged + unstaged)
+	// This is the most efficient and relevant approach for AI coding workflows
+
+	// Get unstaged changes
+	changes, err := validator.GetGitChanges()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to get git changes: %v\n", err)
+		return map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": "⚠️  Failed to get git changes. Make sure you're in a git repository.\n\nError: " + err.Error(),
+				},
+			},
+			"isError": false,
+		}, nil
+	}
+
+	// Also check staged changes
+	stagedChanges, err := validator.GetStagedChanges()
+	if err == nil {
+		changes = append(changes, stagedChanges...)
+	}
+
+	if len(changes) == 0 {
+		return map[string]interface{}{
+			"content": []map[string]interface{}{
+				{
+					"type": "text",
+					"text": "✓ No uncommitted changes to validate. Working directory is clean.",
+				},
+			},
+			"isError": false,
+		}, nil
+	}
+
+	// Setup LLM client for validation
+	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	if apiKey == "" {
+		apiKey = os.Getenv("OPENAI_API_KEY")
+	}
+	if apiKey == "" {
+		return nil, &RPCError{
+			Code:    -32000,
+			Message: "LLM API key not found (ANTHROPIC_API_KEY or OPENAI_API_KEY required for validation)",
 		}
+	}
 
-		for _, violation := range result.Violations {
-			allViolations = append(allViolations, ViolationItem{
-				RuleID:   violation.RuleID,
-				Category: "",
-				Message:  violation.Message,
-				Severity: violation.Severity,
-				File:     violation.File,
-				Line:     violation.Line,
-				Column:   violation.Column,
-			})
+	llmClient := llm.NewClient(apiKey)
+	llmValidator := validator.NewLLMValidator(llmClient, validationPolicy)
 
-			if violation.Severity == "error" {
-				hasErrors = true
-			}
+	// Validate git changes
+	ctx := context.Background()
+	result, err := llmValidator.Validate(ctx, changes)
+	if err != nil {
+		return nil, &RPCError{
+			Code:    -32000,
+			Message: fmt.Sprintf("validation failed: %v", err),
+		}
+	}
+
+	// Convert violations
+	for _, violation := range result.Violations {
+		allViolations = append(allViolations, ViolationItem{
+			RuleID:   violation.RuleID,
+			Category: "",
+			Message:  violation.Message,
+			Severity: violation.Severity,
+			File:     violation.File,
+			Line:     violation.Line,
+			Column:   violation.Column,
+		})
+
+		if violation.Severity == "error" {
+			hasErrors = true
 		}
 	}
 
 	// Format validation results as readable text for MCP response
 	var textContent string
 	if hasErrors {
-		textContent = "❌ VALIDATION FAILED: Found error-level violations. You MUST fix these issues and re-validate before proceeding.\n\n"
+		textContent = "VALIDATION FAILED: Found error-level violations. You MUST fix these issues and re-validate before proceeding.\n\n"
 	} else if len(allViolations) > 0 {
-		textContent = "⚠️  VALIDATION WARNING: Found non-critical violations. Consider fixing these warnings for better code quality.\n\n"
+		textContent = "VALIDATION WARNING: Found non-critical violations. Consider fixing these warnings for better code quality.\n\n"
 	} else {
-		textContent = "✓ VALIDATION PASSED: Code complies with all conventions. Task can be marked as complete.\n\n"
+		textContent = "VALIDATION PASSED: Code complies with all conventions. Task can be marked as complete.\n\n"
 	}
 
 	if len(allViolations) > 0 {
@@ -706,19 +755,17 @@ func (s *Server) handleToolsList(params map[string]interface{}) (interface{}, *R
 	tools := []map[string]interface{}{
 		{
 			"name": "query_conventions",
-			"description": `[STEP 1 - ALWAYS CALL FIRST] Query coding conventions and best practices before writing any code.
+			"description": `⚠️  CALL THIS FIRST - BEFORE WRITING ANY CODE ⚠️
 
-CRITICAL WORKFLOW:
-1. ALWAYS call this tool FIRST when starting any coding task
-2. Query relevant conventions by category (security, style, architecture, etc.)
-3. Query conventions for specific files/languages you'll be working with
-4. Use the returned conventions to guide your code implementation
+This tool is MANDATORY before you start coding. Query project conventions to understand what rules your code must follow.
 
-This ensures your code follows project standards from the start. Never skip this step.
+Usage:
+- Filter by category: security, style, error_handling, architecture, performance, testing, documentation
+- Filter by languages: javascript, typescript, python, go, java, etc.
 
-Categories available: security, style, documentation, error_handling, architecture, performance, testing
+Example: Before adding a login feature, call query_conventions(category="security") first.
 
-Example: Before implementing authentication, query security conventions first.`,
+DO NOT write code before calling this tool. Violations will be caught by validate_code later.`,
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
@@ -736,7 +783,7 @@ Example: Before implementing authentication, query security conventions first.`,
 		},
 		{
 			"name": "validate_code",
-			"description": `[STEP 3 - ALWAYS CALL LAST] Validate that your code complies with all project conventions.
+			"description": `[STEP 3 - ALWAYS CALL LAST] Validate your git changes against all project conventions.
 
 CRITICAL WORKFLOW:
 1. Call this tool AFTER you have written or modified code
@@ -744,9 +791,14 @@ CRITICAL WORKFLOW:
 3. If violations are found, fix them and validate again
 4. Only mark the task as done after validation passes with no errors
 
+This tool automatically validates:
+- All STAGED changes (git add)
+- All UNSTAGED changes (modified but not staged)
+- Only checks the ADDED/MODIFIED lines in your diffs (not entire files)
+
 This is the final quality gate. Never skip this validation step.
 
-The tool will check:
+The tool will check your changes for:
 - Security violations (hardcoded secrets, SQL injection, XSS, etc.)
 - Style violations (formatting, naming, documentation)
 - Architecture violations (separation of concerns, patterns)
@@ -756,18 +808,11 @@ If violations are found, you MUST fix them before proceeding.`,
 			"inputSchema": map[string]interface{}{
 				"type": "object",
 				"properties": map[string]interface{}{
-					"files": map[string]interface{}{
-						"type":        "array",
-						"items":       map[string]string{"type": "string"},
-						"description": "File paths to validate (required)",
-						"required":    true,
-					},
 					"role": map[string]interface{}{
 						"type":        "string",
 						"description": "RBAC role for validation (optional)",
 					},
 				},
-				"required": []string{"files"},
 			},
 		},
 	}
