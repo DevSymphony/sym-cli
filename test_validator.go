@@ -56,7 +56,11 @@ func main() {
 
 	// Create validator
 	v := validator.NewValidator(policy, true)
-	defer v.Close()
+	defer func() {
+		if err := v.Close(); err != nil {
+			fmt.Fprintf(os.Stderr, "Warning: failed to close validator: %v\n", err)
+		}
+	}()
 
 	// Test files
 	testFiles := []string{
