@@ -18,7 +18,6 @@ let appState = {
     },
     settings: {
         policyPath: '',
-        autoSave: false,
         confirmSave: true
     }
 };
@@ -854,12 +853,8 @@ async function loadSettings() {
         document.getElementById('policy-path-input').value = appState.settings.policyPath;
 
         // Load settings from localStorage
-        const savedAutoSave = localStorage.getItem('autoSave');
         const savedConfirmSave = localStorage.getItem('confirmSave');
 
-        if (savedAutoSave !== null) {
-            appState.settings.autoSave = savedAutoSave === 'true';
-        }
         if (savedConfirmSave !== null) {
             appState.settings.confirmSave = savedConfirmSave === 'true';
         }
@@ -1056,31 +1051,6 @@ async function init() {
 document.addEventListener('DOMContentLoaded', () => {
     // Initialize
     init();
-
-    // Auto-save timer (30 seconds)
-    let autoSaveTimer = null;
-    function startAutoSave() {
-        if (autoSaveTimer) clearInterval(autoSaveTimer);
-        autoSaveTimer = setInterval(async () => {
-            if (appState.settings.autoSave && appState.isDirty) {
-                try {
-                    // Temporarily disable confirmation for auto-save
-                    const originalConfirmSave = appState.settings.confirmSave;
-                    appState.settings.confirmSave = false;
-
-                    await savePolicy();
-                    showToast('자동 저장되었습니다', 'info');
-
-                    // Restore confirmation setting
-                    appState.settings.confirmSave = originalConfirmSave;
-                } catch (error) {
-                    console.error('Auto-save failed:', error);
-                    showToast('자동 저장 실패: ' + error.message, 'error');
-                }
-            }
-        }, 30000); // 30 seconds
-    }
-    startAutoSave();
 
     // Save button
     document.getElementById('save-btn').addEventListener('click', savePolicy);
