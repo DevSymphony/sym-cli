@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
+	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 )
 
@@ -29,13 +30,13 @@ func (e *Engine) Init(ctx context.Context, config core.EngineConfig) error {
 	e.config = config
 
 	// Initialize LLM client
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	apiKey := envutil.GetAPIKey("ANTHROPIC_API_KEY")
 	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
+		apiKey = envutil.GetAPIKey("OPENAI_API_KEY")
 	}
 
 	if apiKey == "" {
-		return fmt.Errorf("LLM API key not found (ANTHROPIC_API_KEY or OPENAI_API_KEY)")
+		return fmt.Errorf("LLM API key not found (ANTHROPIC_API_KEY or OPENAI_API_KEY in environment or .sym/.env)")
 	}
 
 	e.client = llm.NewClient(apiKey)

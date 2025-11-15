@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/converter"
+	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
@@ -34,9 +35,9 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 	}
 
 	// Setup LLM client
-	apiKey := os.Getenv("OPENAI_API_KEY")
+	apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
 	if apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
+		return fmt.Errorf("OPENAI_API_KEY not found in environment or .sym/.env")
 	}
 
 	llmClient := llm.NewClient(apiKey,
@@ -142,14 +143,24 @@ func (s *Server) Start() error {
 	// Only try to load policies if we have a directory
 	if dir != "" {
 		// Try to load user-policy.json for natural language descriptions
-		userPolicyPath := filepath.Join(dir, "user-policy.json")
+		// First check .env for POLICY_PATH, otherwise use default
+		userPolicyPath := envutil.GetPolicyPath()
+		if userPolicyPath == "" {
+			userPolicyPath = filepath.Join(dir, "user-policy.json")
+		} else if !filepath.IsAbs(userPolicyPath) {
+			// Make relative path absolute based on repo root
+			if repoRoot, err := git.GetRepoRoot(); err == nil {
+				userPolicyPath = filepath.Join(repoRoot, userPolicyPath)
+			}
+		}
+
 		if userPolicy, err := s.loader.LoadUserPolicy(userPolicyPath); err == nil {
 			s.userPolicy = userPolicy
 			fmt.Fprintf(os.Stderr, "✓ User policy loaded: %s (%d rules)\n", userPolicyPath, len(userPolicy.Rules))
 		}
 
-		// Try to load code-policy.json for validation
-		codePolicyPath := filepath.Join(dir, "code-policy.json")
+		// Try to load code-policy.json for validation (in same directory as user policy)
+		codePolicyPath := filepath.Join(filepath.Dir(userPolicyPath), "code-policy.json")
 		if codePolicy, err := s.loader.LoadCodePolicy(codePolicyPath); err == nil {
 			s.codePolicy = codePolicy
 			fmt.Fprintf(os.Stderr, "✓ Code policy loaded: %s (%d rules)\n", codePolicyPath, len(codePolicy.Rules))
@@ -612,14 +623,14 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 	}
 
 	// Setup LLM client for validation
-	apiKey := os.Getenv("ANTHROPIC_API_KEY")
+	apiKey := envutil.GetAPIKey("ANTHROPIC_API_KEY")
 	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
+		apiKey = envutil.GetAPIKey("OPENAI_API_KEY")
 	}
 	if apiKey == "" {
 		return nil, &RPCError{
 			Code:    -32000,
-			Message: "LLM API key not found (ANTHROPIC_API_KEY or OPENAI_API_KEY required for validation)",
+			Message: "LLM API key not found (ANTHROPIC_API_KEY or OPENAI_API_KEY required for validation in environment or .sym/.env)",
 		}
 	}
 

@@ -12,6 +12,7 @@ let appState = {
     users: [],
     templates: [],
     isDirty: false,
+    originalRules: null, // Store original rules to detect changes
     filters: {
         ruleSearch: '',
         category: ''
@@ -89,13 +90,28 @@ const API = {
     },
 
     async setPolicyPath(path) {
+        console.log('Sending policy path to server:', path);
         const res = await fetch('/api/policy/path', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ policyPath: path })
         });
         if (!res.ok) throw new Error(await res.text());
-        return await res.json();
+        const result = await res.json();
+        console.log('Server response:', result);
+        return result;
+    },
+
+    async convertPolicy() {
+        console.log('Requesting policy conversion...');
+        const res = await fetch('/api/policy/convert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const result = await res.json();
+        console.log('Conversion result:', result);
+        return result;
     }
 };
 
@@ -445,6 +461,8 @@ function handleDeleteRule(e) {
 
     appState.policy.rules = appState.policy.rules.filter(r => r.id !== ruleId);
 
+    console.log('Rule deleted. Current rules count:', appState.policy.rules.length);
+
     renderRules();
     showToast('규칙이 삭제되었습니다');
     markDirty();
@@ -461,6 +479,9 @@ function handleAddRule() {
     const defaultLanguages = (appState.policy.defaults?.languages || []).slice();
     const newRule = { id: newId, say: '', category: '', languages: defaultLanguages, example: '' };
     appState.policy.rules.push(newRule);
+
+    console.log('Rule added. Current rules count:', appState.policy.rules.length);
+
     renderRules();
 
     // Open the new rule details
@@ -820,6 +841,14 @@ async function savePolicy() {
         await API.savePolicy(appState.policy);
         await API.saveRoles(roles);
 
+        // Save policy path if changed
+        const newPath = document.getElementById('policy-path-input').value.trim();
+        if (newPath && newPath !== appState.settings.policyPath) {
+            console.log('Saving policy path:', newPath);
+            await API.setPolicyPath(newPath);
+            appState.settings.policyPath = newPath;
+        }
+
         // Update current user info
         updateUserInfo();
 
@@ -827,6 +856,44 @@ async function savePolicy() {
         document.getElementById('save-btn').classList.remove('ring-2', 'ring-yellow-400');
         document.getElementById('floating-save-btn').classList.remove('ring-4', 'ring-yellow-400', 'animate-pulse');
         showToast('정책이 성공적으로 저장되었습니다!');
+
+        // Check if rules were changed and ask about conversion
+        const currentRules = JSON.stringify(appState.policy.rules || []);
+        const rulesChanged = appState.originalRules && (appState.originalRules !== currentRules);
+
+        console.log('=== Rules Change Detection ===');
+        console.log('Original rules:', appState.originalRules ? appState.originalRules.substring(0, 100) + '...' : 'NULL');
+        console.log('Current rules:', currentRules.substring(0, 100) + '...');
+        console.log('Original length:', appState.originalRules ? appState.originalRules.length : 0);
+        console.log('Current length:', currentRules.length);
+        console.log('Rules changed?', rulesChanged);
+        console.log('============================');
+
+        if (rulesChanged) {
+            const shouldConvert = confirm(
+                '규칙이 변경되었습니다.\n\n' +
+                'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
+                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.'
+            );
+
+            if (shouldConvert) {
+                try {
+                    showToast('정책 변환 중... 잠시만 기다려주세요', 'info');
+                    const convertResult = await API.convertPolicy();
+                    showToast(
+                        `변환 완료! ${convertResult.filesWritten.length}개의 파일이 생성되었습니다.`,
+                        'success'
+                    );
+                    console.log('Convert result:', convertResult);
+                } catch (error) {
+                    console.error('Conversion failed:', error);
+                    showToast('변환 실패: ' + error.message, 'error');
+                }
+            }
+
+            // Update original rules to current state to avoid re-asking
+            appState.originalRules = currentRules;
+        }
     } catch (error) {
         console.error('Failed to save policy:', error);
         showToast('저장에 실패했습니다: ' + error.message, 'error');
@@ -836,6 +903,10 @@ async function savePolicy() {
 async function loadPolicy() {
     try {
         appState.policy = await API.getPolicy();
+        // Store original rules for change detection
+        appState.originalRules = JSON.stringify(appState.policy.rules || []);
+        console.log('Policy loaded. Rules count:', appState.policy.rules.length);
+        console.log('Original rules stored:', appState.originalRules.substring(0, 100) + '...');
         await loadUsersFromRoles();
         renderAll();
         showToast('정책을 불러왔습니다');
@@ -872,11 +943,18 @@ async function loadSettings() {
 async function saveSettings() {
     try {
         const newPath = document.getElementById('policy-path-input').value.trim();
+        console.log('Current policy path:', appState.settings.policyPath);
+        console.log('New policy path from input:', newPath);
 
         if (newPath && newPath !== appState.settings.policyPath) {
+            console.log('Path changed, saving to server...');
             await API.setPolicyPath(newPath);
             appState.settings.policyPath = newPath;
             showToast('설정이 저장되었습니다');
+        } else if (!newPath) {
+            console.log('Empty path, skipping save');
+        } else {
+            console.log('Path unchanged, skipping save');
         }
 
         const confirmSaveCheckbox = document.getElementById('confirm-save-checkbox');

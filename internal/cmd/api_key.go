@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/manifoldco/promptui"
 )
 
@@ -25,9 +26,9 @@ func promptAPIKeyConfiguration(checkExisting bool) {
 	envPath := filepath.Join(".sym", ".env")
 
 	if checkExisting {
-		// 1. Check environment variable
-		if os.Getenv("OPENAI_API_KEY") != "" {
-			fmt.Println("\n✓ OpenAI API key detected from environment")
+		// 1. Check environment variable or .env file
+		if envutil.GetAPIKey("OPENAI_API_KEY") != "" {
+			fmt.Println("\n✓ OpenAI API key detected from environment or .sym/.env")
 			return
 		}
 
@@ -84,7 +85,7 @@ func promptAPIKeyConfiguration(checkExisting bool) {
 		}
 
 		// Save to .sym/.env
-		if err := saveToEnvFile(envPath, "OPENAI_API_KEY", apiKey); err != nil {
+		if err := envutil.SaveKeyToEnvFile(envPath, "OPENAI_API_KEY", apiKey); err != nil {
 			fmt.Printf("\n❌ Failed to save API key: %v\n", err)
 			return
 		}
@@ -173,41 +174,6 @@ func hasAPIKeyInEnvFile(envPath string) bool {
 	return false
 }
 
-// saveToEnvFile saves a key-value pair to .env file
-func saveToEnvFile(envPath, key, value string) error {
-	// Create .sym directory if it doesn't exist
-	symDir := filepath.Dir(envPath)
-	if err := os.MkdirAll(symDir, 0755); err != nil {
-		return fmt.Errorf("failed to create .sym directory: %w", err)
-	}
-
-	// Read existing content
-	var lines []string
-	existingFile, err := os.Open(envPath)
-	if err == nil {
-		scanner := bufio.NewScanner(existingFile)
-		for scanner.Scan() {
-			line := scanner.Text()
-			// Skip existing OPENAI_API_KEY lines
-			if !strings.HasPrefix(strings.TrimSpace(line), key+"=") {
-				lines = append(lines, line)
-			}
-		}
-		_ = existingFile.Close()
-	}
-
-	// Add new key
-	lines = append(lines, fmt.Sprintf("%s=%s", key, value))
-
-	// Write to file with restrictive permissions (owner read/write only)
-	content := strings.Join(lines, "\n") + "\n"
-	if err := os.WriteFile(envPath, []byte(content), 0600); err != nil {
-		return fmt.Errorf("failed to write .env file: %w", err)
-	}
-
-	return nil
-}
-
 // ensureGitignore ensures that the given path is in .gitignore
 func ensureGitignore(path string) error {
 	gitignorePath := ".gitignore"
@@ -241,41 +207,11 @@ func ensureGitignore(path string) error {
 }
 
 // getAPIKey retrieves OpenAI API key from environment or .env file
-// Priority: 1) System environment variable 2) .sym/.env file
+// Returns error if not found
 func getAPIKey() (string, error) {
-	// 1. Check system environment variable first
-	if key := os.Getenv("OPENAI_API_KEY"); key != "" {
-		return key, nil
+	key := envutil.GetAPIKey("OPENAI_API_KEY")
+	if key == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY not found in environment or .sym/.env")
 	}
-
-	// 2. Check .sym/.env file
-	envPath := filepath.Join(".sym", ".env")
-	key, err := loadFromEnvFile(envPath, "OPENAI_API_KEY")
-	if err == nil && key != "" {
-		return key, nil
-	}
-
-	return "", fmt.Errorf("OPENAI_API_KEY not found in environment or .sym/.env")
-}
-
-// loadFromEnvFile loads a specific key from .env file
-func loadFromEnvFile(envPath, key string) (string, error) {
-	file, err := os.Open(envPath)
-	if err != nil {
-		return "", err
-	}
-	defer func() { _ = file.Close() }()
-
-	scanner := bufio.NewScanner(file)
-	for scanner.Scan() {
-		line := strings.TrimSpace(scanner.Text())
-		if strings.HasPrefix(line, key+"=") {
-			parts := strings.SplitN(line, "=", 2)
-			if len(parts) == 2 {
-				return strings.TrimSpace(parts[1]), nil
-			}
-		}
-	}
-
-	return "", fmt.Errorf("key %s not found in %s", key, envPath)
+	return key, nil
 }
