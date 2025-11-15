@@ -30,7 +30,9 @@ func LoadKeyFromEnvFile(envPath, key string) string {
 	if err != nil {
 		return ""
 	}
-	defer file.Close()
+	defer func() {
+		_ = file.Close()
+	}()
 
 	scanner := bufio.NewScanner(file)
 	prefix := key + "="
