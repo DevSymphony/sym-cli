@@ -62,7 +62,6 @@ func (s *Server) Start() error {
 	// Policy API endpoints
 	mux.HandleFunc("/api/policy", s.handlePolicy)
 	mux.HandleFunc("/api/policy/path", s.handlePolicyPath)
-	mux.HandleFunc("/api/policy/history", s.handlePolicyHistory)
 	mux.HandleFunc("/api/policy/templates", s.handlePolicyTemplates)
 	mux.HandleFunc("/api/policy/templates/", s.handlePolicyTemplateDetail)
 	mux.HandleFunc("/api/users", s.handleUsers)
@@ -453,23 +452,6 @@ func (s *Server) handleSetPolicyPath(w http.ResponseWriter, r *http.Request) {
 		"status":  "success",
 		"message": "Policy path updated successfully",
 	})
-}
-
-// handlePolicyHistory returns the policy commit history
-func (s *Server) handlePolicyHistory(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	history, err := policy.GetPolicyHistory(s.cfg.PolicyPath, 20)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get policy history: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(history)
 }
 
 // handlePolicyTemplates returns the list of available templates

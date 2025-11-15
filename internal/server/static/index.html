@@ -49,10 +49,6 @@
                 <img src="/icons/template.svg" alt="Template" class="w-5 h-5">
                 템플릿
             </button>
-            <button id="history-btn" class="px-6 py-3 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-semibold flex items-center gap-2 shadow-md transition-all">
-                <img src="/icons/history.svg" alt="History" class="w-5 h-5">
-                히스토리
-            </button>
         </div>
 
         <!-- User Management Section -->
@@ -104,12 +100,6 @@
                                 <option value="info">Info</option>
                             </select>
                         </div>
-                        <div class="form-group md:col-span-2">
-                            <label for="defaults-autofix" class="flex items-center space-x-2 text-sm font-medium text-slate-600">
-                                <input type="checkbox" id="defaults-autofix" class="h-4 w-4 rounded bg-gray-200 border-gray-300 text-blue-600 focus:ring-blue-500">
-                                <span>자동 수정 (Autofix) 활성화</span>
-                            </label>
-                        </div>
                     </div>
                 </details>
 
@@ -120,10 +110,6 @@
                             <label for="policy-path-input" class="block text-sm font-medium text-slate-600 mb-2">정책 파일 위치</label>
                             <input type="text" id="policy-path-input" placeholder=".sym/user-policy.json" class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
                             <p class="text-xs text-slate-500 mt-1">정책 파일의 상대 경로를 지정합니다.</p>
-                        </div>
-                        <div class="flex items-center space-x-2">
-                            <input type="checkbox" id="auto-save-checkbox" class="h-4 w-4 rounded bg-gray-200 border-gray-300 text-blue-600 focus:ring-blue-500">
-                            <label for="auto-save-checkbox" class="text-sm text-slate-600">자동 저장 (30초마다)</label>
                         </div>
                         <div class="flex items-center space-x-2">
                             <input type="checkbox" id="confirm-save-checkbox" class="h-4 w-4 rounded bg-gray-200 border-gray-300 text-blue-600 focus:ring-blue-500" checked>
@@ -187,22 +173,6 @@
             </div>
             <div class="p-6 border-t border-gray-300 bg-amber-50">
                 <p class="text-sm text-amber-800">⚠️ 템플릿을 적용하면 현재 정책이 덮어써집니다. 계속하시겠습니까?</p>
-            </div>
-        </div>
-    </div>
-
-    <!-- History Modal -->
-    <div id="history-modal" class="fixed inset-0 modal-overlay flex items-center justify-center p-4 z-50 hidden">
-        <div class="w-full max-w-3xl bg-white rounded-lg shadow-xl border border-gray-300">
-            <header class="p-6 flex items-center justify-between border-b border-gray-300">
-                <h3 class="text-xl font-semibold text-slate-900 flex items-center gap-2">
-                    <img src="/icons/history.svg" alt="History" class="w-6 h-6">
-                    정책 변경 히스토리
-                </h3>
-                <button id="close-history-modal" class="text-slate-500 hover:text-slate-800 text-2xl">&times;</button>
-            </header>
-            <div class="p-6 max-h-96 overflow-y-auto">
-                <div id="history-list" class="space-y-4"></div>
             </div>
         </div>
     </div>

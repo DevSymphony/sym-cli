@@ -11,7 +11,6 @@ let appState = {
     },
     users: [],
     templates: [],
-    history: [],
     isDirty: false,
     filters: {
         ruleSearch: '',
@@ -82,11 +81,6 @@ const API = {
             const errorText = await res.text();
             throw new Error(`Failed to load template: ${res.status} ${res.statusText} - ${errorText}`);
         }
-        return await res.json();
-    },
-
-    async getHistory() {
-        const res = await fetch('/api/policy/history');
         return await res.json();
     },
 
@@ -464,7 +458,9 @@ function handleAddRule() {
         return isNaN(ruleId) ? max : Math.max(max, ruleId);
     }, 0);
     const newId = String(maxId + 1);
-    const newRule = { id: newId, say: '', category: '', languages: [], example: '' };
+    // Use default languages from global settings if available
+    const defaultLanguages = (appState.policy.defaults?.languages || []).slice();
+    const newRule = { id: newId, say: '', category: '', languages: defaultLanguages, example: '' };
     appState.policy.rules.push(newRule);
     renderRules();
 
@@ -749,43 +745,6 @@ async function handleApplyTemplate(e) {
         console.error('Error details:', error.message, error.stack);
         showToast(`템플릿 적용에 실패했습니다: ${error.message}`, 'error');
     }
-}
-
-// ==================== History Management ====================
-async function loadHistory() {
-    try {
-        appState.history = await API.getHistory();
-        renderHistory();
-    } catch (error) {
-        console.error('Failed to load history:', error);
-        showToast('히스토리를 불러오는데 실패했습니다', 'error');
-    }
-}
-
-function renderHistory() {
-    const container = document.getElementById('history-list');
-
-    if (appState.history.length === 0) {
-        container.innerHTML = '<div class="text-center text-slate-500 py-4">변경 이력이 없습니다</div>';
-        return;
-    }
-
-    container.innerHTML = appState.history.map(commit => {
-        const date = new Date(commit.date);
-        return `
-            <div class="history-item p-4 border border-gray-200 rounded-lg">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="font-semibold text-slate-800">${commit.message}</div>
-                    <div class="text-xs text-slate-500">${date.toLocaleString('ko-KR')}</div>
-                </div>
-                <div class="text-sm text-slate-600">
-                    <span class="font-mono text-xs text-blue-600">${commit.hash.substring(0, 7)}</span>
-                    <span class="mx-2">•</span>
-                    <span>${commit.author} (${commit.email})</span>
-                </div>
-            </div>
-        `;
-    }).join('');
 }
 
 // ==================== Save & Load ====================
@@ -1143,12 +1102,6 @@ document.addEventListener('DOMContentLoaded', () => {
         showModal('template-modal');
     });
 
-    // History button
-    document.getElementById('history-btn').addEventListener('click', async () => {
-        await loadHistory();
-        showModal('history-modal');
-    });
-
     // User management
     document.getElementById('add-user-btn').addEventListener('click', handleAddUser);
     document.getElementById('user-search').addEventListener('input', () => renderUsers());
@@ -1181,7 +1134,6 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // Modal close buttons
     document.getElementById('close-template-modal').addEventListener('click', () => hideModal('template-modal'));
-    document.getElementById('close-history-modal').addEventListener('click', () => hideModal('history-modal'));
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {
