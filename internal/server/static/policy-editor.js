@@ -797,7 +797,6 @@ async function savePolicy() {
         }
 
         appState.policy.defaults.severity = document.getElementById('defaults-severity').value || undefined;
-        appState.policy.defaults.autofix = document.getElementById('defaults-autofix').checked || undefined;
 
         // Collect roles from users
         const roles = {};
@@ -866,8 +865,10 @@ async function loadSettings() {
         }
 
         // Update checkboxes
-        document.getElementById('auto-save-checkbox').checked = appState.settings.autoSave;
-        document.getElementById('confirm-save-checkbox').checked = appState.settings.confirmSave;
+        const confirmSaveCheckbox = document.getElementById('confirm-save-checkbox');
+        if (confirmSaveCheckbox) {
+            confirmSaveCheckbox.checked = appState.settings.confirmSave;
+        }
     } catch (error) {
         console.error('Failed to load settings:', error);
     }
@@ -883,12 +884,11 @@ async function saveSettings() {
             showToast('설정이 저장되었습니다');
         }
 
-        appState.settings.autoSave = document.getElementById('auto-save-checkbox').checked;
-        appState.settings.confirmSave = document.getElementById('confirm-save-checkbox').checked;
-
-        // Save to localStorage
-        localStorage.setItem('autoSave', appState.settings.autoSave);
-        localStorage.setItem('confirmSave', appState.settings.confirmSave);
+        const confirmSaveCheckbox = document.getElementById('confirm-save-checkbox');
+        if (confirmSaveCheckbox) {
+            appState.settings.confirmSave = confirmSaveCheckbox.checked;
+            localStorage.setItem('confirmSave', appState.settings.confirmSave);
+        }
 
         hideModal('settings-modal');
     } catch (error) {
@@ -926,7 +926,6 @@ function renderAll() {
     const defaults = appState.policy.defaults || {};
     document.getElementById('defaults-languages').value = (defaults.languages || []).join(', ');
     document.getElementById('defaults-severity').value = defaults.severity || '';
-    document.getElementById('defaults-autofix').checked = defaults.autofix || false;
 
     // RBAC
     renderRBAC();
@@ -972,8 +971,6 @@ function applyPermissions() {
         document.getElementById('defaults-languages').classList.add('bg-gray-200', 'cursor-not-allowed');
         document.getElementById('defaults-severity').disabled = true;
         document.getElementById('defaults-severity').classList.add('bg-gray-200', 'cursor-not-allowed');
-        document.getElementById('defaults-autofix').disabled = true;
-        document.getElementById('defaults-autofix').classList.add('cursor-not-allowed');
 
         // Hide rule add/edit/delete buttons
         document.getElementById('add-rule-btn')?.classList.add('hidden');
@@ -1122,15 +1119,13 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('add-role-btn').addEventListener('click', handleAddRBACRole);
 
     // Settings checkboxes - save to localStorage on change
-    document.getElementById('auto-save-checkbox').addEventListener('change', (e) => {
-        appState.settings.autoSave = e.target.checked;
-        localStorage.setItem('autoSave', appState.settings.autoSave);
-        showToast(appState.settings.autoSave ? '자동 저장이 활성화되었습니다' : '자동 저장이 비활성화되었습니다', 'info');
-    });
-    document.getElementById('confirm-save-checkbox').addEventListener('change', (e) => {
-        appState.settings.confirmSave = e.target.checked;
-        localStorage.setItem('confirmSave', appState.settings.confirmSave);
-    });
+    const confirmSaveCheckbox = document.getElementById('confirm-save-checkbox');
+    if (confirmSaveCheckbox) {
+        confirmSaveCheckbox.addEventListener('change', (e) => {
+            appState.settings.confirmSave = e.target.checked;
+            localStorage.setItem('confirmSave', appState.settings.confirmSave);
+        });
+    }
 
     // Modal close buttons
     document.getElementById('close-template-modal').addEventListener('click', () => hideModal('template-modal'));
