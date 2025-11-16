@@ -1,34 +1,35 @@
 package checkstyle
 
 import (
-	"encoding/json"
+	"encoding/xml"
 	"fmt"
 	"strings"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
 )
 
-// CheckstyleOutput represents the JSON output from Checkstyle.
+// CheckstyleOutput represents the XML output from Checkstyle.
 type CheckstyleOutput struct {
-	Files []CheckstyleFile `json:"files"`
+	XMLName xml.Name         `xml:"checkstyle"`
+	Files   []CheckstyleFile `xml:"file"`
 }
 
 // CheckstyleFile represents a file with violations in Checkstyle output.
 type CheckstyleFile struct {
-	Name   string              `json:"name"`
-	Errors []CheckstyleError   `json:"errors"`
+	Name   string            `xml:"name,attr"`
+	Errors []CheckstyleError `xml:"error"`
 }
 
 // CheckstyleError represents a single violation in Checkstyle output.
 type CheckstyleError struct {
-	Line     int    `json:"line"`
-	Column   int    `json:"column"`
-	Severity string `json:"severity"`
-	Message  string `json:"message"`
-	Source   string `json:"source"`
+	Line     int    `xml:"line,attr"`
+	Column   int    `xml:"column,attr"`
+	Severity string `xml:"severity,attr"`
+	Message  string `xml:"message,attr"`
+	Source   string `xml:"source,attr"`
 }
 
-// parseOutput converts Checkstyle JSON output to violations.
+// parseOutput converts Checkstyle XML output to violations.
 func parseOutput(output *adapter.ToolOutput) ([]adapter.Violation, error) {
 	if output == nil {
 		return nil, fmt.Errorf("output is nil")
@@ -39,10 +40,10 @@ func parseOutput(output *adapter.ToolOutput) ([]adapter.Violation, error) {
 		return []adapter.Violation{}, nil
 	}
 
-	// Parse JSON output
+	// Parse XML output
 	var result CheckstyleOutput
-	if err := json.Unmarshal([]byte(output.Stdout), &result); err != nil {
-		// If JSON parsing fails, try to extract errors from stderr
+	if err := xml.Unmarshal([]byte(output.Stdout), &result); err != nil {
+		// If XML parsing fails, try to extract errors from stderr
 		if output.Stderr != "" {
 			return nil, fmt.Errorf("checkstyle failed: %s", output.Stderr)
 		}

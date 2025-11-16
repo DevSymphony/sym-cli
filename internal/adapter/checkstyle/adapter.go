@@ -14,10 +14,10 @@ import (
 
 const (
 	// DefaultVersion is the default Checkstyle version.
-	DefaultVersion = "10.12.0"
+	DefaultVersion = "10.26.1"
 
-	// MavenCentralURL is the Maven Central repository base URL.
-	MavenCentralURL = "https://repo1.maven.org/maven2/com/puppycrawl/tools/checkstyle"
+	// GitHubReleaseURL is the GitHub Releases base URL for Checkstyle.
+	GitHubReleaseURL = "https://github.com/checkstyle/checkstyle/releases/download"
 )
 
 // Adapter wraps Checkstyle for Java validation.
@@ -110,9 +110,9 @@ func (a *Adapter) Install(ctx context.Context, config adapter.InstallConfig) err
 		version = DefaultVersion
 	}
 
-	// Download URL
+	// Download URL - use GitHub Releases for -all.jar
 	jarName := fmt.Sprintf("checkstyle-%s-all.jar", version)
-	url := fmt.Sprintf("%s/%s/%s", MavenCentralURL, version, jarName)
+	url := fmt.Sprintf("%s/checkstyle-%s/%s", GitHubReleaseURL, version, jarName)
 
 	// Destination path
 	jarPath := filepath.Join(a.ToolsDir, jarName)

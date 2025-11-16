@@ -34,7 +34,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	args := []string{
 		"-jar", jarPath,
 		"-c", configFile,
-		"-f", "json", // JSON output format
+		"-f", "xml", // XML output format
 	}
 	args = append(args, files...)
 

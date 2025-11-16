@@ -69,7 +69,7 @@ func (a *Adapter) GetCapabilities() adapter.AdapterCapabilities {
 	return adapter.AdapterCapabilities{
 		Name:                "pmd",
 		SupportedLanguages:  []string{"java"},
-		SupportedCategories: []string{"pattern", "complexity", "performance", "security", "error_handling"},
+		SupportedCategories: []string{"pattern", "complexity", "performance", "security", "error_handling", "ast"},
 		Version:             DefaultVersion,
 	}
 }

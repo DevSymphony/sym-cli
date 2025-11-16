@@ -64,6 +64,10 @@ public class ValidAst {
         LOGGER.severe("Error handled: " + e.getMessage());
     }
 
+    /**
+     * Main entry point for the application.
+     * @param args command line arguments
+     */
     public static void main(String[] args) {
         ValidAst obj = new ValidAst();
         obj.processWithSpecificCatch();

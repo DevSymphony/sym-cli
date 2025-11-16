@@ -11,12 +11,11 @@
         "languages": ["javascript"]
       },
       "check": {
-        "engine": "ast",
+        "engine": "pattern",
         "language": "javascript",
-        "node": "ClassDeclaration",
-        "where": {
-          "id.name": "^[A-Z][a-zA-Z0-9]*$"
-        }
+        "target": "identifier",
+        "context": "class",
+        "pattern": "^[A-Z][a-zA-Z0-9]*$"
       },
       "message": "Class names must be PascalCase"
     },
@@ -30,12 +29,11 @@
         "languages": ["javascript"]
       },
       "check": {
-        "engine": "ast",
+        "engine": "pattern",
         "language": "javascript",
-        "node": "FunctionDeclaration",
-        "where": {
-          "id.name": "^[a-z][a-zA-Z0-9]*$"
-        }
+        "target": "identifier",
+        "context": "function",
+        "pattern": "^[a-z][a-zA-Z0-9]*$"
       },
       "message": "Function names must be camelCase"
     },
@@ -49,12 +47,11 @@
         "languages": ["javascript"]
       },
       "check": {
-        "engine": "ast",
+        "engine": "pattern",
         "language": "javascript",
-        "node": "VariableDeclarator",
-        "where": {
-          "id.name": "^[a-z][a-zA-Z0-9]*$"
-        }
+        "target": "identifier",
+        "context": "variable",
+        "pattern": "^[a-z][a-zA-Z0-9]*$"
       },
       "message": "Variable names must be camelCase"
     }
