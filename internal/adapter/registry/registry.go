@@ -49,7 +49,7 @@ func (r *Registry) Register(adp adapter.Adapter) error {
 
 // GetAdapter finds an adapter that supports the given language and category.
 // Returns the first matching adapter, or ErrAdapterNotFound if none match.
-func (r *Registry) GetAdapter(language, category string) (adapter.Adapter, error) {
+func (r *Registry) GetAdapter(language, category string) (interface{}, error) {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
@@ -71,13 +71,15 @@ func (r *Registry) GetAdapter(language, category string) (adapter.Adapter, error
 }
 
 // GetAll returns all registered adapters.
-func (r *Registry) GetAll() []adapter.Adapter {
+func (r *Registry) GetAll() []interface{} {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 
 	// Return a copy to prevent external modification
-	result := make([]adapter.Adapter, len(r.adapters))
-	copy(result, r.adapters)
+	result := make([]interface{}, len(r.adapters))
+	for i, adp := range r.adapters {
+		result[i] = adp
+	}
 	return result
 }
 
