@@ -13,6 +13,7 @@ let appState = {
     templates: [],
     isDirty: false,
     originalRules: null, // Store original rules to detect changes
+    originalRBAC: null, // Store original RBAC to detect changes
     filters: {
         ruleSearch: '',
         category: ''
@@ -768,6 +769,42 @@ async function handleApplyTemplate(e) {
 }
 
 // ==================== Save & Load ====================
+// Helper function to create stable JSON string for comparison
+// Recursively sorts object keys to ensure consistent comparison
+function createStableJSON(obj) {
+    if (obj === null || obj === undefined) {
+        return JSON.stringify(obj);
+    }
+
+    if (typeof obj !== 'object') {
+        return JSON.stringify(obj);
+    }
+
+    if (Array.isArray(obj)) {
+        // Recursively process array elements
+        const processedArray = obj.map(item => {
+            if (item && typeof item === 'object') {
+                return JSON.parse(createStableJSON(item));
+            }
+            return item;
+        });
+        return JSON.stringify(processedArray);
+    }
+
+    // Recursively process object properties
+    const sorted = {};
+    Object.keys(obj).sort().forEach(key => {
+        const value = obj[key];
+        if (value && typeof value === 'object') {
+            sorted[key] = JSON.parse(createStableJSON(value));
+        } else {
+            sorted[key] = value;
+        }
+    });
+
+    return JSON.stringify(sorted);
+}
+
 async function savePolicy() {
     if (appState.settings.confirmSave) {
         if (!confirm('정책을 저장하시겠습니까?')) return;
@@ -857,21 +894,30 @@ async function savePolicy() {
         document.getElementById('floating-save-btn').classList.remove('ring-4', 'ring-yellow-400', 'animate-pulse');
         showToast('정책이 성공적으로 저장되었습니다!');
 
-        // Check if rules were changed and ask about conversion
-        const currentRules = JSON.stringify(appState.policy.rules || []);
-        const rulesChanged = appState.originalRules && (appState.originalRules !== currentRules);
+        console.log('[DEBUG] Policy saved successfully, checking for changes...');
 
-        console.log('=== Rules Change Detection ===');
+        // Check if rules or RBAC were changed and ask about conversion
+        const currentRules = createStableJSON(appState.policy.rules || []);
+        const currentRBAC = createStableJSON(appState.policy.rbac || {});
+        const rulesChanged = appState.originalRules && (appState.originalRules !== currentRules);
+        const rbacChanged = appState.originalRBAC && (appState.originalRBAC !== currentRBAC);
+
+        console.log('=== Policy Change Detection ===');
         console.log('Original rules:', appState.originalRules ? appState.originalRules.substring(0, 100) + '...' : 'NULL');
         console.log('Current rules:', currentRules.substring(0, 100) + '...');
-        console.log('Original length:', appState.originalRules ? appState.originalRules.length : 0);
-        console.log('Current length:', currentRules.length);
+        console.log('Original RBAC:', appState.originalRBAC ? appState.originalRBAC.substring(0, 100) + '...' : 'NULL');
+        console.log('Current RBAC:', currentRBAC.substring(0, 100) + '...');
         console.log('Rules changed?', rulesChanged);
+        console.log('RBAC changed?', rbacChanged);
         console.log('============================');
 
-        if (rulesChanged) {
+        if (rulesChanged || rbacChanged) {
+            const changedItems = [];
+            if (rulesChanged) changedItems.push('규칙');
+            if (rbacChanged) changedItems.push('RBAC 설정');
+
             const shouldConvert = confirm(
-                '규칙이 변경되었습니다.\n\n' +
+                `${changedItems.join('과 ')}이 변경되었습니다.\n\n` +
                 'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
                 '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.'
             );
@@ -891,8 +937,9 @@ async function savePolicy() {
                 }
             }
 
-            // Update original rules to current state to avoid re-asking
+            // Update original rules and RBAC to current state to avoid re-asking
             appState.originalRules = currentRules;
+            appState.originalRBAC = currentRBAC;
         }
     } catch (error) {
         console.error('Failed to save policy:', error);
@@ -903,10 +950,12 @@ async function savePolicy() {
 async function loadPolicy() {
     try {
         appState.policy = await API.getPolicy();
-        // Store original rules for change detection
-        appState.originalRules = JSON.stringify(appState.policy.rules || []);
+        // Store original rules and RBAC for change detection (using stable JSON)
+        appState.originalRules = createStableJSON(appState.policy.rules || []);
+        appState.originalRBAC = createStableJSON(appState.policy.rbac || {});
         console.log('Policy loaded. Rules count:', appState.policy.rules.length);
         console.log('Original rules stored:', appState.originalRules.substring(0, 100) + '...');
+        console.log('Original RBAC stored:', appState.originalRBAC.substring(0, 100) + '...');
         await loadUsersFromRoles();
         renderAll();
         showToast('정책을 불러왔습니다');
