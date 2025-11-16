@@ -109,7 +109,11 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	// Create unified validator that handles all engines + RBAC
 	v := validator.NewValidator(&policy, true) // verbose=true for CLI
 	v.SetLLMClient(llmClient)
-	defer v.Close()
+	defer func() {
+		if err := v.Close(); err != nil {
+			fmt.Printf("Warning: failed to close validator: %v\n", err)
+		}
+	}()
 
 	// Validate changes
 	ctx := context.Background()
