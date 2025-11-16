@@ -2,6 +2,7 @@ package tsc
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -11,9 +12,26 @@ import (
 
 // execute runs tsc with the given configuration.
 func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*adapter.ToolOutput, error) {
+	// Parse config and add files to check
+	var tsconfig map[string]interface{}
+	if err := json.Unmarshal(config, &tsconfig); err != nil {
+		return nil, fmt.Errorf("failed to parse tsconfig: %w", err)
+	}
+
+	// Add files to tsconfig if specific files are provided
+	if len(files) > 0 {
+		tsconfig["files"] = files
+	}
+
+	// Marshal updated config
+	updatedConfig, err := json.MarshalIndent(tsconfig, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal updated tsconfig: %w", err)
+	}
+
 	// Write tsconfig.json to a temporary location
 	configPath := filepath.Join(a.WorkDir, ".symphony-tsconfig.json")
-	if err := os.WriteFile(configPath, config, 0644); err != nil {
+	if err := os.WriteFile(configPath, updatedConfig, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write tsconfig: %w", err)
 	}
 	defer func() { _ = os.Remove(configPath) }()
@@ -26,17 +44,11 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	}
 
 	// Build tsc command
-	// Use --noEmit to only check types without generating output
-	// Use --pretty false to get machine-readable output
+	// Use --project to read config, --noEmit to only check types, --pretty false for machine-readable output
 	args := []string{
 		"--project", configPath,
 		"--noEmit",
 		"--pretty", "false",
-	}
-
-	// If specific files are provided, add them
-	if len(files) > 0 {
-		args = append(args, files...)
 	}
 
 	// Execute tsc
