@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/converter"
@@ -51,16 +52,27 @@ map them to appropriate linter rules.`,
 }
 
 func init() {
-	convertCmd.Flags().StringVarP(&convertInputFile, "input", "i", "user-policy.json", "input user policy file")
+	convertCmd.Flags().StringVarP(&convertInputFile, "input", "i", "", "input user policy file (default: from .sym/.env POLICY_PATH)")
 	convertCmd.Flags().StringVarP(&convertOutputFile, "output", "o", "", "output code policy file (legacy mode)")
 	convertCmd.Flags().StringSliceVar(&convertTargets, "targets", []string{}, "target linters (eslint,checkstyle,pmd or 'all')")
-	convertCmd.Flags().StringVar(&convertOutputDir, "output-dir", "", "output directory for linter configs (default: <git-root>/.sym)")
+	convertCmd.Flags().StringVar(&convertOutputDir, "output-dir", "", "output directory for linter configs (default: same as input file directory)")
 	convertCmd.Flags().StringVar(&convertOpenAIModel, "openai-model", "gpt-4o-mini", "OpenAI model to use for inference")
 	convertCmd.Flags().Float64Var(&convertConfidenceThreshold, "confidence-threshold", 0.7, "minimum confidence for LLM inference (0.0-1.0)")
 	convertCmd.Flags().IntVar(&convertTimeout, "timeout", 30, "timeout for API calls in seconds")
 }
 
 func runConvert(cmd *cobra.Command, args []string) error {
+	// Determine input file path
+	if convertInputFile == "" {
+		// Try to load from .env
+		policyPath := loadPolicyPathFromEnv()
+		if policyPath == "" {
+			policyPath = ".sym/user-policy.json" // fallback default
+		}
+		convertInputFile = policyPath
+		fmt.Printf("Using policy path from .env: %s\n", convertInputFile)
+	}
+
 	// Read input file
 	data, err := os.ReadFile(convertInputFile)
 	if err != nil {
@@ -83,10 +95,38 @@ func runConvert(cmd *cobra.Command, args []string) error {
 	return runLegacyConvert(&userPolicy)
 }
 
+// loadPolicyPathFromEnv reads POLICY_PATH from .sym/.env
+func loadPolicyPathFromEnv() string {
+	envPath := filepath.Join(".sym", ".env")
+	data, err := os.ReadFile(envPath)
+	if err != nil {
+		return ""
+	}
+
+	lines := strings.Split(string(data), "\n")
+	prefix := "POLICY_PATH="
+
+	for _, line := range lines {
+		line = strings.TrimSpace(line)
+		// Skip comments and empty lines
+		if len(line) == 0 || line[0] == '#' {
+			continue
+		}
+		// Check if line starts with POLICY_PATH=
+		if strings.HasPrefix(line, prefix) {
+			return strings.TrimSpace(line[len(prefix):])
+		}
+	}
+
+	return ""
+}
+
 func runLegacyConvert(userPolicy *schema.UserPolicy) error {
 	outputFile := convertOutputFile
 	if outputFile == "" {
-		outputFile = "code-policy.json"
+		// Use same directory as input file
+		inputDir := filepath.Dir(convertInputFile)
+		outputFile = filepath.Join(inputDir, "code-policy.json")
 	}
 
 	conv := converter.NewConverter()
@@ -101,6 +141,12 @@ func runLegacyConvert(userPolicy *schema.UserPolicy) error {
 	output, err := json.MarshalIndent(codePolicy, "", "  ")
 	if err != nil {
 		return fmt.Errorf("failed to serialize code policy: %w", err)
+	}
+
+	// Create directory if needed
+	outputDir := filepath.Dir(outputFile)
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	if err := os.WriteFile(outputFile, output, 0644); err != nil {
@@ -119,12 +165,9 @@ func runLegacyConvert(userPolicy *schema.UserPolicy) error {
 func runMultiTargetConvert(userPolicy *schema.UserPolicy) error {
 	// Determine output directory
 	if convertOutputDir == "" {
-		// Use .sym directory in git root by default
-		symDir, err := getSymDir()
-		if err != nil {
-			return fmt.Errorf("failed to determine output directory: %w (hint: run from within a git repository or use --output-dir)", err)
-		}
-		convertOutputDir = symDir
+		// Use same directory as input file
+		convertOutputDir = filepath.Dir(convertInputFile)
+		fmt.Printf("Using output directory: %s (same as input file)\n", convertOutputDir)
 	}
 
 	// Create output directory if it doesn't exist

@@ -11,15 +11,15 @@ let appState = {
     },
     users: [],
     templates: [],
-    history: [],
     isDirty: false,
+    originalRules: null, // Store original rules to detect changes
+    originalRBAC: null, // Store original RBAC to detect changes
     filters: {
         ruleSearch: '',
         category: ''
     },
     settings: {
         policyPath: '',
-        autoSave: false,
         confirmSave: true
     }
 };
@@ -85,24 +85,34 @@ const API = {
         return await res.json();
     },
 
-    async getHistory() {
-        const res = await fetch('/api/policy/history');
-        return await res.json();
-    },
-
     async getPolicyPath() {
         const res = await fetch('/api/policy/path');
         return await res.json();
     },
 
     async setPolicyPath(path) {
+        console.log('Sending policy path to server:', path);
         const res = await fetch('/api/policy/path', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ policyPath: path })
         });
         if (!res.ok) throw new Error(await res.text());
-        return await res.json();
+        const result = await res.json();
+        console.log('Server response:', result);
+        return result;
+    },
+
+    async convertPolicy() {
+        console.log('Requesting policy conversion...');
+        const res = await fetch('/api/policy/convert', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        });
+        if (!res.ok) throw new Error(await res.text());
+        const result = await res.json();
+        console.log('Conversion result:', result);
+        return result;
     }
 };
 
@@ -452,6 +462,8 @@ function handleDeleteRule(e) {
 
     appState.policy.rules = appState.policy.rules.filter(r => r.id !== ruleId);
 
+    console.log('Rule deleted. Current rules count:', appState.policy.rules.length);
+
     renderRules();
     showToast('규칙이 삭제되었습니다');
     markDirty();
@@ -464,8 +476,13 @@ function handleAddRule() {
         return isNaN(ruleId) ? max : Math.max(max, ruleId);
     }, 0);
     const newId = String(maxId + 1);
-    const newRule = { id: newId, say: '', category: '', languages: [], example: '' };
+    // Use default languages from global settings if available
+    const defaultLanguages = (appState.policy.defaults?.languages || []).slice();
+    const newRule = { id: newId, say: '', category: '', languages: defaultLanguages, example: '' };
     appState.policy.rules.push(newRule);
+
+    console.log('Rule added. Current rules count:', appState.policy.rules.length);
+
     renderRules();
 
     // Open the new rule details
@@ -751,44 +768,43 @@ async function handleApplyTemplate(e) {
     }
 }
 
-// ==================== History Management ====================
-async function loadHistory() {
-    try {
-        appState.history = await API.getHistory();
-        renderHistory();
-    } catch (error) {
-        console.error('Failed to load history:', error);
-        showToast('히스토리를 불러오는데 실패했습니다', 'error');
-    }
-}
-
-function renderHistory() {
-    const container = document.getElementById('history-list');
-
-    if (appState.history.length === 0) {
-        container.innerHTML = '<div class="text-center text-slate-500 py-4">변경 이력이 없습니다</div>';
-        return;
-    }
-
-    container.innerHTML = appState.history.map(commit => {
-        const date = new Date(commit.date);
-        return `
-            <div class="history-item p-4 border border-gray-200 rounded-lg">
-                <div class="flex justify-between items-start mb-2">
-                    <div class="font-semibold text-slate-800">${commit.message}</div>
-                    <div class="text-xs text-slate-500">${date.toLocaleString('ko-KR')}</div>
-                </div>
-                <div class="text-sm text-slate-600">
-                    <span class="font-mono text-xs text-blue-600">${commit.hash.substring(0, 7)}</span>
-                    <span class="mx-2">•</span>
-                    <span>${commit.author} (${commit.email})</span>
-                </div>
-            </div>
-        `;
-    }).join('');
-}
-
 // ==================== Save & Load ====================
+// Helper function to create stable JSON string for comparison
+// Recursively sorts object keys to ensure consistent comparison
+function createStableJSON(obj) {
+    if (obj === null || obj === undefined) {
+        return JSON.stringify(obj);
+    }
+
+    if (typeof obj !== 'object') {
+        return JSON.stringify(obj);
+    }
+
+    if (Array.isArray(obj)) {
+        // Recursively process array elements
+        const processedArray = obj.map(item => {
+            if (item && typeof item === 'object') {
+                return JSON.parse(createStableJSON(item));
+            }
+            return item;
+        });
+        return JSON.stringify(processedArray);
+    }
+
+    // Recursively process object properties
+    const sorted = {};
+    Object.keys(obj).sort().forEach(key => {
+        const value = obj[key];
+        if (value && typeof value === 'object') {
+            sorted[key] = JSON.parse(createStableJSON(value));
+        } else {
+            sorted[key] = value;
+        }
+    });
+
+    return JSON.stringify(sorted);
+}
+
 async function savePolicy() {
     if (appState.settings.confirmSave) {
         if (!confirm('정책을 저장하시겠습니까?')) return;
@@ -838,7 +854,6 @@ async function savePolicy() {
         }
 
         appState.policy.defaults.severity = document.getElementById('defaults-severity').value || undefined;
-        appState.policy.defaults.autofix = document.getElementById('defaults-autofix').checked || undefined;
 
         // Collect roles from users
         const roles = {};
@@ -863,6 +878,14 @@ async function savePolicy() {
         await API.savePolicy(appState.policy);
         await API.saveRoles(roles);
 
+        // Save policy path if changed
+        const newPath = document.getElementById('policy-path-input').value.trim();
+        if (newPath && newPath !== appState.settings.policyPath) {
+            console.log('Saving policy path:', newPath);
+            await API.setPolicyPath(newPath);
+            appState.settings.policyPath = newPath;
+        }
+
         // Update current user info
         updateUserInfo();
 
@@ -870,6 +893,54 @@ async function savePolicy() {
         document.getElementById('save-btn').classList.remove('ring-2', 'ring-yellow-400');
         document.getElementById('floating-save-btn').classList.remove('ring-4', 'ring-yellow-400', 'animate-pulse');
         showToast('정책이 성공적으로 저장되었습니다!');
+
+        console.log('[DEBUG] Policy saved successfully, checking for changes...');
+
+        // Check if rules or RBAC were changed and ask about conversion
+        const currentRules = createStableJSON(appState.policy.rules || []);
+        const currentRBAC = createStableJSON(appState.policy.rbac || {});
+        const rulesChanged = appState.originalRules && (appState.originalRules !== currentRules);
+        const rbacChanged = appState.originalRBAC && (appState.originalRBAC !== currentRBAC);
+
+        console.log('=== Policy Change Detection ===');
+        console.log('Original rules:', appState.originalRules ? appState.originalRules.substring(0, 100) + '...' : 'NULL');
+        console.log('Current rules:', currentRules.substring(0, 100) + '...');
+        console.log('Original RBAC:', appState.originalRBAC ? appState.originalRBAC.substring(0, 100) + '...' : 'NULL');
+        console.log('Current RBAC:', currentRBAC.substring(0, 100) + '...');
+        console.log('Rules changed?', rulesChanged);
+        console.log('RBAC changed?', rbacChanged);
+        console.log('============================');
+
+        if (rulesChanged || rbacChanged) {
+            const changedItems = [];
+            if (rulesChanged) changedItems.push('규칙');
+            if (rbacChanged) changedItems.push('RBAC 설정');
+
+            const shouldConvert = confirm(
+                `${changedItems.join('과 ')}이 변경되었습니다.\n\n` +
+                'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
+                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.'
+            );
+
+            if (shouldConvert) {
+                try {
+                    showToast('정책 변환 중... 잠시만 기다려주세요', 'info');
+                    const convertResult = await API.convertPolicy();
+                    showToast(
+                        `변환 완료! ${convertResult.filesWritten.length}개의 파일이 생성되었습니다.`,
+                        'success'
+                    );
+                    console.log('Convert result:', convertResult);
+                } catch (error) {
+                    console.error('Conversion failed:', error);
+                    showToast('변환 실패: ' + error.message, 'error');
+                }
+            }
+
+            // Update original rules and RBAC to current state to avoid re-asking
+            appState.originalRules = currentRules;
+            appState.originalRBAC = currentRBAC;
+        }
     } catch (error) {
         console.error('Failed to save policy:', error);
         showToast('저장에 실패했습니다: ' + error.message, 'error');
@@ -879,6 +950,12 @@ async function savePolicy() {
 async function loadPolicy() {
     try {
         appState.policy = await API.getPolicy();
+        // Store original rules and RBAC for change detection (using stable JSON)
+        appState.originalRules = createStableJSON(appState.policy.rules || []);
+        appState.originalRBAC = createStableJSON(appState.policy.rbac || {});
+        console.log('Policy loaded. Rules count:', appState.policy.rules.length);
+        console.log('Original rules stored:', appState.originalRules.substring(0, 100) + '...');
+        console.log('Original RBAC stored:', appState.originalRBAC.substring(0, 100) + '...');
         await loadUsersFromRoles();
         renderAll();
         showToast('정책을 불러왔습니다');
@@ -896,19 +973,17 @@ async function loadSettings() {
         document.getElementById('policy-path-input').value = appState.settings.policyPath;
 
         // Load settings from localStorage
-        const savedAutoSave = localStorage.getItem('autoSave');
         const savedConfirmSave = localStorage.getItem('confirmSave');
 
-        if (savedAutoSave !== null) {
-            appState.settings.autoSave = savedAutoSave === 'true';
-        }
         if (savedConfirmSave !== null) {
             appState.settings.confirmSave = savedConfirmSave === 'true';
         }
 
         // Update checkboxes
-        document.getElementById('auto-save-checkbox').checked = appState.settings.autoSave;
-        document.getElementById('confirm-save-checkbox').checked = appState.settings.confirmSave;
+        const confirmSaveCheckbox = document.getElementById('confirm-save-checkbox');
+        if (confirmSaveCheckbox) {
+            confirmSaveCheckbox.checked = appState.settings.confirmSave;
+        }
     } catch (error) {
         console.error('Failed to load settings:', error);
     }
@@ -917,19 +992,25 @@ async function loadSettings() {
 async function saveSettings() {
     try {
         const newPath = document.getElementById('policy-path-input').value.trim();
+        console.log('Current policy path:', appState.settings.policyPath);
+        console.log('New policy path from input:', newPath);
 
         if (newPath && newPath !== appState.settings.policyPath) {
+            console.log('Path changed, saving to server...');
             await API.setPolicyPath(newPath);
             appState.settings.policyPath = newPath;
             showToast('설정이 저장되었습니다');
+        } else if (!newPath) {
+            console.log('Empty path, skipping save');
+        } else {
+            console.log('Path unchanged, skipping save');
         }
 
-        appState.settings.autoSave = document.getElementById('auto-save-checkbox').checked;
-        appState.settings.confirmSave = document.getElementById('confirm-save-checkbox').checked;
-
-        // Save to localStorage
-        localStorage.setItem('autoSave', appState.settings.autoSave);
-        localStorage.setItem('confirmSave', appState.settings.confirmSave);
+        const confirmSaveCheckbox = document.getElementById('confirm-save-checkbox');
+        if (confirmSaveCheckbox) {
+            appState.settings.confirmSave = confirmSaveCheckbox.checked;
+            localStorage.setItem('confirmSave', appState.settings.confirmSave);
+        }
 
         hideModal('settings-modal');
     } catch (error) {
@@ -967,7 +1048,6 @@ function renderAll() {
     const defaults = appState.policy.defaults || {};
     document.getElementById('defaults-languages').value = (defaults.languages || []).join(', ');
     document.getElementById('defaults-severity').value = defaults.severity || '';
-    document.getElementById('defaults-autofix').checked = defaults.autofix || false;
 
     // RBAC
     renderRBAC();
@@ -1013,8 +1093,6 @@ function applyPermissions() {
         document.getElementById('defaults-languages').classList.add('bg-gray-200', 'cursor-not-allowed');
         document.getElementById('defaults-severity').disabled = true;
         document.getElementById('defaults-severity').classList.add('bg-gray-200', 'cursor-not-allowed');
-        document.getElementById('defaults-autofix').disabled = true;
-        document.getElementById('defaults-autofix').classList.add('cursor-not-allowed');
 
         // Hide rule add/edit/delete buttons
         document.getElementById('add-rule-btn')?.classList.add('hidden');
@@ -1101,31 +1179,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize
     init();
 
-    // Auto-save timer (30 seconds)
-    let autoSaveTimer = null;
-    function startAutoSave() {
-        if (autoSaveTimer) clearInterval(autoSaveTimer);
-        autoSaveTimer = setInterval(async () => {
-            if (appState.settings.autoSave && appState.isDirty) {
-                try {
-                    // Temporarily disable confirmation for auto-save
-                    const originalConfirmSave = appState.settings.confirmSave;
-                    appState.settings.confirmSave = false;
-
-                    await savePolicy();
-                    showToast('자동 저장되었습니다', 'info');
-
-                    // Restore confirmation setting
-                    appState.settings.confirmSave = originalConfirmSave;
-                } catch (error) {
-                    console.error('Auto-save failed:', error);
-                    showToast('자동 저장 실패: ' + error.message, 'error');
-                }
-            }
-        }, 30000); // 30 seconds
-    }
-    startAutoSave();
-
     // Save button
     document.getElementById('save-btn').addEventListener('click', savePolicy);
 
@@ -1141,12 +1194,6 @@ document.addEventListener('DOMContentLoaded', () => {
     // Template button
     document.getElementById('template-btn').addEventListener('click', () => {
         showModal('template-modal');
-    });
-
-    // History button
-    document.getElementById('history-btn').addEventListener('click', async () => {
-        await loadHistory();
-        showModal('history-modal');
     });
 
     // User management
@@ -1169,19 +1216,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('add-role-btn').addEventListener('click', handleAddRBACRole);
 
     // Settings checkboxes - save to localStorage on change
-    document.getElementById('auto-save-checkbox').addEventListener('change', (e) => {
-        appState.settings.autoSave = e.target.checked;
-        localStorage.setItem('autoSave', appState.settings.autoSave);
-        showToast(appState.settings.autoSave ? '자동 저장이 활성화되었습니다' : '자동 저장이 비활성화되었습니다', 'info');
-    });
-    document.getElementById('confirm-save-checkbox').addEventListener('change', (e) => {
-        appState.settings.confirmSave = e.target.checked;
-        localStorage.setItem('confirmSave', appState.settings.confirmSave);
-    });
+    const confirmSaveCheckbox = document.getElementById('confirm-save-checkbox');
+    if (confirmSaveCheckbox) {
+        confirmSaveCheckbox.addEventListener('change', (e) => {
+            appState.settings.confirmSave = e.target.checked;
+            localStorage.setItem('confirmSave', appState.settings.confirmSave);
+        });
+    }
 
     // Modal close buttons
     document.getElementById('close-template-modal').addEventListener('click', () => hideModal('template-modal'));
-    document.getElementById('close-history-modal').addEventListener('click', () => hideModal('history-modal'));
 
     // Keyboard shortcuts
     document.addEventListener('keydown', (e) => {

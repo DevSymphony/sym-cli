@@ -1,16 +1,23 @@
 package server
 
 import (
+	"context"
 	"embed"
 	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
+	"time"
 	"github.com/DevSymphony/sym-cli/internal/config"
+	"github.com/DevSymphony/sym-cli/internal/converter"
+	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/github"
+	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
 	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration
@@ -62,9 +69,9 @@ func (s *Server) Start() error {
 	// Policy API endpoints
 	mux.HandleFunc("/api/policy", s.handlePolicy)
 	mux.HandleFunc("/api/policy/path", s.handlePolicyPath)
-	mux.HandleFunc("/api/policy/history", s.handlePolicyHistory)
 	mux.HandleFunc("/api/policy/templates", s.handlePolicyTemplates)
 	mux.HandleFunc("/api/policy/templates/", s.handlePolicyTemplateDetail)
+	mux.HandleFunc("/api/policy/convert", s.handleConvert)
 	mux.HandleFunc("/api/users", s.handleUsers)
 
 	// Static files
@@ -338,7 +345,14 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 
 // handleGetPolicy returns the current policy
 func (s *Server) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
-	policyData, err := policy.LoadPolicy(s.cfg.PolicyPath)
+	// Get policy path from .sym/.env (or use default)
+	policyPath := envutil.GetPolicyPath()
+	if policyPath == "" {
+		policyPath = ".sym/user-policy.json"
+	}
+	fmt.Printf("Loading policy from: %s\n", policyPath)
+
+	policyData, err := policy.LoadPolicy(policyPath)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to load policy: %v", err), http.StatusInternalServerError)
 		return
@@ -383,8 +397,22 @@ func (s *Server) handleSavePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Get policy path from .sym/.env (or use default)
+	policyPath := envutil.GetPolicyPath()
+	if policyPath == "" {
+		policyPath = ".sym/user-policy.json"
+	}
+	fmt.Printf("Saving policy to: %s\n", policyPath)
+
+	// Ensure directory exists
+	policyDir := filepath.Dir(policyPath)
+	if err := os.MkdirAll(policyDir, 0755); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create directory %s: %v", policyDir, err), http.StatusInternalServerError)
+		return
+	}
+
 	// Save policy
-	if err := policy.SavePolicy(&newPolicy, s.cfg.PolicyPath); err != nil {
+	if err := policy.SavePolicy(&newPolicy, policyPath); err != nil {
 		http.Error(w, fmt.Sprintf("Failed to save policy: %v", err), http.StatusInternalServerError)
 		return
 	}
@@ -400,9 +428,19 @@ func (s *Server) handleSavePolicy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePolicyPath(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
+		// Load policy path from .sym/.env
+		policyPath := envutil.GetPolicyPath()
+		if policyPath == "" {
+			// Default to .sym/user-policy.json if not set
+			policyPath = ".sym/user-policy.json"
+			fmt.Printf("No POLICY_PATH in .sym/.env, using default: %s\n", policyPath)
+		} else {
+			fmt.Printf("Loaded POLICY_PATH from .sym/.env: %s\n", policyPath)
+		}
+
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(map[string]string{
-			"policyPath": s.cfg.PolicyPath,
+			"policyPath": policyPath,
 		})
 	case http.MethodPost:
 		s.handleSetPolicyPath(w, r)
@@ -437,39 +475,70 @@ func (s *Server) handleSetPolicyPath(w http.ResponseWriter, r *http.Request) {
 		PolicyPath string `json:"policyPath"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		fmt.Printf("Failed to decode request body: %v\n", err)
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
 		return
 	}
 
-	// Update config
-	s.cfg.PolicyPath = req.PolicyPath
-	if err := config.SaveConfig(s.cfg); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to save config: %v", err), http.StatusInternalServerError)
+	fmt.Printf("Received policy path from client: '%s' (length: %d)\n", req.PolicyPath, len(req.PolicyPath))
+
+	// Get current policy path from .env
+	oldPolicyPath := envutil.GetPolicyPath()
+	if oldPolicyPath == "" {
+		oldPolicyPath = ".sym/user-policy.json" // default
+	}
+
+	// If path is changing and old file exists, move it to new location
+	if oldPolicyPath != req.PolicyPath {
+		fmt.Printf("Policy path changing from '%s' to '%s'\n", oldPolicyPath, req.PolicyPath)
+
+		if _, err := os.Stat(oldPolicyPath); err == nil {
+			fmt.Printf("Moving existing policy file from '%s' to '%s'\n", oldPolicyPath, req.PolicyPath)
+
+			// Create directory for new path
+			newDir := filepath.Dir(req.PolicyPath)
+			if err := os.MkdirAll(newDir, 0755); err != nil {
+				fmt.Printf("Warning: Failed to create directory '%s': %v\n", newDir, err)
+			}
+
+			// Read old file
+			oldData, err := os.ReadFile(oldPolicyPath)
+			if err != nil {
+				fmt.Printf("Warning: Failed to read old policy file: %v\n", err)
+			} else {
+				// Write to new location
+				if err := os.WriteFile(req.PolicyPath, oldData, 0644); err != nil {
+					fmt.Printf("Warning: Failed to write to new location: %v\n", err)
+				} else {
+					fmt.Printf("Successfully copied policy to new location\n")
+
+					// Remove old file
+					if err := os.Remove(oldPolicyPath); err != nil {
+						fmt.Printf("Warning: Failed to remove old policy file: %v\n", err)
+					} else {
+						fmt.Printf("Successfully removed old policy file\n")
+					}
+				}
+			}
+		} else {
+			fmt.Printf("Old policy file not found at '%s', skipping move\n", oldPolicyPath)
+		}
+	}
+
+	// Save to .sym/.env file
+	fmt.Printf("Saving policy path to .sym/.env: %s\n", req.PolicyPath)
+	if err := envutil.SaveKeyToEnvFile(filepath.Join(".sym", ".env"), "POLICY_PATH", req.PolicyPath); err != nil {
+		fmt.Printf("Failed to save policy path: %v\n", err)
+		http.Error(w, fmt.Sprintf("Failed to save policy path: %v", err), http.StatusInternalServerError)
 		return
 	}
+	fmt.Printf("Policy path saved successfully to .sym/.env\n")
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
 		"status":  "success",
 		"message": "Policy path updated successfully",
 	})
-}
-
-// handlePolicyHistory returns the policy commit history
-func (s *Server) handlePolicyHistory(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodGet {
-		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	history, err := policy.GetPolicyHistory(s.cfg.PolicyPath, 20)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get policy history: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(history)
 }
 
 // handlePolicyTemplates returns the list of available templates
@@ -554,4 +623,141 @@ func (s *Server) handleUsers(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(users)
+}
+
+// handleConvert runs the convert command to generate linter configs
+func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Get current user
+	user, err := s.githubClient.GetCurrentUser()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Check if user has permission to edit policy
+	canEdit, err := s.hasPermission(user.Login, "editPolicy")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to check permissions: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if !canEdit {
+		http.Error(w, "Forbidden: You don't have permission to convert policy", http.StatusForbidden)
+		return
+	}
+
+	fmt.Println("Starting policy conversion...")
+
+	// Get policy path from .env
+	policyPath := envutil.GetPolicyPath()
+	if policyPath == "" {
+		policyPath = ".sym/user-policy.json"
+	}
+
+	fmt.Printf("Converting policy from: %s\n", policyPath)
+
+	// Load user policy
+	userPolicy, err := policy.LoadPolicy(policyPath)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to load policy: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Determine output directory (same as input file)
+	outputDir := filepath.Dir(policyPath)
+
+	// Get API key
+	apiKey, err := s.getAPIKey()
+	if err != nil {
+		fmt.Printf("Warning: %v, conversion may be limited\n", err)
+		apiKey = ""
+	}
+
+	// Setup LLM client
+	timeout := 30 * time.Second
+	llmClient := llm.NewClient(
+		apiKey,
+		llm.WithModel("gpt-4o-mini"),
+		llm.WithTimeout(timeout),
+	)
+
+	// Create converter with LLM client
+	conv := converter.NewConverter(converter.WithLLMClient(llmClient))
+
+	// Setup context with timeout
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(30*len(userPolicy.Rules))*time.Second)
+	defer cancel()
+
+	// Convert for all targets
+	targets := []string{"all"}
+	convResult, err := conv.ConvertMultiTarget(ctx, userPolicy, converter.MultiTargetConvertOptions{
+		Targets:             targets,
+		OutputDir:           outputDir,
+		ConfidenceThreshold: 0.7,
+	})
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Conversion failed: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Write linter configuration files
+	filesWritten := []string{}
+	for linterName, config := range convResult.LinterConfigs {
+		outputPath := filepath.Join(outputDir, config.Filename)
+
+		if err := os.WriteFile(outputPath, config.Content, 0644); err != nil {
+			http.Error(w, fmt.Sprintf("Failed to write %s config: %v", linterName, err), http.StatusInternalServerError)
+			return
+		}
+
+		fmt.Printf("✓ Generated %s configuration: %s\n", linterName, outputPath)
+		filesWritten = append(filesWritten, config.Filename)
+	}
+
+	// Write internal code policy
+	codePolicyPath := filepath.Join(outputDir, "code-policy.json")
+	codePolicyJSON, err := json.MarshalIndent(convResult.CodePolicy, "", "  ")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to serialize code policy: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if err := os.WriteFile(codePolicyPath, codePolicyJSON, 0644); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to write code policy: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	fmt.Printf("✓ Generated internal policy: %s\n", codePolicyPath)
+	filesWritten = append(filesWritten, "code-policy.json")
+
+	result := map[string]interface{}{
+		"status":       "success",
+		"policyPath":   policyPath,
+		"outputDir":    outputDir,
+		"filesWritten": filesWritten,
+		"message":      fmt.Sprintf("Conversion completed: %d files written", len(filesWritten)),
+	}
+
+	if len(convResult.Warnings) > 0 {
+		result["warnings"] = convResult.Warnings
+	}
+
+	fmt.Printf("Conversion completed: %d files written\n", len(filesWritten))
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(result)
+}
+
+// getAPIKey retrieves the OpenAI API key from environment or .sym/.env
+func (s *Server) getAPIKey() (string, error) {
+	key := envutil.GetAPIKey("OPENAI_API_KEY")
+	if key == "" {
+		return "", fmt.Errorf("OPENAI_API_KEY not found in environment or .sym/.env")
+	}
+	return key, nil
 }

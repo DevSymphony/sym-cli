@@ -14,3 +14,7 @@ coverage.txt
 
 # Symphony API key configuration
 .sym/.env
+.vscode
+.cursor
+sym-cli.exe
+.mcp.json

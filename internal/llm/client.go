@@ -7,8 +7,9 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
 	"time"
+
+	"github.com/DevSymphony/sym-cli/internal/envutil"
 )
 
 const (
@@ -70,7 +71,7 @@ func WithVerbose(verbose bool) ClientOption {
 // NewClient creates a new OpenAI API client
 func NewClient(apiKey string, opts ...ClientOption) *Client {
 	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
+		apiKey = envutil.GetAPIKey("OPENAI_API_KEY")
 	}
 
 	client := &Client{
