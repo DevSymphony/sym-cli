@@ -26,7 +26,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp config: %w", err)
 	}
-	defer os.Remove(configFile)
+	defer func() { _ = os.Remove(configFile) }()
 
 	// Build command
 	jarPath := a.getJARPath()

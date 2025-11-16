@@ -20,13 +20,13 @@ func DefaultRegistry() *Registry {
 	workDir := getWorkDir()
 
 	// Register JavaScript/TypeScript adapters
-	reg.Register(eslint.NewAdapter(toolsDir, workDir))
-	reg.Register(prettier.NewAdapter(toolsDir, workDir))
-	reg.Register(tsc.NewAdapter(toolsDir, workDir))
+	_ = reg.Register(eslint.NewAdapter(toolsDir, workDir))
+	_ = reg.Register(prettier.NewAdapter(toolsDir, workDir))
+	_ = reg.Register(tsc.NewAdapter(toolsDir, workDir))
 
 	// Register Java adapters
-	reg.Register(checkstyle.NewAdapter(toolsDir, workDir))
-	reg.Register(pmd.NewAdapter(toolsDir, workDir))
+	_ = reg.Register(checkstyle.NewAdapter(toolsDir, workDir))
+	_ = reg.Register(pmd.NewAdapter(toolsDir, workDir))
 
 	return reg
 }

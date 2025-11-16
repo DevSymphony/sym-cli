@@ -124,7 +124,7 @@ func (a *Adapter) Install(ctx context.Context, config adapter.InstallConfig) err
 	if err := a.downloadFile(ctx, url, zipPath); err != nil {
 		return fmt.Errorf("failed to download PMD: %w", err)
 	}
-	defer os.Remove(zipPath)
+	defer func() { _ = os.Remove(zipPath) }()
 
 	// Extract (simplified - in production use archive/zip)
 	// For now, assume unzip command is available
@@ -185,7 +185,7 @@ func (a *Adapter) downloadFile(ctx context.Context, url, destPath string) error 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
@@ -197,17 +197,17 @@ func (a *Adapter) downloadFile(ctx context.Context, url, destPath string) error 
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	// Copy content
 	if _, err := io.Copy(out, resp.Body); err != nil {
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 		return err
 	}
 
 	// Rename temp to final
 	if err := os.Rename(tempFile, destPath); err != nil {
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 		return err
 	}
 

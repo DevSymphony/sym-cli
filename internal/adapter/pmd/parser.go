@@ -3,7 +3,6 @@ package pmd
 import (
 	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
 )
@@ -106,21 +105,4 @@ func mapPriority(priority int) string {
 	default:
 		return "warning"
 	}
-}
-
-// extractRuleID extracts the rule name from PMD rule string.
-// Example: "AvoidHardcodedPassword" -> "AvoidHardcodedPassword"
-func extractRuleID(rule string) string {
-	if rule == "" {
-		return "unknown"
-	}
-
-	// PMD rule is usually just the rule name
-	// Remove ruleset prefix if present
-	parts := strings.Split(rule, "/")
-	if len(parts) > 0 {
-		return parts[len(parts)-1]
-	}
-
-	return rule
 }

@@ -27,7 +27,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	if err != nil {
 		return nil, fmt.Errorf("failed to create temp ruleset: %w", err)
 	}
-	defer os.Remove(rulesetFile)
+	defer func() { _ = os.Remove(rulesetFile) }()
 
 	// Build command
 	pmdPath := a.getPMDPath()

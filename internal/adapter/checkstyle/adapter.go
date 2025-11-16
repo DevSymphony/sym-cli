@@ -163,7 +163,7 @@ func (a *Adapter) downloadFile(ctx context.Context, url, destPath string) error 
 	if err != nil {
 		return err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("download failed: HTTP %d", resp.StatusCode)
@@ -175,17 +175,17 @@ func (a *Adapter) downloadFile(ctx context.Context, url, destPath string) error 
 	if err != nil {
 		return err
 	}
-	defer out.Close()
+	defer func() { _ = out.Close() }()
 
 	// Copy content
 	if _, err := io.Copy(out, resp.Body); err != nil {
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 		return err
 	}
 
 	// Rename temp to final
 	if err := os.Rename(tempFile, destPath); err != nil {
-		os.Remove(tempFile)
+		_ = os.Remove(tempFile)
 		return err
 	}
 
