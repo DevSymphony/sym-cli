@@ -106,12 +106,14 @@ func runValidate(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Found %d changed file(s)\n", len(changes))
 
-	// Create validator
-	v := validator.NewLLMValidator(llmClient, &policy)
+	// Create unified validator that handles all engines + RBAC
+	v := validator.NewValidator(&policy, true) // verbose=true for CLI
+	v.SetLLMClient(llmClient)
+	defer v.Close()
 
 	// Validate changes
 	ctx := context.Background()
-	result, err := v.Validate(ctx, changes)
+	result, err := v.ValidateChanges(ctx, changes)
 	if err != nil {
 		return fmt.Errorf("validation failed: %w", err)
 	}

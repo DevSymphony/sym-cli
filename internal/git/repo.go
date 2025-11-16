@@ -54,3 +54,13 @@ func IsGitRepo() bool {
 	err := cmd.Run()
 	return err == nil
 }
+
+// GetCurrentUser returns the current git user name
+func GetCurrentUser() (string, error) {
+	cmd := exec.Command("git", "config", "--get", "user.name")
+	output, err := cmd.Output()
+	if err != nil {
+		return "", fmt.Errorf("failed to get git user.name: %w", err)
+	}
+	return strings.TrimSpace(string(output)), nil
+}

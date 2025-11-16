@@ -69,7 +69,7 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 		for _, rule := range llmRules {
 			result.Checked++
 
-			violation, err := v.checkRule(ctx, change, addedLines, rule)
+			violation, err := v.CheckRule(ctx, change, addedLines, rule)
 			if err != nil {
 				// Log error but continue
 				fmt.Printf("Warning: failed to check rule %s: %v\n", rule.ID, err)
@@ -106,8 +106,9 @@ func (v *LLMValidator) filterLLMRules() []schema.PolicyRule {
 	return llmRules
 }
 
-// checkRule checks if code violates a specific rule using LLM
-func (v *LLMValidator) checkRule(ctx context.Context, change GitChange, addedLines []string, rule schema.PolicyRule) (*Violation, error) {
+// CheckRule checks if code violates a specific rule using LLM
+// This is the single source of truth for LLM-based validation logic
+func (v *LLMValidator) CheckRule(ctx context.Context, change GitChange, addedLines []string, rule schema.PolicyRule) (*Violation, error) {
 	// Build prompt for LLM
 	systemPrompt := `You are a code reviewer. Check if the code changes violate the given coding convention.
 
