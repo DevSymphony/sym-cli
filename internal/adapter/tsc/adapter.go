@@ -48,6 +48,16 @@ func (a *Adapter) Name() string {
 	return "tsc"
 }
 
+// GetCapabilities returns the TSC adapter capabilities.
+func (a *Adapter) GetCapabilities() adapter.AdapterCapabilities {
+	return adapter.AdapterCapabilities{
+		Name:                "tsc",
+		SupportedLanguages:  []string{"typescript"},
+		SupportedCategories: []string{"typechecker"},
+		Version:             "^5.0.0",
+	}
+}
+
 // CheckAvailability checks if tsc is installed.
 func (a *Adapter) CheckAvailability(ctx context.Context) error {
 	// Try local installation first
@@ -99,6 +109,20 @@ func (a *Adapter) Install(ctx context.Context, config adapter.InstallConfig) err
 	}
 
 	return nil
+}
+
+// GenerateConfig generates tsconfig.json from a rule.
+// For type checking, returns minimal tsconfig.
+func (a *Adapter) GenerateConfig(rule interface{}) ([]byte, error) {
+	// Minimal tsconfig for type checking
+	config := map[string]interface{}{
+		"compilerOptions": map[string]interface{}{
+			"noEmit":   true,
+			"strict":   true,
+			"skipLibCheck": true,
+		},
+	}
+	return json.Marshal(config)
 }
 
 // Execute runs tsc with the given config and files.
