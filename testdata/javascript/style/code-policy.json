@@ -1,0 +1,74 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "JS-STYLE-INDENT",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Use consistent 2-space indentation",
+      "when": {
+        "languages": ["javascript"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "javascript",
+        "indent": 2,
+        "indentStyle": "space"
+      },
+      "message": "Use 2 spaces for indentation"
+    },
+    {
+      "id": "JS-STYLE-QUOTES",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Use single quotes for strings",
+      "when": {
+        "languages": ["javascript"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "javascript",
+        "quotes": "single"
+      },
+      "message": "Use single quotes for strings"
+    },
+    {
+      "id": "JS-STYLE-SEMI",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Require semicolons",
+      "when": {
+        "languages": ["javascript"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "javascript",
+        "semi": true
+      },
+      "message": "Statements must end with semicolons"
+    },
+    {
+      "id": "JS-STYLE-MAX-LINE",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Maximum line length of 100 characters",
+      "when": {
+        "languages": ["javascript"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "javascript",
+        "printWidth": 100
+      },
+      "message": "Line length must not exceed 100 characters"
+    }
+  ],
+  "enforce": {
+    "stages": ["pre-commit"],
+    "fail_on": ["error"]
+  }
+}
