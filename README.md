@@ -453,3 +453,200 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ---
 
 **Note:** 코드 검증 기능 (`convert`, `validate`, `export`)은 현재 개발 중입니다.
+
+## 📊 패키지 구조 및 의존성
+
+```mermaid
+graph TB
+    subgraph "메인 진입점"
+        main[cmd/sym<br/>main]
+    end
+
+    subgraph "CLI 계층"
+        cmd[internal/cmd<br/>Cobra Commands]
+    end
+
+    subgraph "중앙 데이터 구조"
+        schema[pkg/schema<br/>Types]
+    end
+
+    subgraph "기본 유틸리티"
+        config[internal/config]
+        git[internal/git]
+        github[internal/github]
+        llm[internal/llm]
+    end
+
+    subgraph "도메인 계층"
+        auth[internal/auth]
+
+        subgraph converter_group["internal/converter"]
+            converter[converter]
+            conv_linters[linters]
+        end
+
+        policy[internal/policy]
+    end
+
+    subgraph "비즈니스 로직"
+        roles[internal/roles]
+
+        subgraph adapter_group["internal/adapter"]
+            adapter[adapter]
+            adapter_eslint[eslint]
+            adapter_prettier[prettier]
+            adapter_tsc[tsc]
+        end
+
+        subgraph engine_group["internal/engine"]
+            engine[engine]
+            engine_core[core]
+            engine_registry[registry]
+            engine_pattern[pattern]
+            engine_length[length]
+            engine_style[style]
+            engine_ast[ast]
+            engine_llm[llm engine]
+            engine_typechecker[typechecker]
+        end
+
+        validator[internal/validator]
+    end
+
+    subgraph "통합 계층"
+        mcp[internal/mcp]
+        server[internal/server]
+    end
+
+    %% main 의존성
+    main --> cmd
+
+    %% cmd 의존성
+    cmd --> auth
+    cmd --> config
+    cmd --> converter
+    cmd --> git
+    cmd --> github
+    cmd --> llm
+    cmd --> mcp
+    cmd --> policy
+    cmd --> roles
+    cmd --> server
+    cmd --> validator
+    cmd --> schema
+
+    %% auth 의존성
+    auth --> config
+    auth --> github
+
+    %% converter 의존성
+    converter --> llm
+    converter --> schema
+    conv_linters --> converter
+
+    %% policy 의존성
+    policy --> git
+    policy --> schema
+
+    %% roles 의존성
+    roles --> git
+    roles --> policy
+    roles --> schema
+
+    %% adapter 서브패키지
+    adapter_eslint --> adapter
+    adapter_prettier --> adapter
+    adapter_tsc --> adapter
+    adapter --> engine_core
+
+    %% engine 서브패키지
+    engine_pattern --> engine_core
+    engine_pattern --> adapter_eslint
+    engine_length --> engine_core
+    engine_length --> adapter_eslint
+    engine_style --> engine_core
+    engine_style --> adapter_eslint
+    engine_style --> adapter_prettier
+    engine_ast --> engine_core
+    engine_ast --> adapter_eslint
+    engine_llm --> engine_core
+    engine_llm --> llm
+    engine_typechecker --> engine_core
+    engine_typechecker --> adapter_tsc
+    engine_registry --> engine_core
+    engine --> engine_registry
+
+    %% validator 의존성
+    validator --> engine
+    validator --> llm
+    validator --> schema
+
+    %% mcp 의존성
+    mcp --> converter
+    mcp --> git
+    mcp --> llm
+    mcp --> policy
+    mcp --> validator
+    mcp --> schema
+
+    %% server 의존성
+    server --> config
+    server --> git
+    server --> github
+    server --> policy
+    server --> roles
+    server --> schema
+
+    %% llm의 schema 의존성
+    llm --> schema
+
+    classDef mainEntry fill:#e03131,stroke:#a61e4d,color:#fff,stroke-width:3px
+    classDef cliLayer fill:#ff6b6b,stroke:#c92a2a,color:#fff
+    classDef core fill:#20c997,stroke:#087f5b,color:#fff
+    classDef leaf fill:#51cf66,stroke:#2f9e44,color:#fff
+    classDef domain fill:#74c0fc,stroke:#1971c2,color:#fff
+    classDef business fill:#ffd43b,stroke:#f08c00,color:#000
+    classDef integration fill:#da77f2,stroke:#9c36b5,color:#fff
+    classDef subpkg fill:#f8f9fa,stroke:#868e96,color:#000
+
+    class main mainEntry
+    class cmd cliLayer
+    class schema core
+    class config,git,github,llm leaf
+    class auth,converter,policy domain
+    class roles,adapter,engine,validator business
+    class mcp,server integration
+    class adapter_eslint,adapter_prettier,adapter_tsc,conv_linters subpkg
+    class engine_core,engine_registry,engine_pattern,engine_length,engine_style,engine_ast,engine_llm,engine_typechecker subpkg
+```
+
+### 패키지 계층 구조
+
+**메인 진입점**
+- `cmd/sym`: main 패키지 (→ internal/cmd)
+
+**CLI 계층**
+- `internal/cmd`: Cobra 기반 CLI 커맨드 구현 (→ 모든 internal 패키지)
+
+**중앙 데이터 구조**
+- `pkg/schema`: UserPolicy(A Schema) 및 CodePolicy(B Schema) 타입 정의
+
+**Tier 0: 기본 유틸리티** (의존성 없음)
+- `internal/config`: 전역 설정 및 토큰 관리
+- `internal/git`: Git 저장소 작업
+- `internal/github`: GitHub API 클라이언트
+- `internal/llm`: OpenAI API 클라이언트 (→ schema)
+
+**Tier 1: 도메인 계층**
+- `internal/auth`: GitHub OAuth 인증 (→ config, github)
+- `internal/converter`: 정책 변환 (→ llm, schema)
+- `internal/policy`: 정책 파일 관리 (→ git, schema)
+
+**Tier 2: 비즈니스 로직**
+- `internal/roles`: RBAC 구현 (→ git, policy, schema)
+- `internal/adapter` ↔ `internal/engine`: 검증 도구 어댑터 및 엔진 (순환 의존성)
+- `internal/validator`: 검증 오케스트레이터 (→ engine, llm, schema)
+
+**Tier 3: 통합 계층**
+- `internal/mcp`: MCP 서버 (→ converter, git, llm, policy, validator, schema)
+- `internal/server`: 웹 대시보드 (→ config, git, github, policy, roles, schema)
