@@ -3,22 +3,23 @@ package length
 import (
 	"context"
 	"fmt"
+	"path/filepath"
+	"strings"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/adapter/eslint"
+	"github.com/DevSymphony/sym-cli/internal/adapter"
+	adapterRegistry "github.com/DevSymphony/sym-cli/internal/adapter/registry"
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
 )
 
 // Engine validates length constraint rules (line, file, function, params).
 //
-// For JavaScript/TypeScript:
-// - Uses ESLint max-len for line length
-// - Uses ESLint max-lines for file length
-// - Uses ESLint max-lines-per-function for function length
-// - Uses ESLint max-params for parameter count
+// Supports multiple languages through adapter registry:
+// - JavaScript/TypeScript: ESLint (max-len, max-lines, max-lines-per-function, max-params)
+// - Java: Checkstyle (LineLength, FileLength, MethodLength, ParameterNumber)
 type Engine struct {
-	eslint *eslint.Adapter
-	config core.EngineConfig
+	adapterRegistry *adapterRegistry.Registry
+	config          core.EngineConfig
 }
 
 // NewEngine creates a new length engine.
@@ -26,32 +27,19 @@ func NewEngine() *Engine {
 	return &Engine{}
 }
 
-// Init initializes the engine.
+// Init initializes the engine with adapter registry.
 func (e *Engine) Init(ctx context.Context, config core.EngineConfig) error {
 	e.config = config
 
-	// Initialize ESLint adapter
-	e.eslint = eslint.NewAdapter(config.ToolsDir, config.WorkDir)
-
-	// Check availability (same as pattern engine)
-	if err := e.eslint.CheckAvailability(ctx); err != nil {
-		if config.Debug {
-			fmt.Printf("ESLint not found, attempting install...\n")
+	// Use provided adapter registry or create default
+	if config.AdapterRegistry != nil {
+		if reg, ok := config.AdapterRegistry.(*adapterRegistry.Registry); ok {
+			e.adapterRegistry = reg
+		} else {
+			return fmt.Errorf("invalid adapter registry type")
 		}
-
-		installConfig := struct {
-			ToolsDir string
-			Version  string
-			Force    bool
-		}{
-			ToolsDir: config.ToolsDir,
-			Version:  "",
-			Force:    false,
-		}
-
-		if err := e.eslint.Install(ctx, installConfig); err != nil {
-			return fmt.Errorf("failed to install ESLint: %w", err)
-		}
+	} else {
+		e.adapterRegistry = adapterRegistry.DefaultRegistry()
 	}
 
 	return nil
@@ -73,20 +61,47 @@ func (e *Engine) Validate(ctx context.Context, rule core.Rule, files []string) (
 		}, nil
 	}
 
-	// Generate ESLint config
-	config, err := e.eslint.GenerateConfig(&rule)
+	// Check initialization
+	if e.adapterRegistry == nil {
+		return nil, fmt.Errorf("length engine not initialized")
+	}
+
+	// Detect language
+	language := e.detectLanguage(rule, files)
+
+	// Get appropriate adapter for language
+	adp, err := e.adapterRegistry.GetAdapter(language, "length")
+	if err != nil {
+		return nil, fmt.Errorf("no adapter found for language %s: %w", language, err)
+	}
+
+	// Type assert to adapter.Adapter
+	lengthAdapter, ok := adp.(adapter.Adapter)
+	if !ok {
+		return nil, fmt.Errorf("invalid adapter type for language %s", language)
+	}
+
+	// Check if adapter is available, install if needed
+	if err := lengthAdapter.CheckAvailability(ctx); err != nil {
+		if installErr := lengthAdapter.Install(ctx, adapter.InstallConfig{}); installErr != nil {
+			return nil, fmt.Errorf("adapter not available and installation failed: %w", installErr)
+		}
+	}
+
+	// Generate config
+	config, err := lengthAdapter.GenerateConfig(&rule)
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate config: %w", err)
 	}
 
-	// Execute ESLint
-	output, err := e.eslint.Execute(ctx, config, files)
-	if err != nil {
-		return nil, fmt.Errorf("failed to execute ESLint: %w", err)
+	// Execute adapter
+	output, err := lengthAdapter.Execute(ctx, config, files)
+	if err != nil && output == nil {
+		return nil, fmt.Errorf("failed to execute adapter: %w", err)
 	}
 
 	// Parse output
-	adapterViolations, err := e.eslint.ParseOutput(output)
+	adapterViolations, err := lengthAdapter.ParseOutput(output)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse output: %w", err)
 	}
@@ -115,27 +130,29 @@ func (e *Engine) Validate(ctx context.Context, rule core.Rule, files []string) (
 		Violations: violations,
 		Duration:   time.Since(start),
 		Engine:     "length",
-		Language:   "javascript",
+		Language:   language,
 	}, nil
 }
 
 // GetCapabilities returns engine capabilities.
+// Supported languages are determined dynamically based on registered adapters.
 func (e *Engine) GetCapabilities() core.EngineCapabilities {
-	return core.EngineCapabilities{
+	caps := core.EngineCapabilities{
 		Name:                "length",
-		SupportedLanguages:  []string{"javascript", "typescript", "jsx", "tsx"},
 		SupportedCategories: []string{"formatting", "style"},
 		SupportsAutofix:     false,
 		RequiresCompilation: false,
-		ExternalTools: []core.ToolRequirement{
-			{
-				Name:           "eslint",
-				Version:        "^8.0.0",
-				Optional:       false,
-				InstallCommand: "npm install -g eslint",
-			},
-		},
 	}
+
+	// If registry is available, get languages dynamically
+	if e.adapterRegistry != nil {
+		caps.SupportedLanguages = e.adapterRegistry.GetSupportedLanguages("length")
+	} else {
+		// Fallback to default JS/TS
+		caps.SupportedLanguages = []string{"javascript", "typescript", "jsx", "tsx"}
+	}
+
+	return caps
 }
 
 // Close cleans up resources.
@@ -146,4 +163,38 @@ func (e *Engine) Close() error {
 // filterFiles filters files based on selector using proper glob matching.
 func (e *Engine) filterFiles(files []string, selector *core.Selector) []string {
 	return core.FilterFiles(files, selector)
+}
+
+// detectLanguage detects the primary language from files and rule configuration.
+func (e *Engine) detectLanguage(rule core.Rule, files []string) string {
+	// 1. Check rule.When.Languages if specified
+	if rule.When != nil && len(rule.When.Languages) > 0 {
+		return rule.When.Languages[0]
+	}
+
+	// 2. Detect from first file extension
+	if len(files) > 0 {
+		ext := strings.ToLower(filepath.Ext(files[0]))
+		switch ext {
+		case ".js":
+			return "javascript"
+		case ".ts":
+			return "typescript"
+		case ".jsx":
+			return "jsx"
+		case ".tsx":
+			return "tsx"
+		case ".java":
+			return "java"
+		case ".py":
+			return "python"
+		case ".go":
+			return "go"
+		case ".rs":
+			return "rust"
+		}
+	}
+
+	// 3. Default to JavaScript
+	return "javascript"
 }
