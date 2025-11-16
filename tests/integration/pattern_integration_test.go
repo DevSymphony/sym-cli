@@ -47,7 +47,7 @@ func TestPatternEngine_NamingViolations_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/naming-violations.js"),
+		filepath.Join(workDir, "testdata/javascript/pattern/naming-violations.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
@@ -107,7 +107,7 @@ func TestPatternEngine_SecurityViolations_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/security-violations.js"),
+		filepath.Join(workDir, "testdata/javascript/pattern/security-violations.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
@@ -165,7 +165,7 @@ func TestPatternEngine_ValidFile_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/valid.js"),
+		filepath.Join(workDir, "testdata/javascript/pattern/valid.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)

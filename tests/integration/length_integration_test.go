@@ -46,7 +46,7 @@ func TestLengthEngine_LineLengthViolations_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/length-violations.js"),
+		filepath.Join(workDir, "testdata/javascript/length/length-violations.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
@@ -105,7 +105,7 @@ func TestLengthEngine_MaxParams_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/length-violations.js"),
+		filepath.Join(workDir, "testdata/javascript/length/length-violations.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
@@ -163,7 +163,7 @@ func TestLengthEngine_ValidFile_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/valid.js"),
+		filepath.Join(workDir, "testdata/javascript/length/valid.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)

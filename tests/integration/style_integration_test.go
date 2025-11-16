@@ -47,7 +47,7 @@ func TestStyleEngine_IndentViolations_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/style-violations.js"),
+		filepath.Join(workDir, "testdata/javascript/style/style-violations.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
@@ -106,7 +106,7 @@ func TestStyleEngine_ValidFile_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/valid.js"),
+		filepath.Join(workDir, "testdata/javascript/style/valid.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
