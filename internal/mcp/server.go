@@ -15,6 +15,7 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
+	"github.com/DevSymphony/sym-cli/internal/roles"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	sdkmcp "github.com/modelcontextprotocol/go-sdk/mcp"
@@ -446,8 +447,15 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 			}
 			textContent += "\n"
 		}
-		textContent += "\n✓ Next Step: Implement your code following these conventions. After completion, MUST call validate_code to verify compliance."
 	}
+
+	// Add RBAC information if available
+	rbacInfo := s.getRBACInfo()
+	if rbacInfo != "" {
+		textContent += "\n\n" + rbacInfo
+	}
+
+	textContent += "\n✓ Next Step: Implement your code following these conventions. After completion, MUST call validate_code to verify compliance."
 
 	// Return MCP-compliant response with content array
 	return map[string]interface{}{
@@ -635,11 +643,17 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 	}
 
 	llmClient := llm.NewClient(apiKey)
-	llmValidator := validator.NewLLMValidator(llmClient, validationPolicy)
 
-	// Validate git changes
+	// Create unified validator that handles all engines + RBAC
+	v := validator.NewValidator(validationPolicy, false) // verbose=false for MCP
+	v.SetLLMClient(llmClient)
+	defer func() {
+		_ = v.Close() // Ignore close error in MCP context
+	}()
+
+	// Validate git changes using unified validator
 	ctx := context.Background()
-	result, err := llmValidator.Validate(ctx, changes)
+	result, err := v.ValidateChanges(ctx, changes)
 	if err != nil {
 		return nil, &RPCError{
 			Code:    -32000,
@@ -903,4 +917,71 @@ func (s *Server) needsConversion(codePolicyPath string) bool {
 // This is a wrapper that calls the shared conversion logic.
 func (s *Server) convertUserPolicy(userPolicyPath, codePolicyPath string) error {
 	return ConvertPolicyWithLLM(userPolicyPath, codePolicyPath)
+}
+
+// getRBACInfo returns RBAC information for the current user
+func (s *Server) getRBACInfo() string {
+	// Try to get current user
+	username, err := git.GetCurrentUser()
+	if err != nil {
+		// Not in a git environment or user not configured
+		return ""
+	}
+
+	// Get user's role
+	userRole, err := roles.GetUserRole(username)
+	if err != nil {
+		// Roles not configured
+		return ""
+	}
+
+	if userRole == "none" {
+		return fmt.Sprintf("⚠️  RBAC: User '%s' has no assigned role. You may not have permission to modify files.", username)
+	}
+
+	// Load user policy to get RBAC details
+	userPolicy, err := roles.LoadUserPolicyFromRepo()
+	if err != nil {
+		// User policy not available
+		return fmt.Sprintf("🔐 RBAC: Current user '%s' has role '%s'", username, userRole)
+	}
+
+	// Check if RBAC is defined
+	if userPolicy.RBAC == nil || userPolicy.RBAC.Roles == nil {
+		return fmt.Sprintf("🔐 RBAC: Current user '%s' has role '%s' (no restrictions defined)", username, userRole)
+	}
+
+	// Get role configuration
+	roleConfig, exists := userPolicy.RBAC.Roles[userRole]
+	if !exists {
+		return fmt.Sprintf("⚠️  RBAC: User '%s' has role '%s', but role is not defined in policy", username, userRole)
+	}
+
+	// Build RBAC info message
+	var rbacMsg strings.Builder
+	rbacMsg.WriteString("🔐 RBAC Information:\n")
+	rbacMsg.WriteString(fmt.Sprintf("   User: %s\n", username))
+	rbacMsg.WriteString(fmt.Sprintf("   Role: %s\n", userRole))
+
+	if len(roleConfig.AllowWrite) > 0 {
+		rbacMsg.WriteString(fmt.Sprintf("   Allowed paths: %s\n", strings.Join(roleConfig.AllowWrite, ", ")))
+	} else {
+		rbacMsg.WriteString("   Allowed paths: All files (no restrictions)\n")
+	}
+
+	if len(roleConfig.DenyWrite) > 0 {
+		rbacMsg.WriteString(fmt.Sprintf("   Denied paths: %s\n", strings.Join(roleConfig.DenyWrite, ", ")))
+	}
+
+	if roleConfig.CanEditPolicy {
+		rbacMsg.WriteString("   Can edit policy: Yes\n")
+	}
+
+	if roleConfig.CanEditRoles {
+		rbacMsg.WriteString("   Can edit roles: Yes\n")
+	}
+
+	rbacMsg.WriteString("\n⚠️  Note: Modifications to denied paths will be blocked during validation.")
+
+	return rbacMsg.String()
 }
