@@ -1,0 +1,60 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "TS-TYPE-STRICT",
+      "enabled": true,
+      "category": "typing",
+      "severity": "error",
+      "desc": "Enable strict type checking",
+      "when": {
+        "languages": ["typescript"]
+      },
+      "check": {
+        "engine": "typechecker",
+        "language": "typescript",
+        "strict": true,
+        "noImplicitAny": true,
+        "strictNullChecks": true,
+        "strictFunctionTypes": true
+      },
+      "message": "Strict type checking enabled - all type errors must be resolved"
+    },
+    {
+      "id": "TS-TYPE-NO-IMPLICIT-ANY",
+      "enabled": true,
+      "category": "typing",
+      "severity": "error",
+      "desc": "Disallow implicit any types",
+      "when": {
+        "languages": ["typescript"]
+      },
+      "check": {
+        "engine": "typechecker",
+        "language": "typescript",
+        "noImplicitAny": true
+      },
+      "message": "Variables and parameters must have explicit type annotations"
+    },
+    {
+      "id": "TS-TYPE-RETURN-TYPE",
+      "enabled": true,
+      "category": "typing",
+      "severity": "error",
+      "desc": "Functions must have explicit return types",
+      "when": {
+        "languages": ["typescript"]
+      },
+      "check": {
+        "engine": "typechecker",
+        "language": "typescript",
+        "noImplicitReturns": true
+      },
+      "message": "Functions must have explicit return type annotations"
+    }
+  ],
+  "enforce": {
+    "stages": ["pre-commit"],
+    "fail_on": ["error"]
+  }
+}

@@ -14,6 +14,10 @@ type Adapter interface {
 	// Name returns the adapter name (e.g., "eslint", "prettier").
 	Name() string
 
+	// GetCapabilities returns the adapter's capabilities.
+	// This includes supported languages, categories, and version info.
+	GetCapabilities() AdapterCapabilities
+
 	// CheckAvailability checks if the tool is installed and usable.
 	// Returns nil if available, error with details if not.
 	CheckAvailability(ctx context.Context) error
@@ -32,6 +36,23 @@ type Adapter interface {
 
 	// ParseOutput converts tool output to standard violations.
 	ParseOutput(output *ToolOutput) ([]Violation, error)
+}
+
+// AdapterCapabilities describes what an adapter can do.
+type AdapterCapabilities struct {
+	// Name is the adapter identifier (e.g., "eslint", "checkstyle").
+	Name string
+
+	// SupportedLanguages lists languages this adapter can validate.
+	// Examples: ["javascript", "typescript", "java"]
+	SupportedLanguages []string
+
+	// SupportedCategories lists rule categories this adapter can handle.
+	// Examples: ["pattern", "length", "style", "ast", "complexity"]
+	SupportedCategories []string
+
+	// Version is the tool version (e.g., "8.0.0", "10.12.0").
+	Version string
 }
 
 // InstallConfig holds tool installation settings.

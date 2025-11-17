@@ -1,0 +1,122 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "JAVA-STYLE-INDENT",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Use consistent 4-space indentation",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "java",
+        "indent": 4,
+        "indentStyle": "space"
+      },
+      "message": "Use 4 spaces for indentation"
+    },
+    {
+      "id": "JAVA-STYLE-BRACE-SAME-LINE",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Opening brace must be on same line",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "java",
+        "braceStyle": "same-line"
+      },
+      "message": "Opening brace should be on the same line"
+    },
+    {
+      "id": "JAVA-STYLE-SPACE-AFTER-KEYWORD",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Require space after control keywords",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "java",
+        "spaceAfterKeyword": true
+      },
+      "message": "Add space after control keywords (if, for, while, etc.)"
+    },
+    {
+      "id": "JAVA-STYLE-OPERATOR-SPACING",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Require spacing around operators",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "java",
+        "spaceAroundOperators": true
+      },
+      "message": "Add spaces around operators"
+    },
+    {
+      "id": "JAVA-STYLE-MAX-LINE",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Maximum line length of 120 characters",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "java",
+        "printWidth": 120
+      },
+      "message": "Line length must not exceed 120 characters"
+    },
+    {
+      "id": "JAVA-STYLE-BLANK-LINE-SEPARATOR",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Require blank lines between methods",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "java",
+        "blankLinesBetweenMethods": true
+      },
+      "message": "Add blank line between method declarations"
+    },
+    {
+      "id": "JAVA-STYLE-ONE-STATEMENT-PER-LINE",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Only one statement per line",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "style",
+        "language": "java",
+        "oneStatementPerLine": true
+      },
+      "message": "Place each statement on its own line"
+    }
+  ],
+  "enforce": {
+    "stages": ["pre-commit"],
+    "fail_on": ["error"]
+  }
+}

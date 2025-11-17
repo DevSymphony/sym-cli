@@ -1,0 +1,60 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "JS-LENGTH-MAX-LINE",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Line length must not exceed 100 characters",
+      "when": {
+        "languages": ["javascript"]
+      },
+      "check": {
+        "engine": "length",
+        "language": "javascript",
+        "scope": "line",
+        "max": 100
+      },
+      "message": "Line length must not exceed 100 characters"
+    },
+    {
+      "id": "JS-LENGTH-MAX-FUNCTION",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "error",
+      "desc": "Function length must not exceed 50 lines",
+      "when": {
+        "languages": ["javascript"]
+      },
+      "check": {
+        "engine": "length",
+        "language": "javascript",
+        "scope": "function",
+        "max": 50
+      },
+      "message": "Function length must not exceed 50 lines"
+    },
+    {
+      "id": "JS-LENGTH-MAX-PARAMS",
+      "enabled": true,
+      "category": "formatting",
+      "severity": "warning",
+      "desc": "Functions should have at most 4 parameters",
+      "when": {
+        "languages": ["javascript"]
+      },
+      "check": {
+        "engine": "length",
+        "language": "javascript",
+        "scope": "params",
+        "max": 4
+      },
+      "message": "Functions should have at most 4 parameters"
+    }
+  ],
+  "enforce": {
+    "stages": ["pre-commit"],
+    "fail_on": ["error"]
+  }
+}

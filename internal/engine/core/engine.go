@@ -5,6 +5,14 @@ import (
 	"time"
 )
 
+// AdapterRegistry is an interface for adapter registry to avoid import cycles.
+// The actual implementation is in internal/adapter/registry.
+type AdapterRegistry interface {
+	GetAdapter(language, category string) (interface{}, error)
+	GetAll() []interface{}
+	GetSupportedLanguages(category string) []string
+}
+
 // Engine is the interface that all validation engines must implement.
 // Engines validate code against specific rule types (pattern, length, style, etc.).
 //
@@ -56,6 +64,10 @@ type EngineConfig struct {
 
 	// Debug enables verbose logging.
 	Debug bool
+
+	// AdapterRegistry provides access to language-specific adapters.
+	// If nil, engines will create a default registry.
+	AdapterRegistry AdapterRegistry
 
 	// Extra holds engine-specific config.
 	Extra map[string]interface{}

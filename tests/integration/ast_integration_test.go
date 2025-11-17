@@ -50,7 +50,7 @@ func TestASTEngine_CallExpression_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/valid.js"),
+		filepath.Join(workDir, "testdata/javascript/ast/valid.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
@@ -101,8 +101,8 @@ func TestASTEngine_ClassDeclaration_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/javascript/valid.js"),
-		filepath.Join(workDir, "testdata/javascript/naming-violations.js"),
+		filepath.Join(workDir, "testdata/javascript/ast/valid.js"),
+		filepath.Join(workDir, "testdata/javascript/ast/naming-violations.js"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)

@@ -86,3 +86,45 @@ Generated `code-policy.json` contains:
 ```
 
 Rules with `engine: "llm-validator"` cannot be checked by traditional linters and require custom LLM-based validation.
+
+## Testing
+
+### Integration Test Data
+
+Validation engines are tested using structured test data in `testdata/`:
+
+```
+testdata/
+├── javascript/      # ESLint-based validation tests
+│   ├── pattern/     # Naming conventions, regex patterns
+│   ├── length/      # Line/function length limits
+│   ├── style/       # Code formatting
+│   └── ast/         # AST structure validation
+├── typescript/      # TSC-based validation tests
+│   └── typechecker/ # Type checking tests
+└── java/            # Checkstyle/PMD-based validation tests
+    ├── pattern/     # Naming conventions (PascalCase, camelCase)
+    ├── length/      # Line/method/parameter length limits
+    ├── style/       # Java formatting conventions
+    └── ast/         # Code structure (exception handling, etc.)
+```
+
+Each directory contains:
+- **Violation files**: Code that violates conventions (e.g., `NamingViolations.java`)
+- **Valid files**: Code that complies with conventions (e.g., `ValidNaming.java`)
+
+### Running Integration Tests
+
+```bash
+# All integration tests
+go test ./tests/integration/... -v
+
+# Specific engine tests
+go test ./tests/integration/... -v -run TestPatternEngine
+go test ./tests/integration/... -v -run TestLengthEngine
+go test ./tests/integration/... -v -run TestStyleEngine
+go test ./tests/integration/... -v -run TestASTEngine
+go test ./tests/integration/... -v -run TestTypeChecker
+```
+
+For detailed test data structure, see [testdata/README.md](../testdata/README.md).

@@ -45,7 +45,7 @@ func TestTypeChecker_TypeErrors_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/typescript/type-errors.ts"),
+		filepath.Join(workDir, "testdata/typescript/typechecker/type-errors.ts"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
@@ -105,7 +105,7 @@ func TestTypeChecker_StrictModeErrors_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/typescript/strict-mode-errors.ts"),
+		filepath.Join(workDir, "testdata/typescript/typechecker/strict-mode-errors.ts"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)
@@ -162,7 +162,7 @@ func TestTypeChecker_ValidFile_Integration(t *testing.T) {
 	}
 
 	files := []string{
-		filepath.Join(workDir, "testdata/typescript/valid.ts"),
+		filepath.Join(workDir, "testdata/typescript/typechecker/valid.ts"),
 	}
 
 	result, err := engine.Validate(ctx, rule, files)

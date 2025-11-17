@@ -168,20 +168,22 @@ func TestDetectLanguage(t *testing.T) {
 	engine := &Engine{}
 
 	tests := []struct {
+		rule  core.Rule
 		files []string
 		want  string
 	}{
-		{[]string{"main.js"}, "javascript"},
-		{[]string{"app.jsx"}, "jsx"},
-		{[]string{"server.ts"}, "typescript"},
-		{[]string{"component.tsx"}, "tsx"},
-		{[]string{}, "javascript"},
+		{core.Rule{}, []string{"main.js"}, "javascript"},
+		{core.Rule{}, []string{"app.jsx"}, "jsx"},
+		{core.Rule{}, []string{"server.ts"}, "typescript"},
+		{core.Rule{}, []string{"component.tsx"}, "tsx"},
+		{core.Rule{}, []string{}, "javascript"},
+		{core.Rule{When: &core.Selector{Languages: []string{"python"}}}, []string{"main.js"}, "python"},
 	}
 
 	for _, tt := range tests {
-		got := engine.detectLanguage(tt.files)
+		got := engine.detectLanguage(tt.rule, tt.files)
 		if got != tt.want {
-			t.Errorf("detectLanguage(%v) = %q, want %q", tt.files, got, tt.want)
+			t.Errorf("detectLanguage(%v, %v) = %q, want %q", tt.rule, tt.files, got, tt.want)
 		}
 	}
 }
