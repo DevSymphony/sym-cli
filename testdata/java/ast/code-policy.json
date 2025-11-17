@@ -1,0 +1,87 @@
+{
+  "version": "1.0.0",
+  "rules": [
+    {
+      "id": "JAVA-AST-NO-SYSTEM-OUT",
+      "enabled": true,
+      "category": "error_handling",
+      "severity": "error",
+      "desc": "Avoid using System.out for logging",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "ast",
+        "language": "java",
+        "node": "MethodCallExpr",
+        "where": {
+          "scope": "System.out",
+          "name": "println"
+        }
+      },
+      "message": "Use a proper logging framework instead of System.out"
+    },
+    {
+      "id": "JAVA-AST-EMPTY-CATCH",
+      "enabled": true,
+      "category": "error_handling",
+      "severity": "error",
+      "desc": "Empty catch blocks are not allowed",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "ast",
+        "language": "java",
+        "node": "CatchClause",
+        "where": {
+          "body.statements.size": 0
+        }
+      },
+      "message": "Catch block must handle the exception or at least log it"
+    },
+    {
+      "id": "JAVA-AST-GENERIC-EXCEPTION",
+      "enabled": true,
+      "category": "error_handling",
+      "severity": "error",
+      "desc": "Avoid catching generic Exception",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "ast",
+        "language": "java",
+        "node": "CatchClause",
+        "where": {
+          "parameter.type.name": "Exception"
+        }
+      },
+      "message": "Catch specific exception types instead of generic Exception"
+    },
+    {
+      "id": "JAVA-AST-MISSING-JAVADOC",
+      "enabled": true,
+      "category": "documentation",
+      "severity": "error",
+      "desc": "Public methods must have Javadoc",
+      "when": {
+        "languages": ["java"]
+      },
+      "check": {
+        "engine": "ast",
+        "language": "java",
+        "node": "MethodDeclaration",
+        "where": {
+          "isPublic": true,
+          "hasJavadoc": false
+        }
+      },
+      "message": "Public methods must have Javadoc documentation"
+    }
+  ],
+  "enforce": {
+    "stages": ["pre-commit"],
+    "fail_on": ["error"]
+  }
+}

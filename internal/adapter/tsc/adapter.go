@@ -48,6 +48,16 @@ func (a *Adapter) Name() string {
 	return "tsc"
 }
 
+// GetCapabilities returns the TSC adapter capabilities.
+func (a *Adapter) GetCapabilities() adapter.AdapterCapabilities {
+	return adapter.AdapterCapabilities{
+		Name:                "tsc",
+		SupportedLanguages:  []string{"typescript"},
+		SupportedCategories: []string{"typechecker"},
+		Version:             "^5.0.0",
+	}
+}
+
 // CheckAvailability checks if tsc is installed.
 func (a *Adapter) CheckAvailability(ctx context.Context) error {
 	// Try local installation first
@@ -100,6 +110,7 @@ func (a *Adapter) Install(ctx context.Context, config adapter.InstallConfig) err
 
 	return nil
 }
+
 
 // Execute runs tsc with the given config and files.
 // Returns type checking results.

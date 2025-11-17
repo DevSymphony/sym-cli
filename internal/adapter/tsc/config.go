@@ -3,6 +3,8 @@ package tsc
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/DevSymphony/sym-cli/internal/engine/core"
 )
 
 // TSConfig represents TypeScript compiler configuration.
@@ -36,7 +38,13 @@ type CompilerOptions struct {
 }
 
 // GenerateConfig generates a tsconfig.json from a rule.
-func (a *Adapter) GenerateConfig(rule interface{}) ([]byte, error) {
+func (a *Adapter) GenerateConfig(ruleInterface interface{}) ([]byte, error) {
+	// Type assert to *core.Rule
+	rule, ok := ruleInterface.(*core.Rule)
+	if !ok {
+		return nil, fmt.Errorf("expected *core.Rule, got %T", ruleInterface)
+	}
+
 	// Default configuration for type checking
 	config := TSConfig{
 		CompilerOptions: CompilerOptions{
@@ -62,12 +70,8 @@ func (a *Adapter) GenerateConfig(rule interface{}) ([]byte, error) {
 		},
 	}
 
-	// If rule is a map, extract type checking options
-	if ruleMap, ok := rule.(map[string]interface{}); ok {
-		if check, ok := ruleMap["check"].(map[string]interface{}); ok {
-			applyRuleConfig(&config, check)
-		}
-	}
+	// Apply rule-specific configuration from Check map
+	applyRuleConfig(&config, rule.Check)
 
 	return json.MarshalIndent(config, "", "  ")
 }

@@ -3,12 +3,19 @@ package tsc
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/DevSymphony/sym-cli/internal/engine/core"
 )
 
 func TestGenerateConfig_Default(t *testing.T) {
 	adapter := NewAdapter("", "/test/project")
 
-	config, err := adapter.GenerateConfig(nil)
+	rule := &core.Rule{
+		ID:    "test-default",
+		Check: map[string]interface{}{},
+	}
+
+	config, err := adapter.GenerateConfig(rule)
 	if err != nil {
 		t.Fatalf("GenerateConfig() error = %v", err)
 	}
@@ -43,8 +50,9 @@ func TestGenerateConfig_Default(t *testing.T) {
 func TestGenerateConfig_WithRuleOptions(t *testing.T) {
 	adapter := NewAdapter("", "/test/project")
 
-	rule := map[string]interface{}{
-		"check": map[string]interface{}{
+	rule := &core.Rule{
+		ID: "test-with-options",
+		Check: map[string]interface{}{
 			"strict":           false,
 			"noImplicitAny":    false,
 			"allowJs":          true,
@@ -88,8 +96,9 @@ func TestGenerateConfig_WithRuleOptions(t *testing.T) {
 func TestGenerateConfig_WithIncludeExclude(t *testing.T) {
 	adapter := NewAdapter("", "/test/project")
 
-	rule := map[string]interface{}{
-		"check": map[string]interface{}{
+	rule := &core.Rule{
+		ID: "test-include-exclude",
+		Check: map[string]interface{}{
 			"include": []interface{}{"src/**/*.ts", "lib/**/*.ts"},
 			"exclude": []interface{}{"**/*.test.ts", "dist/**"},
 		},
@@ -127,7 +136,12 @@ func TestGenerateConfig_WithIncludeExclude(t *testing.T) {
 func TestGenerateConfig_ValidJSON(t *testing.T) {
 	adapter := NewAdapter("", "/test/project")
 
-	config, err := adapter.GenerateConfig(nil)
+	rule := &core.Rule{
+		ID:    "test-valid-json",
+		Check: map[string]interface{}{},
+	}
+
+	config, err := adapter.GenerateConfig(rule)
 	if err != nil {
 		t.Fatalf("GenerateConfig() error = %v", err)
 	}

@@ -43,6 +43,16 @@ func (a *Adapter) Name() string {
 	return "prettier"
 }
 
+// GetCapabilities returns the Prettier adapter capabilities.
+func (a *Adapter) GetCapabilities() adapter.AdapterCapabilities {
+	return adapter.AdapterCapabilities{
+		Name:                "prettier",
+		SupportedLanguages:  []string{"javascript", "typescript", "jsx", "tsx", "json", "yaml", "css", "html", "markdown"},
+		SupportedCategories: []string{"style"},
+		Version:             "^3.0.0",
+	}
+}
+
 // CheckAvailability checks if Prettier is installed.
 func (a *Adapter) CheckAvailability(ctx context.Context) error {
 	prettierPath := a.getPrettierPath()

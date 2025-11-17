@@ -50,6 +50,16 @@ func (a *Adapter) Name() string {
 	return "eslint"
 }
 
+// GetCapabilities returns the ESLint adapter capabilities.
+func (a *Adapter) GetCapabilities() adapter.AdapterCapabilities {
+	return adapter.AdapterCapabilities{
+		Name:                "eslint",
+		SupportedLanguages:  []string{"javascript", "typescript", "jsx", "tsx"},
+		SupportedCategories: []string{"pattern", "length", "style", "ast"},
+		Version:             "^8.0.0",
+	}
+}
+
 // CheckAvailability checks if ESLint is installed.
 func (a *Adapter) CheckAvailability(ctx context.Context) error {
 	// Try local installation first
