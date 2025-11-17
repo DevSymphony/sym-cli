@@ -517,6 +517,9 @@ graph TB
             adapter_eslint[eslint]
             adapter_prettier[prettier]
             adapter_tsc[tsc]
+            adapter_checkstyle[checkstyle]
+            adapter_pmd[pmd]
+            adapter_registry[registry]
         end
 
         subgraph engine_group["internal/engine"]
@@ -578,6 +581,9 @@ graph TB
     adapter_eslint --> adapter
     adapter_prettier --> adapter
     adapter_tsc --> adapter
+    adapter_checkstyle --> adapter
+    adapter_pmd --> adapter
+    adapter_registry --> adapter
     adapter --> engine_core
 
     %% engine 서브패키지
@@ -590,6 +596,8 @@ graph TB
     engine_style --> adapter_prettier
     engine_ast --> engine_core
     engine_ast --> adapter_eslint
+    engine_ast --> adapter_checkstyle
+    engine_ast --> adapter_pmd
     engine_llm --> engine_core
     engine_llm --> llm
     engine_typechecker --> engine_core
@@ -600,6 +608,8 @@ graph TB
     %% validator 의존성
     validator --> engine
     validator --> llm
+    validator --> roles
+    validator --> git
     validator --> schema
 
     %% mcp 의존성
@@ -637,7 +647,7 @@ graph TB
     class auth,converter,policy domain
     class roles,adapter,engine,validator business
     class mcp,server integration
-    class adapter_eslint,adapter_prettier,adapter_tsc,conv_linters subpkg
+    class adapter_eslint,adapter_prettier,adapter_tsc,adapter_checkstyle,adapter_pmd,adapter_registry,conv_linters subpkg
     class engine_core,engine_registry,engine_pattern,engine_length,engine_style,engine_ast,engine_llm,engine_typechecker subpkg
 ```
 
@@ -666,7 +676,9 @@ graph TB
 **Tier 2: 비즈니스 로직**
 - `internal/roles`: RBAC 구현 (→ git, policy, schema)
 - `internal/adapter` ↔ `internal/engine`: 검증 도구 어댑터 및 엔진 (순환 의존성)
-- `internal/validator`: 검증 오케스트레이터 (→ engine, llm, schema)
+  - Adapters: ESLint, Prettier, TSC, Checkstyle, PMD
+  - Engines: Pattern, Length, Style, AST, LLM, TypeChecker
+- `internal/validator`: 검증 오케스트레이터 (→ engine, llm, roles, git, schema)
 
 **Tier 3: 통합 계층**
 - `internal/mcp`: MCP 서버 (→ converter, git, llm, policy, validator, schema)
