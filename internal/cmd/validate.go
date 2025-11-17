@@ -30,11 +30,16 @@ This command checks git changes (diff) against rules in code-policy.json
 that use "llm-validator" as the engine. These are typically complex rules
 that cannot be checked by traditional linters (e.g., security, architecture).
 
+By default, this validates ALL uncommitted changes including:
+  - Staged changes (git add)
+  - Unstaged changes (modified but not staged)
+  - Untracked files (new files not yet added)
+
 Examples:
-  # Validate unstaged changes
+  # Validate all uncommitted changes (default)
   sym validate
 
-  # Validate staged changes
+  # Validate only staged changes
   sym validate --staged
 
   # Use custom policy file
@@ -44,7 +49,7 @@ Examples:
 
 func init() {
 	validateCmd.Flags().StringVarP(&validatePolicyFile, "policy", "p", "", "Path to code-policy.json (default: .sym/code-policy.json)")
-	validateCmd.Flags().BoolVar(&validateStaged, "staged", false, "Validate staged changes instead of unstaged")
+	validateCmd.Flags().BoolVar(&validateStaged, "staged", false, "Validate only staged changes (default: all uncommitted changes)")
 	validateCmd.Flags().StringVar(&validateModel, "model", "gpt-4o-mini", "OpenAI model to use")
 	validateCmd.Flags().IntVar(&validateTimeout, "timeout", 30, "Timeout per rule check in seconds")
 }
@@ -96,7 +101,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		if err != nil {
 			return fmt.Errorf("failed to get git changes: %w", err)
 		}
-		fmt.Println("Validating unstaged changes...")
+		fmt.Println("Validating all uncommitted changes (staged + unstaged + untracked)...")
 	}
 
 	if len(changes) == 0 {
