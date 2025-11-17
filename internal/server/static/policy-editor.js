@@ -902,6 +902,19 @@ async function savePolicy() {
         const rulesChanged = appState.originalRules && (appState.originalRules !== currentRules);
         const rbacChanged = appState.originalRBAC && (appState.originalRBAC !== currentRBAC);
 
+        // Check if code-policy.json exists in the policy directory
+        const policyPath = appState.settings.policyPath || '.sym/user-policy.json';
+        const policyDir = policyPath.substring(0, policyPath.lastIndexOf('/'));
+        const codePolicyPath = policyDir + '/code-policy.json';
+        let codePolicyExists = false;
+
+        try {
+            const response = await fetch(codePolicyPath);
+            codePolicyExists = response.ok;
+        } catch (error) {
+            codePolicyExists = false;
+        }
+
         console.log('=== Policy Change Detection ===');
         console.log('Original rules:', appState.originalRules ? appState.originalRules.substring(0, 100) + '...' : 'NULL');
         console.log('Current rules:', currentRules.substring(0, 100) + '...');
@@ -909,18 +922,23 @@ async function savePolicy() {
         console.log('Current RBAC:', currentRBAC.substring(0, 100) + '...');
         console.log('Rules changed?', rulesChanged);
         console.log('RBAC changed?', rbacChanged);
+        console.log('code-policy.json exists?', codePolicyExists);
         console.log('============================');
 
-        if (rulesChanged || rbacChanged) {
+        if (rulesChanged || rbacChanged || !codePolicyExists) {
             const changedItems = [];
             if (rulesChanged) changedItems.push('규칙');
             if (rbacChanged) changedItems.push('RBAC 설정');
+            if (!codePolicyExists) changedItems.push('code-policy.json 파일이 없음');
 
-            const shouldConvert = confirm(
-                `${changedItems.join('과 ')}이 변경되었습니다.\n\n` +
+            const message = changedItems.length > 0 ?
+                `${changedItems.join(', ')}.\n\n` +
                 'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
-                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.'
-            );
+                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.' :
+                'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
+                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.';
+
+            const shouldConvert = confirm(message);
 
             if (shouldConvert) {
                 try {
