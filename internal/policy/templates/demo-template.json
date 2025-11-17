@@ -1,0 +1,145 @@
+{
+  "version": "1.0.0",
+  "defaults": {
+    "languages": ["java"],
+    "severity": "error"
+  },
+  "rbac": {
+    "roles": {
+      "backend-dev": {
+        "allowWrite": ["src/main/java/com/company/ecommerce/controller/**", "src/main/java/com/company/ecommerce/service/**", "src/main/java/com/company/ecommerce/dto/**"],
+        "denyWrite": ["src/main/java/com/company/ecommerce/entity/**", "src/main/java/com/company/ecommerce/repository/**"]
+      },
+      "database-dev": {
+        "allowWrite": ["src/main/java/com/company/ecommerce/entity/**", "src/main/java/com/company/ecommerce/repository/**"],
+        "denyWrite": ["src/main/java/com/company/ecommerce/controller/**"]
+      },
+      "senior-dev": {
+        "allowWrite": ["src/**"],
+        "denyWrite": []
+      }
+    }
+  },
+  "rules": [
+    {
+      "id": "N-01",
+      "say": "DTO 클래스는 반드시 'Dto' 접미어를 사용합니다 (DTO 대문자 아님)",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\npublic class UserDto { }\npublic class OrderDto { }\n\n// ❌ 나쁜 예:\npublic class UserDTO { }\npublic class UserData { }"
+    },
+    {
+      "id": "N-02",
+      "say": "Entity 클래스는 반드시 'Entity' 접미어를 사용합니다",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\npublic class UserEntity { }\npublic class ProductEntity { }\n\n// ❌ 나쁜 예:\npublic class User { }\npublic class ProductModel { }"
+    },
+    {
+      "id": "N-03",
+      "say": "Repository 클래스는 반드시 'Repo' 접미어를 사용합니다 (Repository 전체 단어 아님)",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\npublic class UserRepo { }\npublic interface ProductRepo { }\n\n// ❌ 나쁜 예:\npublic class UserRepository { }\npublic class UserDAO { }"
+    },
+    {
+      "id": "N-04",
+      "say": "Service 클래스는 반드시 'Service' 접미어를 사용합니다",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\npublic interface UserService { }\npublic class UserServiceImpl { }\n\n// ❌ 나쁜 예:\npublic class UserManager { }\npublic class UserHandler { }"
+    },
+    {
+      "id": "N-05",
+      "say": "Controller 클래스는 반드시 'Ctrl' 접미어를 사용합니다 (Controller 전체 단어 아님)",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\npublic class UserCtrl { }\npublic class OrderCtrl { }\n\n// ❌ 나쁜 예:\npublic class UserController { }\npublic class UserResource { }"
+    },
+    {
+      "id": "N-06",
+      "say": "Abstract 클래스는 반드시 'Abs' 접두어를 사용합니다",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\npublic abstract class AbsBaseEntity { }\npublic abstract class AbsUserService { }\n\n// ❌ 나쁜 예:\npublic abstract class AbstractBaseEntity { }\npublic abstract class BaseEntity { }"
+    },
+    {
+      "id": "N-07",
+      "say": "Interface 구현체는 반드시 'Impl' 접미어를 사용합니다",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\npublic class UserServiceImpl implements UserService { }\n\n// ❌ 나쁜 예:\npublic class UserServiceImplementation { }\npublic class DefaultUserService { }"
+    },
+    {
+      "id": "N-08",
+      "say": "private 멤버변수는 반드시 'm_' 접두어를 사용합니다 (static final 상수 제외)",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\nprivate String m_userName;\nprivate UserRepo m_userRepo;\nprivate static final int MAX_COUNT = 100;\n\n// ❌ 나쁜 예:\nprivate String userName;\nprivate String _userName;\nprivate String mUserName;"
+    },
+    {
+      "id": "N-09",
+      "say": "protected 멤버변수는 반드시 'p_' 접두어를 사용합니다 (static final 상수 제외)",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\nprotected String p_serviceName;\nprotected Logger p_logger;\n\n// ❌ 나쁜 예:\nprotected String serviceName;\nprotected String m_serviceName;"
+    },
+    {
+      "id": "N-10",
+      "say": "모든 메서드 매개변수는 반드시 'param' 접두어를 사용합니다",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\npublic void setEmail(String paramEmail) { }\npublic UserDto getUser(Long paramUserId) { }\n\n// ❌ 나쁜 예:\npublic void setEmail(String email) { }\npublic UserDto getUser(Long userId) { }"
+    },
+    {
+      "id": "N-11",
+      "say": "private 메서드는 반드시 '_' (언더스코어) 접두어를 사용합니다",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\nprivate boolean _validateUserId(Long paramUserId) { }\nprivate void _processData() { }\n\n// ❌ 나쁜 예:\nprivate boolean validateUserId(Long paramUserId) { }\nprivate void __processData() { }"
+    },
+    {
+      "id": "N-12",
+      "say": "Boolean 타입 변수/메서드는 'is', 'has', 'can' 중 하나의 접두어를 반드시 사용합니다",
+      "category": "naming",
+      "example": "// ✅ 좋은 예:\nprivate boolean m_isActive;\nprivate boolean m_hasPermission;\npublic boolean isValid() { }\npublic boolean canDelete() { }\n\n// ❌ 나쁜 예:\nprivate boolean m_active;\npublic boolean checkValid() { }\npublic boolean validateUser() { }"
+    },
+    {
+      "id": "F-01",
+      "say": "클래스 내부 순서: static 변수 → 멤버변수 → 생성자 → public 메서드 → protected 메서드 → private 메서드",
+      "category": "formatting",
+      "example": "// ✅ 좋은 예:\npublic class UserService {\n    // 1. static 변수\n    private static final int MAX_COUNT = 100;\n    \n    // 2. 멤버변수\n    private UserRepo m_userRepo;\n    \n    // 3. 생성자\n    public UserService() { }\n    \n    // 4. public 메서드\n    public void getUser() { }\n    \n    // 5. protected 메서드\n    protected void validate() { }\n    \n    // 6. private 메서드\n    private void _helper() { }\n}"
+    },
+    {
+      "id": "F-02",
+      "say": "멤버변수는 public → protected → private 순서로 선언합니다",
+      "category": "formatting",
+      "example": "// ✅ 좋은 예:\npublic class UserService {\n    public String publicField;\n    protected String p_protectedField;\n    private String m_privateField;\n}"
+    },
+    {
+      "id": "F-03",
+      "say": "생성자는 매개변수 개수가 적은 순서부터 배치합니다",
+      "category": "formatting",
+      "example": "// ✅ 좋은 예:\npublic UserEntity() { }\npublic UserEntity(Long paramId) { }\npublic UserEntity(Long paramId, String paramName) { }\n\n// ❌ 나쁜 예:\npublic UserEntity(Long paramId, String paramName) { }\npublic UserEntity() { }"
+    },
+    {
+      "id": "F-04",
+      "say": "메서드와 메서드 사이에는 정확히 1개의 공백 라인이 필요합니다",
+      "category": "formatting",
+      "example": "// ✅ 좋은 예:\npublic void method1() {\n}\n\npublic void method2() {\n}\n\n// ❌ 나쁜 예:\npublic void method1() {\n}\npublic void method2() {\n}"
+    },
+    {
+      "id": "F-05",
+      "say": "import 문은 패키지명 기준 알파벳 순으로 정렬합니다 (java.* → javax.* → com.* → org.*)",
+      "category": "formatting",
+      "example": "// ✅ 좋은 예:\nimport com.company.ecommerce.dto.UserDto;\nimport com.company.ecommerce.entity.UserEntity;\nimport java.util.List;\nimport javax.persistence.Entity;\nimport org.springframework.stereotype.Service;\n\n// ❌ 나쁜 예:\nimport java.util.List;\nimport com.company.ecommerce.dto.UserDto;\nimport org.springframework.stereotype.Service;"
+    },
+    {
+      "id": "D-01",
+      "say": "모든 public 클래스는 @author, @since, @version 태그를 포함한 Javadoc이 필수입니다",
+      "category": "documentation",
+      "example": "// ✅ 좋은 예:\n/**\n * 사용자 관리 서비스 클래스\n *\n * @author Development Team\n * @since 1.0\n * @version 1.0.0\n */\npublic class UserService { }\n\n// ❌ 나쁜 예:\n// 사용자 관리 서비스\npublic class UserService { }"
+    },
+    {
+      "id": "D-02",
+      "say": "모든 public 메서드는 @param, @return (반환값 있는 경우) 태그를 포함한 Javadoc이 필수입니다",
+      "category": "documentation",
+      "example": "// ✅ 좋은 예:\n/**\n * 사용자 ID로 사용자를 조회합니다.\n *\n * @param paramUserId 조회할 사용자 ID\n * @return 사용자 DTO\n */\npublic UserDto getUser(Long paramUserId) { }\n\n// ❌ 나쁜 예:\n// 사용자 조회\npublic UserDto getUser(Long paramUserId) { }"
+    },
+    {
+      "id": "E-01",
+      "say": "Custom Exception 클래스는 반드시 'Exception' 접미어를 사용합니다",
+      "category": "error_handling",
+      "example": "// ✅ 좋은 예:\npublic class UserNotFoundException extends Exception { }\npublic class InvalidOrderException extends RuntimeException { }\n\n// ❌ 나쁜 예:\npublic class UserNotFound { }\npublic class OrderError { }\npublic class PaymentFailure { }"
+    }
+  ]
+}

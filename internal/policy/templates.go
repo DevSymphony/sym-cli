@@ -43,6 +43,9 @@ func GetTemplates() ([]Template, error) {
 
 		// Set description based on template name
 		switch name {
+		case "demo-template":
+			template.Description = "샘플 자바 정책 템플릿 (다양한 규칙 포함)"
+			template.Language = "Java"
 		case "react-template":
 			template.Description = "React 프로젝트용 정책 (컴포넌트, Hooks, JSX 규칙)"
 			template.Language = "JavaScript/TypeScript"
