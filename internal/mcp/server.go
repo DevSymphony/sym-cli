@@ -46,42 +46,31 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 		llm.WithTimeout(30*time.Second),
 	)
 
-	// Create converter
-	conv := converter.NewConverter(converter.WithLLMClient(llmClient))
+	// Create converter with output directory
+	outputDir := filepath.Dir(codePolicyPath)
+	conv := converter.NewConverter(llmClient, outputDir)
 
 	// Setup context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(len(userPolicy.Rules)*30)*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(30*10)*time.Second)
 	defer cancel()
 
 	fmt.Fprintf(os.Stderr, "Converting %d rules...\n", len(userPolicy.Rules))
 
-	// Convert to all targets
-	result, err := conv.ConvertMultiTarget(ctx, &userPolicy, converter.MultiTargetConvertOptions{
-		Targets:             []string{"all"},
-		OutputDir:           filepath.Dir(codePolicyPath),
-		ConfidenceThreshold: 0.7,
-	})
+	// Convert using new API
+	result, err := conv.Convert(ctx, &userPolicy)
 	if err != nil {
 		return fmt.Errorf("conversion failed: %w", err)
 	}
 
-	// Write code policy
-	codePolicyJSON, err := json.MarshalIndent(result.CodePolicy, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize code policy: %w", err)
+	// Files are already written by converter
+	for _, filePath := range result.GeneratedFiles {
+		fmt.Fprintf(os.Stderr, "  ✓ Generated: %s\n", filePath)
 	}
 
-	if err := os.WriteFile(codePolicyPath, codePolicyJSON, 0644); err != nil {
-		return fmt.Errorf("failed to write code policy: %w", err)
-	}
-
-	// Write linter configs
-	for linterName, config := range result.LinterConfigs {
-		outputPath := filepath.Join(filepath.Dir(codePolicyPath), config.Filename)
-		if err := os.WriteFile(outputPath, config.Content, 0644); err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to write %s config: %v\n", linterName, err)
-		} else {
-			fmt.Fprintf(os.Stderr, "  ✓ Generated %s: %s\n", linterName, outputPath)
+	// Report any errors
+	if len(result.Errors) > 0 {
+		for linter, err := range result.Errors {
+			fmt.Fprintf(os.Stderr, "  ✗ %s: %v\n", linter, err)
 		}
 	}
 
@@ -594,10 +583,8 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 	var allViolations []ViolationItem
 	var hasErrors bool
 
-	// Always validate git changes (staged + unstaged)
-	// This is the most efficient and relevant approach for AI coding workflows
-
-	// Get unstaged changes
+	// Get all git changes (staged + unstaged + untracked)
+	// GetGitChanges already includes all types of changes
 	changes, err := validator.GetGitChanges()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to get git changes: %v\n", err)
@@ -610,12 +597,6 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 			},
 			"isError": false,
 		}, nil
-	}
-
-	// Also check staged changes
-	stagedChanges, err := validator.GetStagedChanges()
-	if err == nil {
-		changes = append(changes, stagedChanges...)
 	}
 
 	if len(changes) == 0 {
@@ -631,21 +612,18 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 	}
 
 	// Setup LLM client for validation
-	apiKey := envutil.GetAPIKey("ANTHROPIC_API_KEY")
-	if apiKey == "" {
-		apiKey = envutil.GetAPIKey("OPENAI_API_KEY")
-	}
+	apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
 	if apiKey == "" {
 		return nil, &RPCError{
 			Code:    -32000,
-			Message: "LLM API key not found (ANTHROPIC_API_KEY or OPENAI_API_KEY required for validation in environment or .sym/.env)",
+			Message: "OPENAI_API_KEY not found in environment or .sym/.env",
 		}
 	}
 
 	llmClient := llm.NewClient(apiKey)
 
 	// Create unified validator that handles all engines + RBAC
-	v := validator.NewValidator(validationPolicy, false) // verbose=false for MCP
+	v := validator.NewValidator(validationPolicy, true) // verbose=true for debugging
 	v.SetLLMClient(llmClient)
 	defer func() {
 		_ = v.Close() // Ignore close error in MCP context
@@ -678,6 +656,11 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 		}
 	}
 
+	// Save validation results to .sym/validation-results.json
+	if err := s.saveValidationResults(result, allViolations, hasErrors); err != nil {
+		fmt.Fprintf(os.Stderr, "Warning: failed to save validation results: %v\n", err)
+	}
+
 	// Format validation results as readable text for MCP response
 	var textContent string
 	if hasErrors {
@@ -705,6 +688,9 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 			textContent += fmt.Sprintf("   Message: %s\n\n", violation.Message)
 		}
 	}
+
+	// Add note about saved results
+	textContent += fmt.Sprintf("\n💾 Validation results saved to .sym/validation-results.json\n")
 
 	// Return MCP-compliant response with content array
 	return map[string]interface{}{
@@ -984,4 +970,97 @@ func (s *Server) getRBACInfo() string {
 	rbacMsg.WriteString("\n⚠️  Note: Modifications to denied paths will be blocked during validation.")
 
 	return rbacMsg.String()
+}
+
+// ValidationResultRecord represents a single validation result with timestamp
+type ValidationResultRecord struct {
+	Timestamp   string          `json:"timestamp"`
+	Status      string          `json:"status"` // "passed", "warning", "failed"
+	TotalChecks int             `json:"total_checks"`
+	Passed      int             `json:"passed"`
+	Failed      int             `json:"failed"`
+	Violations  []ViolationItem `json:"violations"`
+	FilesChecked []string       `json:"files_checked"`
+}
+
+// ValidationHistory represents the history of validation results
+type ValidationHistory struct {
+	Results []ValidationResultRecord `json:"results"`
+}
+
+// saveValidationResults saves validation results to .sym/validation-results.json
+func (s *Server) saveValidationResults(result *validator.ValidationResult, violations []ViolationItem, hasErrors bool) error {
+	// Get git root to find .sym directory
+	repoRoot, err := git.GetRepoRoot()
+	if err != nil {
+		return fmt.Errorf("failed to get repository root: %w", err)
+	}
+
+	symDir := filepath.Join(repoRoot, ".sym")
+	if err := os.MkdirAll(symDir, 0755); err != nil {
+		return fmt.Errorf("failed to create .sym directory: %w", err)
+	}
+
+	resultsPath := filepath.Join(symDir, "validation-results.json")
+
+	// Load existing history
+	var history ValidationHistory
+	if data, err := os.ReadFile(resultsPath); err == nil {
+		if err := json.Unmarshal(data, &history); err != nil {
+			// If unmarshal fails, start fresh
+			history = ValidationHistory{Results: []ValidationResultRecord{}}
+		}
+	} else {
+		history = ValidationHistory{Results: []ValidationResultRecord{}}
+	}
+
+	// Determine status
+	status := "passed"
+	if hasErrors {
+		status = "failed"
+	} else if len(violations) > 0 {
+		status = "warning"
+	}
+
+	// Collect files checked (from violations)
+	filesChecked := make(map[string]bool)
+	for _, v := range violations {
+		if v.File != "" {
+			filesChecked[v.File] = true
+		}
+	}
+	filesCheckedList := make([]string, 0, len(filesChecked))
+	for file := range filesChecked {
+		filesCheckedList = append(filesCheckedList, file)
+	}
+
+	// Create new record
+	record := ValidationResultRecord{
+		Timestamp:    time.Now().Format(time.RFC3339),
+		Status:       status,
+		TotalChecks:  result.Checked,
+		Passed:       result.Passed,
+		Failed:       result.Failed,
+		Violations:   violations,
+		FilesChecked: filesCheckedList,
+	}
+
+	// Add to history (keep last 50 results)
+	history.Results = append(history.Results, record)
+	if len(history.Results) > 50 {
+		history.Results = history.Results[len(history.Results)-50:]
+	}
+
+	// Save to file
+	data, err := json.MarshalIndent(history, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal validation results: %w", err)
+	}
+
+	if err := os.WriteFile(resultsPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write validation results: %w", err)
+	}
+
+	fmt.Fprintf(os.Stderr, "✓ Validation results saved to %s\n", resultsPath)
+	return nil
 }
