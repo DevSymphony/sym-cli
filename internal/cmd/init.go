@@ -149,14 +149,6 @@ func runInit(cmd *cobra.Command, args []string) {
 		fmt.Println("✓ .sym/.env created with default policy path")
 	}
 
-	fmt.Println("\nNext steps:")
-	fmt.Println("  1. Review the files:")
-	fmt.Println("     cat .sym/roles.json")
-	fmt.Println("     cat .sym/user-policy.json")
-	fmt.Println("  2. Commit: git add .sym/ && git commit -m 'Initialize Symphony roles and policy'")
-	fmt.Println("  3. Push: git push")
-	fmt.Println("\nAfter pushing, team members can clone and use 'sym my-role' to check their access.")
-
 	// MCP registration prompt
 	if !skipMCPRegister {
 		promptMCPRegistration()
@@ -166,6 +158,19 @@ func runInit(cmd *cobra.Command, args []string) {
 	if !skipAPIKey {
 		promptAPIKeyIfNeeded()
 	}
+
+	// Show dashboard guide after all initialization is complete
+	fmt.Println("\n🎯 What's Next: Use Symphony Dashboard")
+	fmt.Println()
+	fmt.Println("Start the web dashboard:")
+	fmt.Println("  sym dashboard")
+	fmt.Println()
+	fmt.Println("Dashboard features:")
+	fmt.Println("  📋 Manage roles - Add/remove team members, configure permissions")
+	fmt.Println("  📝 Edit policies - Create and modify coding conventions")
+	fmt.Println("  ✅ Test validation - Check rules against your code in real-time")
+	fmt.Println()
+	fmt.Println("After setup, commit and push .sym/ folder to share with your team.")
 }
 
 // createDefaultPolicy creates a default policy file with RBAC roles
