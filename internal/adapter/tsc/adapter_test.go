@@ -13,6 +13,7 @@ func TestNewAdapter(t *testing.T) {
 	adapter := NewAdapter("", "")
 	if adapter == nil {
 		t.Fatal("NewAdapter() returned nil")
+		return
 	}
 
 	// Should have default ToolsDir
