@@ -16,13 +16,13 @@ import (
 )
 
 var (
-	convertInputFile        string
-	convertOutputFile       string
-	convertTargets          []string
-	convertOutputDir        string
-	convertOpenAIModel      string
+	convertInputFile           string
+	convertOutputFile          string
+	convertTargets             []string
+	convertOutputDir           string
+	convertOpenAIModel         string
 	convertConfidenceThreshold float64
-	convertTimeout          int
+	convertTimeout             int
 )
 
 var convertCmd = &cobra.Command{
@@ -86,13 +86,8 @@ func runConvert(cmd *cobra.Command, args []string) error {
 
 	fmt.Printf("Loaded user policy with %d rules\n", len(userPolicy.Rules))
 
-	// Check mode: multi-target or legacy
-	if len(convertTargets) > 0 {
-		return runMultiTargetConvert(&userPolicy)
-	}
-
-	// Legacy mode: generate only internal code-policy.json
-	return runLegacyConvert(&userPolicy)
+	// Use new converter by default (language-based routing with parallel LLM)
+	return runNewConverter(&userPolicy)
 }
 
 // loadPolicyPathFromEnv reads POLICY_PATH from .sym/.env
@@ -121,65 +116,17 @@ func loadPolicyPathFromEnv() string {
 	return ""
 }
 
-func runLegacyConvert(userPolicy *schema.UserPolicy) error {
-	outputFile := convertOutputFile
-	if outputFile == "" {
-		// Use same directory as input file
-		inputDir := filepath.Dir(convertInputFile)
-		outputFile = filepath.Join(inputDir, "code-policy.json")
-	}
-
-	conv := converter.NewConverter()
-
-	fmt.Printf("Converting %d natural language rules into structured policy...\n", len(userPolicy.Rules))
-
-	codePolicy, err := conv.Convert(userPolicy)
-	if err != nil {
-		return fmt.Errorf("conversion failed: %w", err)
-	}
-
-	output, err := json.MarshalIndent(codePolicy, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize code policy: %w", err)
-	}
-
-	// Create directory if needed
-	outputDir := filepath.Dir(outputFile)
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
-	}
-
-	if err := os.WriteFile(outputFile, output, 0644); err != nil {
-		return fmt.Errorf("failed to write output file: %w", err)
-	}
-
-	fmt.Printf("✓ Conversion completed: %s\n", outputFile)
-	fmt.Printf("  - Processed rules: %d\n", len(codePolicy.Rules))
-	if codePolicy.RBAC != nil {
-		fmt.Printf("  - RBAC roles: %d\n", len(codePolicy.RBAC.Roles))
-	}
-
-	return nil
-}
-
-func runMultiTargetConvert(userPolicy *schema.UserPolicy) error {
+func runNewConverter(userPolicy *schema.UserPolicy) error {
 	// Determine output directory
 	if convertOutputDir == "" {
-		// Use same directory as input file
-		convertOutputDir = filepath.Dir(convertInputFile)
-		fmt.Printf("Using output directory: %s (same as input file)\n", convertOutputDir)
-	}
-
-	// Create output directory if it doesn't exist
-	if err := os.MkdirAll(convertOutputDir, 0755); err != nil {
-		return fmt.Errorf("failed to create output directory: %w", err)
+		// Default to .sym directory
+		convertOutputDir = ".sym"
 	}
 
 	// Setup OpenAI client
 	apiKey, err := getAPIKey()
 	if err != nil {
-		fmt.Printf("Warning: %v, using fallback inference\n", err)
-		apiKey = ""
+		return fmt.Errorf("OpenAI API key required: %w", err)
 	}
 
 	timeout := time.Duration(convertTimeout) * time.Second
@@ -189,70 +136,41 @@ func runMultiTargetConvert(userPolicy *schema.UserPolicy) error {
 		llm.WithTimeout(timeout),
 	)
 
-	// Create converter with LLM client
-	conv := converter.NewConverter(converter.WithLLMClient(llmClient))
+	// Create new converter
+	conv := converter.NewConverter(llmClient, convertOutputDir)
 
-	// Setup context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(convertTimeout*len(userPolicy.Rules))*time.Second)
+	// Setup context with generous timeout for parallel processing
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(convertTimeout*10)*time.Second)
 	defer cancel()
 
-	fmt.Printf("\nConverting with OpenAI model: %s\n", convertOpenAIModel)
-	fmt.Printf("Confidence threshold: %.2f\n", convertConfidenceThreshold)
-	fmt.Printf("Output directory: %s\n\n", convertOutputDir)
+	fmt.Printf("\n🚀 Converting with language-based routing and parallel LLM inference\n")
+	fmt.Printf("📝 Model: %s\n", convertOpenAIModel)
+	fmt.Printf("📂 Output: %s\n\n", convertOutputDir)
 
-	// Convert for multiple targets
-	result, err := conv.ConvertMultiTarget(ctx, userPolicy, converter.MultiTargetConvertOptions{
-		Targets:             convertTargets,
-		OutputDir:           convertOutputDir,
-		ConfidenceThreshold: convertConfidenceThreshold,
-	})
+	// Convert
+	result, err := conv.Convert(ctx, userPolicy)
 	if err != nil {
-		return fmt.Errorf("multi-target conversion failed: %w", err)
+		return fmt.Errorf("conversion failed: %w", err)
 	}
 
-	// Write linter configuration files
-	filesWritten := 0
-	for linterName, config := range result.LinterConfigs {
-		outputPath := filepath.Join(convertOutputDir, config.Filename)
+	// Print results
+	fmt.Printf("\n✅ Conversion completed successfully!\n")
+	fmt.Printf("📦 Generated %d configuration file(s):\n", len(result.GeneratedFiles))
+	for _, file := range result.GeneratedFiles {
+		fmt.Printf("   ✓ %s\n", file)
+	}
 
-		if err := os.WriteFile(outputPath, config.Content, 0644); err != nil {
-			return fmt.Errorf("failed to write %s config: %w", linterName, err)
+	if len(result.Errors) > 0 {
+		fmt.Printf("\n⚠️  Errors (%d):\n", len(result.Errors))
+		for linter, err := range result.Errors {
+			fmt.Printf("   ✗ %s: %v\n", linter, err)
 		}
-
-		fmt.Printf("✓ Generated %s configuration: %s\n", linterName, outputPath)
-
-		// Print rule count
-		if convResult, ok := result.Results[linterName]; ok {
-			fmt.Printf("  - Rules: %d\n", len(convResult.Rules))
-			if len(convResult.Warnings) > 0 {
-				fmt.Printf("  - Warnings: %d\n", len(convResult.Warnings))
-			}
-		}
-
-		filesWritten++
 	}
-
-	// Write internal code policy
-	codePolicyPath := filepath.Join(convertOutputDir, "code-policy.json")
-	codePolicyJSON, err := json.MarshalIndent(result.CodePolicy, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to serialize code policy: %w", err)
-	}
-
-	if err := os.WriteFile(codePolicyPath, codePolicyJSON, 0644); err != nil {
-		return fmt.Errorf("failed to write code policy: %w", err)
-	}
-
-	fmt.Printf("✓ Generated internal policy: %s\n", codePolicyPath)
-	filesWritten++
-
-	// Print summary
-	fmt.Printf("\n✓ Conversion complete: %d files written\n", filesWritten)
 
 	if len(result.Warnings) > 0 {
-		fmt.Printf("\nWarnings (%d):\n", len(result.Warnings))
+		fmt.Printf("\n⚠️  Warnings (%d):\n", len(result.Warnings))
 		for _, warning := range result.Warnings {
-			fmt.Printf("  ⚠ %s\n", warning)
+			fmt.Printf("   • %s\n", warning)
 		}
 	}
 

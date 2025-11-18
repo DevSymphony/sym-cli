@@ -2,548 +2,391 @@ package converter
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"reflect"
+	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/DevSymphony/sym-cli/internal/converter/linters"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// Converter converts user policy (A schema) to code policy (B schema)
+// LanguageLinterMapping defines which linters are available for each language
+var LanguageLinterMapping = map[string][]string{
+	"javascript": {"eslint", "prettier"},
+	"js":         {"eslint", "prettier"},
+	"typescript": {"tsc", "eslint", "prettier"},
+	"ts":         {"tsc", "eslint", "prettier"},
+	"tsx":        {"tsc", "eslint", "prettier"},
+	"jsx":        {"eslint", "prettier"},
+	"java":       {"checkstyle", "pmd"},
+}
+
+// Special linter for rules that don't fit any specific external linter
+const LLMValidatorEngine = "llm-validator"
+
+// Converter is the main converter with language-based routing
 type Converter struct {
-	llmClient  *llm.Client
-	inferencer *llm.Inferencer
+	llmClient *llm.Client
+	outputDir string
 }
 
-// ConverterOption is a functional option for configuring the converter
-type ConverterOption func(*Converter)
-
-// WithLLMClient sets the LLM client for inference
-func WithLLMClient(client *llm.Client) ConverterOption {
-	return func(c *Converter) {
-		c.llmClient = client
-		c.inferencer = llm.NewInferencer(client)
+// NewConverter creates a new converter instance
+func NewConverter(llmClient *llm.Client, outputDir string) *Converter {
+	if outputDir == "" {
+		outputDir = ".sym"
+	}
+	return &Converter{
+		llmClient: llmClient,
+		outputDir: outputDir,
 	}
 }
 
-// NewConverter creates a new converter
-func NewConverter(opts ...ConverterOption) *Converter {
-	c := &Converter{}
-
-	for _, opt := range opts {
-		opt(c)
-	}
-
-	return c
+// ConvertResult represents the result of conversion
+type ConvertResult struct {
+	GeneratedFiles []string          // List of generated file paths (including code-policy.json)
+	CodePolicy     *schema.CodePolicy // Generated code policy
+	Errors         map[string]error  // Errors per linter
+	Warnings       []string          // Conversion warnings
 }
 
-// Convert converts user policy to code policy
-func (c *Converter) Convert(userPolicy *schema.UserPolicy) (*schema.CodePolicy, error) {
+// Convert is the main entry point for converting user policy to linter configs
+func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) (*ConvertResult, error) {
 	if userPolicy == nil {
 		return nil, fmt.Errorf("user policy is nil")
 	}
 
+	// Step 1: Route rules by asking LLM which linters are appropriate
+	linterRules := c.routeRulesWithLLM(ctx, userPolicy)
+
+	// Step 2: Create output directory
+	if err := os.MkdirAll(c.outputDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create output directory: %w", err)
+	}
+
+	// Step 3: Build CodePolicy with linter mappings
 	codePolicy := &schema.CodePolicy{
-		Version: userPolicy.Version,
-		Rules:   make([]schema.PolicyRule, 0, len(userPolicy.Rules)),
+		Version: "1.0",
+		Rules:   []schema.PolicyRule{},
 		Enforce: schema.EnforceSettings{
-			Stages: []string{"pre-commit"},
+			Stages: []string{"pre-commit", "pre-push"},
 			FailOn: []string{"error"},
 		},
 	}
 
-	if codePolicy.Version == "" {
-		codePolicy.Version = "1.0.0"
-	}
+	// Track which linters each rule maps to
+	ruleToLinters := make(map[string][]string) // rule ID -> linter names
 
-	// Convert RBAC
-	if userPolicy.RBAC != nil {
-		codePolicy.RBAC = c.convertRBAC(userPolicy.RBAC)
-	}
-
-	// Convert rules
-	for i, userRule := range userPolicy.Rules {
-		policyRule, err := c.convertRule(&userRule, userPolicy.Defaults, i)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert rule %d: %w", i, err)
-		}
-		codePolicy.Rules = append(codePolicy.Rules, *policyRule)
-	}
-
-	return codePolicy, nil
-}
-
-// convertWithEngines converts user policy to code policy with engine mappings
-func (c *Converter) convertWithEngines(userPolicy *schema.UserPolicy, engineMap map[string]string) (*schema.CodePolicy, error) {
-	if userPolicy == nil {
-		return nil, fmt.Errorf("user policy is nil")
-	}
-
-	codePolicy := &schema.CodePolicy{
-		Version: userPolicy.Version,
-		Rules:   make([]schema.PolicyRule, 0, len(userPolicy.Rules)),
-		Enforce: schema.EnforceSettings{
-			Stages: []string{"pre-commit"},
-			FailOn: []string{"error"},
-		},
-	}
-
-	if codePolicy.Version == "" {
-		codePolicy.Version = "1.0.0"
-	}
-
-	// Convert RBAC
-	if userPolicy.RBAC != nil {
-		codePolicy.RBAC = c.convertRBAC(userPolicy.RBAC)
-	}
-
-	// Convert rules with engine information
-	for i, userRule := range userPolicy.Rules {
-		policyRule, err := c.convertRule(&userRule, userPolicy.Defaults, i)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert rule %d: %w", i, err)
-		}
-
-		// Update engine field based on mapping
-		if engine, ok := engineMap[userRule.ID]; ok {
-			policyRule.Check["engine"] = engine
-		} else {
-			// Fallback to llm-validator if no mapping found
-			policyRule.Check["engine"] = "llm-validator"
-		}
-
-		codePolicy.Rules = append(codePolicy.Rules, *policyRule)
-	}
-
-	return codePolicy, nil
-}
-
-// convertRBAC converts user RBAC to policy RBAC
-func (c *Converter) convertRBAC(userRBAC *schema.UserRBAC) *schema.PolicyRBAC {
-	policyRBAC := &schema.PolicyRBAC{
-		Roles: make(map[string]schema.PolicyRole),
-	}
-
-	for roleName, userRole := range userRBAC.Roles {
-		permissions := make([]schema.Permission, 0)
-
-		// Convert allowWrite
-		for _, path := range userRole.AllowWrite {
-			permissions = append(permissions, schema.Permission{
-				Path:    path,
-				Read:    true,
-				Write:   true,
-				Execute: false,
-			})
-		}
-
-		// Convert denyWrite
-		for _, path := range userRole.DenyWrite {
-			permissions = append(permissions, schema.Permission{
-				Path:    path,
-				Read:    true,
-				Write:   false,
-				Execute: false,
-			})
-		}
-
-		// Convert allowExec
-		for _, path := range userRole.AllowExec {
-			permissions = append(permissions, schema.Permission{
-				Path:    path,
-				Read:    true,
-				Write:   false,
-				Execute: true,
-			})
-		}
-
-		policyRBAC.Roles[roleName] = schema.PolicyRole{
-			Permissions: permissions,
+	for linterName, rules := range linterRules {
+		for _, rule := range rules {
+			ruleToLinters[rule.ID] = append(ruleToLinters[rule.ID], linterName)
 		}
 	}
 
-	return policyRBAC
-}
-
-// convertRule converts a user rule to policy rule
-func (c *Converter) convertRule(userRule *schema.UserRule, defaults *schema.UserDefaults, index int) (*schema.PolicyRule, error) {
-	// Generate ID if not provided
-	id := userRule.ID
-	if id == "" {
-		id = fmt.Sprintf("RULE-%d", index+1)
+	// Step 4: Convert rules for each linter in parallel using goroutines
+	result := &ConvertResult{
+		GeneratedFiles: []string{},
+		CodePolicy:     codePolicy,
+		Errors:         make(map[string]error),
+		Warnings:       []string{},
 	}
 
-	// Determine severity
-	severity := userRule.Severity
-	if severity == "" && defaults != nil {
-		severity = defaults.Severity
-	}
-	if severity == "" {
-		severity = "error"
-	}
+	var wg sync.WaitGroup
+	var mu sync.Mutex
 
-	// Build selector
-	var selector *schema.Selector
-	if len(userRule.Languages) > 0 || len(userRule.Include) > 0 || len(userRule.Exclude) > 0 {
-		selector = &schema.Selector{
-			Languages: userRule.Languages,
-			Include:   userRule.Include,
-			Exclude:   userRule.Exclude,
-		}
-	} else if defaults != nil && (len(defaults.Languages) > 0 || len(defaults.Include) > 0 || len(defaults.Exclude) > 0) {
-		selector = &schema.Selector{
-			Languages: defaults.Languages,
-			Include:   defaults.Include,
-			Exclude:   defaults.Exclude,
-		}
-	}
-
-	// For now, create a basic check structure with llm-validator as default engine
-	check := map[string]any{
-		"engine": "llm-validator",
-		"desc":   userRule.Say,
-	}
-
-	// Merge params if provided
-	for k, v := range userRule.Params {
-		check[k] = v
-	}
-
-	// Build remedy
-	var remedy *schema.Remedy
-	autofix := userRule.Autofix
-	if !autofix && defaults != nil {
-		autofix = defaults.Autofix
-	}
-	if autofix {
-		remedy = &schema.Remedy{
-			Autofix: true,
-		}
-	}
-
-	policyRule := &schema.PolicyRule{
-		ID:       id,
-		Enabled:  true,
-		Category: userRule.Category,
-		Severity: severity,
-		Desc:     userRule.Say,
-		When:     selector,
-		Check:    check,
-		Remedy:   remedy,
-		Message:  userRule.Message,
-	}
-
-	if policyRule.Category == "" {
-		policyRule.Category = "custom"
-	}
-
-	return policyRule, nil
-}
-
-// MultiTargetConvertOptions represents options for multi-target conversion
-type MultiTargetConvertOptions struct {
-	Targets             []string // Linter targets (e.g., "eslint", "checkstyle", "pmd")
-	OutputDir           string   // Output directory for generated files
-	ConfidenceThreshold float64  // Minimum confidence for LLM inference
-}
-
-// MultiTargetConvertResult represents the result of multi-target conversion
-type MultiTargetConvertResult struct {
-	CodePolicy    *schema.CodePolicy                   // Internal policy
-	LinterConfigs map[string]*linters.LinterConfig     // Linter-specific configs
-	Results       map[string]*linters.ConversionResult // Detailed results per linter
-	Warnings      []string                             // Overall warnings
-}
-
-// ConvertMultiTarget converts user policy to multiple linter configurations
-func (c *Converter) ConvertMultiTarget(ctx context.Context, userPolicy *schema.UserPolicy, opts MultiTargetConvertOptions) (*MultiTargetConvertResult, error) {
-	if userPolicy == nil {
-		return nil, fmt.Errorf("user policy is nil")
-	}
-
-	// Default options
-	if opts.ConfidenceThreshold == 0 {
-		opts.ConfidenceThreshold = 0.7
-	}
-
-	if len(opts.Targets) == 0 {
-		opts.Targets = []string{"all"}
-	}
-
-	result := &MultiTargetConvertResult{
-		CodePolicy:    nil, // Will be generated after linter conversion
-		LinterConfigs: make(map[string]*linters.LinterConfig),
-		Results:       make(map[string]*linters.ConversionResult),
-		Warnings:      []string{},
-	}
-
-	// Resolve target linters
-	targetConverters, err := c.resolveTargets(opts.Targets)
-	if err != nil {
-		return nil, fmt.Errorf("failed to resolve targets: %w", err)
-	}
-
-	// Aggregate engine mappings: ruleID -> engine name
-	engineMap := make(map[string]string)
-
-	// Convert rules for each target linter
-	for _, converter := range targetConverters {
-		linterName := converter.Name()
-
-		convResult, err := c.convertForLinter(ctx, userPolicy, converter, opts.ConfidenceThreshold)
-		if err != nil {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: conversion failed: %v", linterName, err))
+	for linterName, rules := range linterRules {
+		if len(rules) == 0 {
 			continue
 		}
 
-		result.Results[linterName] = convResult
-		result.LinterConfigs[linterName] = convResult.Config
+		// Skip llm-validator - it will be handled in CodePolicy only
+		if linterName == LLMValidatorEngine {
+			continue
+		}
 
-		// Aggregate engine mappings
-		// Priority: first linter that successfully converts wins
-		for ruleID, engine := range convResult.RuleEngineMap {
-			if _, exists := engineMap[ruleID]; !exists || engine != "llm-validator" {
-				engineMap[ruleID] = engine
+		wg.Add(1)
+		go func(linter string, ruleSet []schema.UserRule) {
+			defer wg.Done()
+
+			// Get linter converter
+			converter := c.getLinterConverter(linter)
+			if converter == nil {
+				mu.Lock()
+				result.Errors[linter] = fmt.Errorf("unsupported linter: %s", linter)
+				mu.Unlock()
+				return
 			}
+
+			// Convert rules using LLM
+			configFile, err := converter.ConvertRules(ctx, ruleSet, c.llmClient)
+			if err != nil {
+				mu.Lock()
+				result.Errors[linter] = fmt.Errorf("conversion failed: %w", err)
+				mu.Unlock()
+				return
+			}
+
+			// Write config file to .sym directory
+			outputPath := filepath.Join(c.outputDir, configFile.Filename)
+			if err := os.WriteFile(outputPath, configFile.Content, 0644); err != nil {
+				mu.Lock()
+				result.Errors[linter] = fmt.Errorf("failed to write file: %w", err)
+				mu.Unlock()
+				return
+			}
+
+			mu.Lock()
+			result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
+			mu.Unlock()
+
+			fmt.Printf("✓ Generated %s configuration: %s\n", linter, outputPath)
+		}(linterName, rules)
+	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
+
+	// Check if we have any successful conversions
+	if len(result.GeneratedFiles) == 0 && len(result.Errors) > 0 {
+		return result, fmt.Errorf("all conversions failed")
+	}
+
+	// Step 5: Generate CodePolicy rules from UserPolicy
+	for _, userRule := range userPolicy.Rules {
+		linters := ruleToLinters[userRule.ID]
+		if len(linters) == 0 {
+			continue // Skip rules that didn't map to any linter
 		}
 
-		// Collect warnings
-		for _, warning := range convResult.Warnings {
-			result.Warnings = append(result.Warnings, fmt.Sprintf("%s: %s", linterName, warning))
+		// Create a PolicyRule for each linter this rule applies to
+		for _, linterName := range linters {
+			policyRule := schema.PolicyRule{
+				ID:       fmt.Sprintf("%s-%s", userRule.ID, linterName),
+				Enabled:  true,
+				Category: userRule.Category,
+				Severity: userRule.Severity,
+				Desc:     userRule.Say,
+				Message:  userRule.Message,
+				Check: map[string]any{
+					"engine": linterName, // External linter name
+					"desc":   userRule.Say,
+				},
+			}
+
+			// Add selector if languages are specified
+			if len(userRule.Languages) > 0 || len(userRule.Include) > 0 || len(userRule.Exclude) > 0 {
+				policyRule.When = &schema.Selector{
+					Languages: userRule.Languages,
+					Include:   userRule.Include,
+					Exclude:   userRule.Exclude,
+				}
+			}
+
+			// Add remedy if autofix is enabled
+			if userRule.Autofix {
+				policyRule.Remedy = &schema.Remedy{
+					Autofix: true,
+					Tool:    linterName,
+				}
+			}
+
+			// Use defaults if not specified
+			if policyRule.Severity == "" && userPolicy.Defaults != nil {
+				policyRule.Severity = userPolicy.Defaults.Severity
+			}
+			if policyRule.Severity == "" {
+				policyRule.Severity = "error"
+			}
+
+			codePolicy.Rules = append(codePolicy.Rules, policyRule)
 		}
 	}
 
-	// Generate internal code policy with engine mappings
-	codePolicy, err := c.convertWithEngines(userPolicy, engineMap)
+	// Step 6: Write code-policy.json
+	codePolicyPath := filepath.Join(c.outputDir, "code-policy.json")
+	codePolicyJSON, err := json.MarshalIndent(codePolicy, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("failed to convert to code policy: %w", err)
+		return result, fmt.Errorf("failed to marshal code policy: %w", err)
 	}
 
-	result.CodePolicy = codePolicy
+	if err := os.WriteFile(codePolicyPath, codePolicyJSON, 0644); err != nil {
+		return result, fmt.Errorf("failed to write code policy: %w", err)
+	}
+
+	result.GeneratedFiles = append(result.GeneratedFiles, codePolicyPath)
+	fmt.Printf("✓ Generated code policy: %s\n", codePolicyPath)
 
 	return result, nil
 }
 
-// convertForLinter converts rules for a specific linter
-func (c *Converter) convertForLinter(ctx context.Context, userPolicy *schema.UserPolicy, converter linters.LinterConverter, confidenceThreshold float64) (*linters.ConversionResult, error) {
-	result := &linters.ConversionResult{
-		LinterName:    converter.Name(),
-		Rules:         []*linters.LinterRule{},
-		Warnings:      []string{},
-		Errors:        []error{},
-		RuleEngineMap: make(map[string]string), // Track which engine handles each rule
-	}
+// routeRulesWithLLM uses LLM to determine which linters are appropriate for each rule
+func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.UserPolicy) map[string][]schema.UserRule {
+	linterRules := make(map[string][]schema.UserRule)
 
-	// Filter rules by language if needed
-	supportedLangs := converter.SupportedLanguages()
-
-	// Collect applicable rules
-	type ruleWithIndex struct {
-		rule  schema.UserRule
-		index int
-	}
-	var applicableRules []ruleWithIndex
-
-	for i, userRule := range userPolicy.Rules {
-		if c.ruleAppliesToLanguages(userRule, supportedLangs, userPolicy.Defaults) {
-			applicableRules = append(applicableRules, ruleWithIndex{rule: userRule, index: i})
+	for _, rule := range userPolicy.Rules {
+		// Get languages for this rule
+		languages := rule.Languages
+		if len(languages) == 0 && userPolicy.Defaults != nil {
+			languages = userPolicy.Defaults.Languages
 		}
-	}
 
-	if len(applicableRules) == 0 {
-		// No applicable rules, return empty result
-		config, err := converter.GenerateConfig(result.Rules)
-		if err != nil {
-			return nil, fmt.Errorf("failed to generate config: %w", err)
-		}
-		result.Config = config
-		return result, nil
-	}
-
-	// Infer rule intents in parallel
-	if c.inferencer == nil {
-		return nil, fmt.Errorf("LLM client not configured")
-	}
-
-	type inferenceJob struct {
-		ruleWithIndex
-		intent  *llm.RuleIntent
-		err     error
-		warning string
-	}
-
-	// Create worker pool with concurrency limit
-	maxWorkers := 5 // Limit concurrent LLM API calls
-	jobs := make(chan ruleWithIndex, len(applicableRules))
-	results := make(chan inferenceJob, len(applicableRules))
-
-	// Start workers
-	for w := 0; w < maxWorkers; w++ {
-		go func() {
-			for job := range jobs {
-				inferResult, err := c.inferencer.InferFromUserRule(ctx, &job.rule)
-
-				jobResult := inferenceJob{
-					ruleWithIndex: job,
-				}
-
-				if err != nil {
-					jobResult.err = err
-					jobResult.warning = fmt.Sprintf("Rule %d (%s): %v", job.index+1, job.rule.ID, err)
-				} else {
-					jobResult.intent = inferResult.Intent
-
-					// Check confidence threshold
-					if inferResult.Intent.Confidence < confidenceThreshold {
-						jobResult.warning = fmt.Sprintf("Rule %d (%s): low confidence %.2f",
-							job.index+1, job.rule.ID, inferResult.Intent.Confidence)
-					}
-				}
-
-				results <- jobResult
-			}
-		}()
-	}
-
-	// Send jobs
-	for _, rule := range applicableRules {
-		jobs <- rule
-	}
-	close(jobs)
-
-	// Collect results
-	inferenceResults := make(map[int]inferenceJob)
-	for i := 0; i < len(applicableRules); i++ {
-		jobResult := <-results
-		inferenceResults[jobResult.index] = jobResult
-	}
-	close(results)
-
-	// Process results in original order
-	for _, ruleInfo := range applicableRules {
-		jobResult := inferenceResults[ruleInfo.index]
-
-		if jobResult.err != nil {
-			result.Warnings = append(result.Warnings, jobResult.warning)
+		// Get available linters for these languages
+		availableLinters := c.getAvailableLinters(languages)
+		if len(availableLinters) == 0 {
+			// No language-specific linters, use llm-validator
+			linterRules[LLMValidatorEngine] = append(linterRules[LLMValidatorEngine], rule)
 			continue
 		}
 
-		if jobResult.warning != "" {
-			result.Warnings = append(result.Warnings, jobResult.warning)
-		}
+		// Ask LLM which linters are appropriate for this rule
+		selectedLinters := c.selectLintersForRule(ctx, rule, availableLinters)
 
-		// Convert to linter-specific rule
-		linterRule, err := converter.Convert(&ruleInfo.rule, jobResult.intent)
-		if err != nil {
-			result.Errors = append(result.Errors, fmt.Errorf("rule %d: %w", ruleInfo.index+1, err))
-			continue
-		}
-
-		result.Rules = append(result.Rules, linterRule)
-
-		// Track which engine will validate this rule
-		// Check if the rule has meaningful configuration content
-		hasContent := false
-		if len(linterRule.Config) > 0 {
-			// Check if config has actual rule content (not just empty nested structures)
-			for key, value := range linterRule.Config {
-				if key == "modules" && value != nil {
-					// For Checkstyle, check if modules slice is not empty
-					v := reflect.ValueOf(value)
-					if v.Kind() == reflect.Slice && v.Len() > 0 {
-						hasContent = true
-						break
-					}
-				} else if key == "rules" && value != nil {
-					// For PMD, check if rules array/slice is not empty
-					v := reflect.ValueOf(value)
-					if v.Kind() == reflect.Slice && v.Len() > 0 {
-						hasContent = true
-						break
-					}
-				} else if key != "" && value != nil {
-					// For ESLint and other formats with direct config
-					hasContent = true
-					break
-				}
-			}
-		}
-
-		if hasContent {
-			result.RuleEngineMap[ruleInfo.rule.ID] = converter.Name()
+		if len(selectedLinters) == 0 {
+			// LLM couldn't map to any linter, use llm-validator
+			linterRules[LLMValidatorEngine] = append(linterRules[LLMValidatorEngine], rule)
 		} else {
-			result.RuleEngineMap[ruleInfo.rule.ID] = "llm-validator"
-		}
-	}
-
-	// Generate final configuration
-	config, err := converter.GenerateConfig(result.Rules)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate config: %w", err)
-	}
-
-	result.Config = config
-
-	return result, nil
-}
-
-// resolveTargets resolves target names to converters
-func (c *Converter) resolveTargets(targets []string) ([]linters.LinterConverter, error) {
-	if len(targets) == 1 && strings.ToLower(targets[0]) == "all" {
-		// Return all registered converters
-		return linters.GetAll(), nil
-	}
-
-	converters := []linters.LinterConverter{}
-	for _, target := range targets {
-		converter, err := linters.Get(target)
-		if err != nil {
-			return nil, fmt.Errorf("target %s: %w", target, err)
-		}
-		converters = append(converters, converter)
-	}
-
-	return converters, nil
-}
-
-// ruleAppliesToLanguages checks if a rule applies to any of the supported languages
-func (c *Converter) ruleAppliesToLanguages(rule schema.UserRule, supportedLangs []string, defaults *schema.UserDefaults) bool {
-	// Get rule's target languages
-	targetLangs := rule.Languages
-	if len(targetLangs) == 0 && defaults != nil {
-		targetLangs = defaults.Languages
-	}
-
-	// If no target languages specified, apply to all
-	if len(targetLangs) == 0 {
-		return true
-	}
-
-	// Check if any target language matches supported languages
-	for _, targetLang := range targetLangs {
-		targetLang = strings.ToLower(targetLang)
-		for _, supportedLang := range supportedLangs {
-			supportedLang = strings.ToLower(supportedLang)
-			if targetLang == supportedLang || strings.Contains(supportedLang, targetLang) || strings.Contains(targetLang, supportedLang) {
-				return true
+			// Add rule to selected linters
+			for _, linter := range selectedLinters {
+				linterRules[linter] = append(linterRules[linter], rule)
 			}
 		}
 	}
 
-	return false
+	return linterRules
 }
 
-// GetAll is a helper to get all registered converters
-func GetAll() []linters.LinterConverter {
-	registry := linters.List()
-	converters := make([]linters.LinterConverter, 0, len(registry))
-	for _, name := range registry {
-		converter, err := linters.Get(name)
-		if err == nil {
-			converters = append(converters, converter)
+// getAvailableLinters returns available linters for given languages
+func (c *Converter) getAvailableLinters(languages []string) []string {
+	if len(languages) == 0 {
+		// If no languages specified, include all linters
+		languages = []string{"javascript", "typescript", "java"}
+	}
+
+	linterSet := make(map[string]bool)
+	for _, lang := range languages {
+		if linters, ok := LanguageLinterMapping[lang]; ok {
+			for _, linter := range linters {
+				linterSet[linter] = true
+			}
 		}
 	}
-	return converters
+
+	result := []string{}
+	for linter := range linterSet {
+		result = append(result, linter)
+	}
+	return result
+}
+
+// selectLintersForRule uses LLM to determine which linters are appropriate for a rule
+func (c *Converter) selectLintersForRule(ctx context.Context, rule schema.UserRule, availableLinters []string) []string {
+	systemPrompt := fmt.Sprintf(`You are a code quality expert. Analyze the given coding rule and determine which linters can ACTUALLY enforce it using their NATIVE rules (without plugins).
+
+Available linters and NATIVE capabilities:
+- eslint: ONLY native ESLint rules (no-console, no-unused-vars, eqeqeq, no-var, camelcase, new-cap, max-len, max-lines, no-eval, etc.)
+  - CAN: Simple syntax checks, variable naming, console usage, basic patterns
+  - CANNOT: Complex business logic, context-aware rules, file naming, advanced async patterns
+- prettier: Code formatting ONLY (quotes, semicolons, indentation, line length, trailing commas)
+- tsc: TypeScript type checking ONLY (strict modes, noImplicitAny, strictNullChecks, type inference)
+- checkstyle: Java style checks (naming, whitespace, imports, line length, complexity)
+- pmd: Java code quality (unused code, empty blocks, naming conventions, design issues)
+
+STRICT Rules for selection:
+1. ONLY select if the linter has a NATIVE rule that can enforce this
+2. If the rule requires understanding business logic or context → return []
+3. If the rule requires custom plugins → return []
+4. If the rule is about file naming → return []
+5. If the rule requires deep semantic analysis → return []
+6. When in doubt, return [] (better to use llm-validator than fail)
+
+Available linters for this rule: %s
+
+Return ONLY a JSON array of linter names (no markdown):
+["linter1", "linter2"] or []
+
+Examples:
+
+Input: "Use single quotes for strings"
+Output: ["prettier"]
+
+Input: "No console.log allowed"
+Output: ["eslint"]
+
+Input: "Classes start with capital letter"
+Output: ["eslint"]
+
+Input: "Maximum line length is 120"
+Output: ["prettier"]
+
+Input: "No implicit any types"
+Output: ["tsc"]
+
+Input: "All async functions must have try-catch"
+Output: []
+Reason: Requires semantic understanding of error handling
+
+Input: "File names must be kebab-case"
+Output: []
+Reason: File naming requires plugin
+
+Input: "API handlers must return proper status codes"
+Output: []
+Reason: Requires business logic understanding
+
+Input: "Database queries must use parameterized queries"
+Output: []
+Reason: Requires understanding SQL injection context
+
+Input: "No hardcoded API keys or passwords"
+Output: []
+Reason: Requires semantic analysis of what constitutes secrets
+
+Input: "Imports from large packages must be specific"
+Output: []
+Reason: Requires knowing which packages are "large"`, availableLinters)
+
+	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
+
+	// Call LLM
+	response, err := c.llmClient.Complete(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		fmt.Printf("Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
+		return []string{} // Will fall back to llm-validator
+	}
+
+	// Parse response
+	response = strings.TrimSpace(response)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	var selectedLinters []string
+	if err := json.Unmarshal([]byte(response), &selectedLinters); err != nil {
+		fmt.Printf("Warning: Failed to parse LLM response for rule %s: %v\n", rule.ID, err)
+		return []string{} // Will fall back to llm-validator
+	}
+
+	return selectedLinters
+}
+
+// getLinterConverter returns the appropriate converter for a linter
+func (c *Converter) getLinterConverter(linterName string) linters.LinterConverter {
+	switch linterName {
+	case "eslint":
+		return linters.NewESLintLinterConverter()
+	case "prettier":
+		return linters.NewPrettierLinterConverter()
+	case "tsc":
+		return linters.NewTSCLinterConverter()
+	case "checkstyle":
+		return linters.NewCheckstyleLinterConverter()
+	case "pmd":
+		return linters.NewPMDLinterConverter()
+	default:
+		return nil
+	}
 }

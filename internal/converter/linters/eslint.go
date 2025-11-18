@@ -1,318 +1,235 @@
 package linters
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// ESLintConverter converts rules to ESLint configuration
-type ESLintConverter struct {
-	verbose bool
-}
+// ESLintLinterConverter converts rules to ESLint configuration using LLM
+type ESLintLinterConverter struct{}
 
-// NewESLintConverter creates a new ESLint converter
-func NewESLintConverter(verbose bool) *ESLintConverter {
-	return &ESLintConverter{
-		verbose: verbose,
-	}
+// NewESLintLinterConverter creates a new ESLint converter
+func NewESLintLinterConverter() *ESLintLinterConverter {
+	return &ESLintLinterConverter{}
 }
 
 // Name returns the linter name
-func (c *ESLintConverter) Name() string {
+func (c *ESLintLinterConverter) Name() string {
 	return "eslint"
 }
 
 // SupportedLanguages returns supported languages
-func (c *ESLintConverter) SupportedLanguages() []string {
-	return []string{"javascript", "typescript", "js", "ts", "jsx", "tsx"}
+func (c *ESLintLinterConverter) SupportedLanguages() []string {
+	return []string{"javascript", "js", "typescript", "ts", "jsx", "tsx"}
 }
 
-// SupportedCategories returns supported rule categories
-func (c *ESLintConverter) SupportedCategories() []string {
-	return []string{
-		"naming",
-		"formatting",
-		"style",
-		"length",
-		"security",
-		"error_handling",
-		"dependency",
-		"import",
-	}
-}
-
-// Convert converts a user rule with intent to ESLint rule
-func (c *ESLintConverter) Convert(userRule *schema.UserRule, intent *llm.RuleIntent) (*LinterRule, error) {
-	if userRule == nil {
-		return nil, fmt.Errorf("user rule is nil")
+// ConvertRules converts user rules to ESLint configuration using LLM
+func (c *ESLintLinterConverter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error) {
+	if llmClient == nil {
+		return nil, fmt.Errorf("LLM client is required")
 	}
 
-	if intent == nil {
-		return nil, fmt.Errorf("rule intent is nil")
+	// Convert rules in parallel using goroutines
+	type ruleResult struct {
+		index    int
+		ruleName string
+		config   interface{}
+		err      error
 	}
 
-	severity := c.mapSeverity(userRule.Severity)
+	results := make(chan ruleResult, len(rules))
+	var wg sync.WaitGroup
 
-	// Map based on engine type
-	var config map[string]any
-	var err error
+	// Process each rule in parallel
+	for i, rule := range rules {
+		wg.Add(1)
+		go func(idx int, r schema.UserRule) {
+			defer wg.Done()
 
-	switch intent.Engine {
-	case "pattern":
-		config, err = c.convertPatternRule(intent, severity)
-	case "length":
-		config, err = c.convertLengthRule(intent, severity)
-	case "style":
-		config, err = c.convertStyleRule(intent, severity)
-	case "ast":
-		config, err = c.convertASTRule(intent, severity)
-	default:
-		// Custom or unsupported engine - create generic comment
-		return &LinterRule{
-			ID:       userRule.ID,
-			Severity: severity,
-			Config:   make(map[string]any),
-			Comment:  fmt.Sprintf("Unsupported rule (engine: %s): %s", intent.Engine, userRule.Say),
-		}, nil
+			ruleName, config, err := c.convertSingleRule(ctx, r, llmClient)
+			results <- ruleResult{
+				index:    idx,
+				ruleName: ruleName,
+				config:   config,
+				err:      err,
+			}
+		}(i, rule)
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert rule: %w", err)
+	// Wait for all goroutines
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	eslintRules := make(map[string]interface{})
+	var errors []string
+	skippedCount := 0
+
+	for result := range results {
+		if result.err != nil {
+			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
+			fmt.Printf("⚠️  ESLint rule %d conversion error: %v\n", result.index+1, result.err)
+			continue
+		}
+
+		if result.ruleName != "" {
+			eslintRules[result.ruleName] = result.config
+			fmt.Printf("✓ ESLint rule %d → %s\n", result.index+1, result.ruleName)
+		} else {
+			skippedCount++
+			fmt.Printf("⊘ ESLint rule %d skipped (cannot be enforced by ESLint)\n", result.index+1)
+		}
 	}
 
-	return &LinterRule{
-		ID:       userRule.ID,
-		Severity: severity,
-		Config:   config,
-		Comment:  userRule.Say,
-	}, nil
-}
+	if skippedCount > 0 {
+		fmt.Printf("ℹ️  %d rule(s) skipped for ESLint (will use llm-validator)\n", skippedCount)
+	}
 
-// GenerateConfig generates ESLint configuration from rules
-func (c *ESLintConverter) GenerateConfig(rules []*LinterRule) (*LinterConfig, error) {
-	eslintConfig := map[string]any{
+	if len(eslintRules) == 0 {
+		return nil, fmt.Errorf("no rules converted successfully: %v", errors)
+	}
+
+	// Build ESLint configuration
+	eslintConfig := map[string]interface{}{
 		"env": map[string]bool{
 			"es2021":  true,
 			"node":    true,
 			"browser": true,
 		},
-		"rules": make(map[string]any),
+		"parserOptions": map[string]interface{}{
+			"ecmaVersion": "latest",
+			"sourceType":  "module",
+		},
+		"rules": eslintRules,
 	}
 
-	rulesMap := eslintConfig["rules"].(map[string]any)
-
-	// Merge all rule configs
-	for _, rule := range rules {
-		for ruleID, ruleConfig := range rule.Config {
-			rulesMap[ruleID] = ruleConfig
-		}
-	}
-
-	// Add comments as a separate field (not part of standard ESLint config)
-	comments := make(map[string]string)
-	for _, rule := range rules {
-		if rule.Comment != "" {
-			for ruleID := range rule.Config {
-				comments[ruleID] = rule.Comment
-			}
-		}
-	}
-
-	if len(comments) > 0 {
-		eslintConfig["_comments"] = comments
-	}
-
+	// Marshal to JSON
 	content, err := json.MarshalIndent(eslintConfig, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal ESLint config: %w", err)
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
 	return &LinterConfig{
-		Format:   "json",
 		Filename: ".eslintrc.json",
 		Content:  content,
+		Format:   "json",
 	}, nil
 }
 
-// convertPatternRule converts pattern engine rules to ESLint rules
-func (c *ESLintConverter) convertPatternRule(intent *llm.RuleIntent, severity string) (map[string]any, error) {
-	config := make(map[string]any)
+// convertSingleRule converts a single user rule to ESLint rule using LLM
+func (c *ESLintLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (string, interface{}, error) {
+	systemPrompt := `You are an ESLint configuration expert. Convert natural language coding rules to ESLint rule configurations.
 
-	switch intent.Target {
-	case "identifier", "variable", "function", "class":
-		// Use id-match for identifier patterns
-		if len(intent.Patterns) > 0 {
-			pattern := intent.Patterns[0]
-			config["id-match"] = []any{
-				severity,
-				pattern,
-				map[string]any{
-					"properties":       false,
-					"classFields":      false,
-					"onlyDeclarations": true,
-				},
-			}
-		} else if caseStyle, ok := intent.Params["case"].(string); ok {
-			// Convert case style to regex
-			pattern := c.caseToRegex(caseStyle)
-			config["id-match"] = []any{
-				severity,
-				pattern,
-				map[string]any{
-					"properties":       false,
-					"classFields":      false,
-					"onlyDeclarations": true,
-				},
-			}
-		}
-
-	case "content":
-		// Use no-restricted-syntax for content patterns
-		if len(intent.Patterns) > 0 {
-			pattern := intent.Patterns[0]
-			config["no-restricted-syntax"] = []any{
-				severity,
-				map[string]any{
-					"selector": fmt.Sprintf("Literal[value=/%s/]", pattern),
-					"message":  "Forbidden pattern detected",
-				},
-			}
-		}
-
-	case "import", "dependency":
-		// Use no-restricted-imports
-		if len(intent.Patterns) > 0 {
-			config["no-restricted-imports"] = []any{
-				severity,
-				map[string]any{
-					"patterns": intent.Patterns,
-				},
-			}
-		}
-
-	default:
-		return nil, fmt.Errorf("unsupported pattern target: %s", intent.Target)
-	}
-
-	return config, nil
+Return ONLY a JSON object (no markdown fences) with this structure:
+{
+  "rule_name": "eslint-rule-name",
+  "severity": "error|warn|off",
+  "options": {...}
 }
 
-// convertLengthRule converts length engine rules to ESLint rules
-func (c *ESLintConverter) convertLengthRule(intent *llm.RuleIntent, severity string) (map[string]any, error) {
-	config := make(map[string]any)
+Common ESLint rules:
+- Naming: camelcase, id-match, id-length, new-cap
+- Console: no-console, no-debugger, no-alert
+- Code Quality: no-unused-vars, no-undef, eqeqeq, prefer-const, no-var
+- Complexity: complexity, max-depth, max-nested-callbacks, max-lines-per-function
+- Length: max-len, max-lines, max-params, max-statements
+- Style: indent, quotes, semi, comma-dangle, brace-style
+- Imports: no-restricted-imports
+- Security: no-eval, no-implied-eval, no-new-func
 
-	max := c.getIntParam(intent.Params, "max")
-	min := c.getIntParam(intent.Params, "min")
-
-	switch intent.Scope {
-	case "line":
-		if max > 0 {
-			config["max-len"] = []any{
-				severity,
-				map[string]any{
-					"code": max,
-				},
-			}
-		}
-
-	case "file":
-		if max > 0 {
-			config["max-lines"] = []any{
-				severity,
-				map[string]any{
-					"max":            max,
-					"skipBlankLines": true,
-					"skipComments":   true,
-				},
-			}
-		}
-
-	case "function", "method":
-		if max > 0 {
-			config["max-lines-per-function"] = []any{
-				severity,
-				map[string]any{
-					"max":            max,
-					"skipBlankLines": true,
-					"skipComments":   true,
-				},
-			}
-		}
-
-	case "params", "parameters":
-		if max > 0 {
-			config["max-params"] = []any{severity, max}
-		}
-
-	default:
-		return nil, fmt.Errorf("unsupported length scope: %s", intent.Scope)
-	}
-
-	// Note: ESLint doesn't have min-len, so we ignore min for now
-	_ = min
-
-	return config, nil
+If the rule cannot be expressed in ESLint, return:
+{
+  "rule_name": "",
+  "severity": "off",
+  "options": null
 }
 
-// convertStyleRule converts style engine rules to ESLint rules
-func (c *ESLintConverter) convertStyleRule(intent *llm.RuleIntent, severity string) (map[string]any, error) {
-	config := make(map[string]any)
+Examples:
 
-	// Indent
-	if indent := c.getIntParam(intent.Params, "indent"); indent > 0 {
-		config["indent"] = []any{severity, indent}
-	}
-
-	// Quote style
-	if quote, ok := intent.Params["quote"].(string); ok {
-		config["quotes"] = []any{severity, quote}
-	}
-
-	// Semicolons
-	if semi, ok := intent.Params["semi"].(bool); ok {
-		if semi {
-			config["semi"] = []any{severity, "always"}
-		} else {
-			config["semi"] = []any{severity, "never"}
-		}
-	}
-
-	// Trailing comma
-	if trailingComma, ok := intent.Params["trailingComma"].(string); ok {
-		config["comma-dangle"] = []any{severity, trailingComma}
-	}
-
-	return config, nil
+Input: "No console.log allowed"
+Output:
+{
+  "rule_name": "no-console",
+  "severity": "error",
+  "options": null
 }
 
-// convertASTRule converts AST engine rules to ESLint rules
-func (c *ESLintConverter) convertASTRule(intent *llm.RuleIntent, severity string) (map[string]any, error) {
-	config := make(map[string]any)
-
-	// Cyclomatic complexity
-	if complexity := c.getIntParam(intent.Params, "complexity"); complexity > 0 {
-		config["complexity"] = []any{severity, complexity}
-	}
-
-	// Max depth
-	if depth := c.getIntParam(intent.Params, "depth"); depth > 0 {
-		config["max-depth"] = []any{severity, depth}
-	}
-
-	// Max nested callbacks
-	if callbacks := c.getIntParam(intent.Params, "callbacks"); callbacks > 0 {
-		config["max-nested-callbacks"] = []any{severity, callbacks}
-	}
-
-	return config, nil
+Input: "Functions must not exceed 50 lines"
+Output:
+{
+  "rule_name": "max-lines-per-function",
+  "severity": "error",
+  "options": {"max": 50, "skipBlankLines": true, "skipComments": true}
 }
 
-// mapSeverity maps Symphony severity to ESLint severity
-func (c *ESLintConverter) mapSeverity(severity string) string {
+Input: "Use camelCase for variables"
+Output:
+{
+  "rule_name": "camelcase",
+  "severity": "error",
+  "options": {"properties": "always"}
+}`
+
+	userPrompt := fmt.Sprintf("Convert this rule to ESLint configuration:\n\n%s", rule.Say)
+	if rule.Severity != "" {
+		userPrompt += fmt.Sprintf("\nSeverity: %s", rule.Severity)
+	}
+
+	// Call LLM
+	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return "", nil, fmt.Errorf("LLM call failed: %w", err)
+	}
+
+	// Parse response
+	response = strings.TrimSpace(response)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	var result struct {
+		RuleName string      `json:"rule_name"`
+		Severity string      `json:"severity"`
+		Options  interface{} `json:"options"`
+	}
+
+	if err := json.Unmarshal([]byte(response), &result); err != nil {
+		return "", nil, fmt.Errorf("failed to parse LLM response: %w", err)
+	}
+
+	// If rule_name is empty, this rule cannot be converted
+	if result.RuleName == "" {
+		return "", nil, nil
+	}
+
+	// Map user severity to ESLint severity if needed
+	severity := mapSeverity(rule.Severity)
+	if severity == "" {
+		severity = result.Severity
+	}
+
+	// Build rule configuration
+	var config interface{}
+	if result.Options != nil {
+		config = []interface{}{severity, result.Options}
+	} else {
+		config = severity
+	}
+
+	return result.RuleName, config, nil
+}
+
+// mapSeverity maps user severity to ESLint severity
+func mapSeverity(severity string) string {
 	switch strings.ToLower(severity) {
 	case "error":
 		return "error"
@@ -323,44 +240,4 @@ func (c *ESLintConverter) mapSeverity(severity string) string {
 	default:
 		return "error"
 	}
-}
-
-// caseToRegex converts case style name to regex pattern
-func (c *ESLintConverter) caseToRegex(caseStyle string) string {
-	switch strings.ToLower(caseStyle) {
-	case "pascalcase":
-		return "^[A-Z][a-zA-Z0-9]*$"
-	case "camelcase":
-		return "^[a-z][a-zA-Z0-9]*$"
-	case "snake_case":
-		return "^[a-z][a-z0-9_]*$"
-	case "screaming_snake_case":
-		return "^[A-Z][A-Z0-9_]*$"
-	case "kebab-case":
-		return "^[a-z][a-z0-9-]*$"
-	default:
-		return "^[a-zA-Z][a-zA-Z0-9]*$"
-	}
-}
-
-// getIntParam safely extracts an integer parameter
-func (c *ESLintConverter) getIntParam(params map[string]any, key string) int {
-	if val, ok := params[key]; ok {
-		switch v := val.(type) {
-		case int:
-			return v
-		case float64:
-			return int(v)
-		case string:
-			var i int
-			_, _ = fmt.Sscanf(v, "%d", &i)
-			return i
-		}
-	}
-	return 0
-}
-
-func init() {
-	// Register ESLint converter on package initialization
-	Register(NewESLintConverter(false))
 }
