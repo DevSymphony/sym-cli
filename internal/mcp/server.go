@@ -623,7 +623,7 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 	llmClient := llm.NewClient(apiKey)
 
 	// Create unified validator that handles all engines + RBAC
-	v := validator.NewValidator(validationPolicy, true) // verbose=true for debugging
+	v := validator.NewValidator(validationPolicy, false) // verbose=false for MCP
 	v.SetLLMClient(llmClient)
 	defer func() {
 		_ = v.Close() // Ignore close error in MCP context

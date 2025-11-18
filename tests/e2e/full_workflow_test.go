@@ -79,12 +79,22 @@ func TestE2E_FullWorkflow(t *testing.T) {
 		llm.WithTimeout(30*time.Second),
 	)
 
-	conv := converter.NewConverter(converter.WithLLMClient(client))
+	outputDir := filepath.Join(testDir, ".sym")
+	conv := converter.NewConverter(client, outputDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	convertedPolicy, err := conv.Convert(&userPolicy)
+	result, err := conv.Convert(ctx, &userPolicy)
+	require.NoError(t, err, "Conversion should succeed")
+
+	// Load the generated code policy
+	codePolicyPath := filepath.Join(outputDir, "code-policy.json")
+	codePolicyData, err := os.ReadFile(codePolicyPath)
+	require.NoError(t, err, "Should be able to read generated code policy")
+
+	var convertedPolicy schema.CodePolicy
+	err = json.Unmarshal(codePolicyData, &convertedPolicy)
 	require.NoError(t, err, "Conversion should succeed")
 	require.NotNil(t, convertedPolicy)
 
@@ -96,16 +106,10 @@ func TestE2E_FullWorkflow(t *testing.T) {
 		t.Logf("  Rule %d: %s (category: %s)", i+1, rule.ID, rule.Category)
 	}
 
-	// Save converted policy
-	convertedPolicyPath := filepath.Join(testDir, ".sym", "code-policy.json")
-	err = os.MkdirAll(filepath.Dir(convertedPolicyPath), 0755)
-	require.NoError(t, err)
-
-	convertedData, err := json.MarshalIndent(convertedPolicy, "", "  ")
-	require.NoError(t, err)
-	err = os.WriteFile(convertedPolicyPath, convertedData, 0644)
-	require.NoError(t, err)
-	t.Logf("✓ Saved converted policy: %s", convertedPolicyPath)
+	// Files are already written by converter
+	for _, filePath := range result.GeneratedFiles {
+		t.Logf("✓ Generated: %s", filePath)
+	}
 
 	// ========== STEP 3: LLM coding tool queries conventions via MCP ==========
 	t.Log("STEP 3: Simulating LLM tool querying conventions")
@@ -166,7 +170,7 @@ func ProcessData(data string) error {
 	// ========== STEP 4: Validate generated code ==========
 	t.Log("STEP 4: Validating generated code against conventions")
 
-	llmValidator := validator.NewLLMValidator(client, convertedPolicy)
+	llmValidator := validator.NewLLMValidator(client, &convertedPolicy)
 
 	// Validate BAD code
 	t.Log("STEP 4a: Validating BAD code (should find violations)")
