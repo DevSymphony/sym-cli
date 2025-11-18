@@ -32,10 +32,31 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	// Build command
 	pmdPath := a.getPMDPath()
 
+	// Ensure all file paths are absolute
+	// Convert relative paths using WorkDir as base
+	absFiles := make([]string, len(files))
+	for i, file := range files {
+		var absPath string
+		if filepath.IsAbs(file) {
+			// Already absolute, use as-is
+			absPath = file
+		} else {
+			// Relative path, resolve against WorkDir
+			absPath = filepath.Join(a.WorkDir, file)
+		}
+
+		// Verify file exists
+		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("file not found: %s", file)
+		}
+
+		absFiles[i] = absPath
+	}
+
 	// PMD command format: pmd check -d <files> -R <ruleset> -f json
 	args := []string{
 		"check",
-		"-d", strings.Join(files, ","), // Comma-separated file list
+		"-d", strings.Join(absFiles, ","), // Comma-separated file list
 		"-R", rulesetFile,
 		"-f", "json", // JSON output format
 		"--no-cache", // Disable cache for consistent results

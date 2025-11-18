@@ -36,7 +36,29 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 		"-c", configFile,
 		"-f", "xml", // XML output format
 	}
-	args = append(args, files...)
+
+	// Ensure all file paths are absolute
+	// Convert relative paths using WorkDir as base
+	absFiles := make([]string, len(files))
+	for i, file := range files {
+		var absPath string
+		if filepath.IsAbs(file) {
+			// Already absolute, use as-is
+			absPath = file
+		} else {
+			// Relative path, resolve against WorkDir
+			absPath = filepath.Join(a.WorkDir, file)
+		}
+
+		// Verify file exists
+		if _, err := os.Stat(absPath); os.IsNotExist(err) {
+			return nil, fmt.Errorf("file not found: %s", file)
+		}
+
+		absFiles[i] = absPath
+	}
+
+	args = append(args, absFiles...)
 
 	// Execute
 	start := time.Now()

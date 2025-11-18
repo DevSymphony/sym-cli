@@ -163,10 +163,19 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 			}
 
 			// Collect all changed files
+			// Convert absolute paths to relative paths for RBAC checking
 			changedFiles := make([]string, 0, len(changes))
 			for _, change := range changes {
 				if change.Status != "D" { // Skip deleted files
-					changedFiles = append(changedFiles, change.FilePath)
+					filePath := change.FilePath
+					// Convert absolute path to relative path from workDir
+					if filepath.IsAbs(filePath) {
+						relPath, err := filepath.Rel(v.workDir, filePath)
+						if err == nil {
+							filePath = relPath
+						}
+					}
+					changedFiles = append(changedFiles, filePath)
 				}
 			}
 

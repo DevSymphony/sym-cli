@@ -40,6 +40,14 @@ func parseOutput(output *adapter.ToolOutput) ([]adapter.Violation, error) {
 		return []adapter.Violation{}, nil
 	}
 
+	// If no output but non-zero exit code, something went wrong
+	if output.Stdout == "" {
+		if output.Stderr != "" {
+			return nil, fmt.Errorf("checkstyle failed (exit code %d): %s", output.ExitCode, output.Stderr)
+		}
+		return nil, fmt.Errorf("checkstyle failed with exit code %d but produced no output", output.ExitCode)
+	}
+
 	// Parse XML output
 	var result CheckstyleOutput
 	if err := xml.Unmarshal([]byte(output.Stdout), &result); err != nil {

@@ -55,7 +55,27 @@ func loadPolicyFromTestdata(t *testing.T, relativePath string) *schema.CodePolic
 // createTestValidator creates a validator with given policy and registers cleanup
 func createTestValidator(t *testing.T, pol *schema.CodePolicy) *validator.Validator {
 	t.Helper()
+
+	// Save current directory
+	originalDir, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Failed to get current directory: %v", err)
+	}
+
+	// Change to repo root so Validator.workDir is set correctly
+	repoRoot := getTestdataDir(t)
+	if err := os.Chdir(repoRoot); err != nil {
+		t.Fatalf("Failed to change to repo root: %v", err)
+	}
+
+	// Create validator (it will use repo root as workDir)
 	v := validator.NewValidator(pol, testing.Verbose())
+
+	// Change back to original directory
+	if err := os.Chdir(originalDir); err != nil {
+		t.Fatalf("Failed to change back to original directory: %v", err)
+	}
+
 	t.Cleanup(func() {
 		if err := v.Close(); err != nil {
 			t.Logf("Warning: failed to close validator: %v", err)
@@ -85,25 +105,17 @@ func createGitChangeFromFile(t *testing.T, filePath string) validator.GitChange 
 		}
 	}
 
-	// Convert absolute path to relative path from repo root
-	// FilePath should be relative like "testdata/rbac/src/components/Button.js"
-	// not absolute like "/workspace/testdata/rbac/src/components/Button.js"
-	relativePath := filePath
-	if filepath.IsAbs(filePath) {
-		// Get repo root
+	// Use absolute path for FilePath
+	// The adapters (checkstyle/pmd) will handle path resolution correctly
+	absPath := filePath
+	if !filepath.IsAbs(filePath) {
+		// If relative, make it absolute
 		cwd, _ := os.Getwd()
-		projectRoot := filepath.Join(cwd, "../..")
-		absProjectRoot, _ := filepath.Abs(projectRoot)
-
-		// Make path relative to project root
-		relPath, err := filepath.Rel(absProjectRoot, filePath)
-		if err == nil {
-			relativePath = relPath
-		}
+		absPath, _ = filepath.Abs(filepath.Join(cwd, filePath))
 	}
 
 	return validator.GitChange{
-		FilePath: relativePath,
+		FilePath: absPath,
 		Status:   "A", // Treat as Added file
 		Diff:     string(output),
 	}
