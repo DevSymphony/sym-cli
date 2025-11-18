@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+	"sync"
 
 	"github.com/DevSymphony/sym-cli/internal/engine/core"
 	"github.com/DevSymphony/sym-cli/internal/engine/registry"
@@ -467,22 +468,22 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 		coreRule := convertToCoreRule(rule)
 
 		// Execute validation on each change
-		for _, change := range relevantChanges {
-			if change.Status == "D" {
-				continue // Skip deleted files
+		// For LLM engine, use goroutines for parallel processing
+		if engineName == "llm-validator" {
+			if v.llmClient == nil {
+				fmt.Printf("⚠️  LLM client not configured for rule %s\n", rule.ID)
+				continue
 			}
 
-			result.Checked++
+			// Use goroutines for parallel LLM validation
+			var wg sync.WaitGroup
+			var mu sync.Mutex
+			llmValidator := NewLLMValidator(v.llmClient, v.policy)
 
-			// For LLM engine, validate the diff using LLMValidator
-			if engineName == "llm-validator" {
-				if v.llmClient == nil {
-					fmt.Printf("⚠️  LLM client not configured for rule %s\n", rule.ID)
-					continue
+			for _, change := range relevantChanges {
+				if change.Status == "D" {
+					continue // Skip deleted files
 				}
-
-				// Create LLMValidator to use its CheckRule method
-				llmValidator := NewLLMValidator(v.llmClient, v.policy)
 
 				// Extract added lines from diff
 				addedLines := ExtractAddedLines(change.Diff)
@@ -491,22 +492,50 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 				}
 
 				if len(addedLines) == 0 {
+					mu.Lock()
+					result.Checked++
 					result.Passed++
+					mu.Unlock()
 					continue
 				}
 
-				violation, err := llmValidator.CheckRule(ctx, change, addedLines, rule)
-				if err != nil {
-					fmt.Printf("⚠️  Validation failed for rule %s: %v\n", rule.ID, err)
-					continue
+				// Increment counter and launch goroutine
+				mu.Lock()
+				result.Checked++
+				mu.Unlock()
+
+				wg.Add(1)
+				go func(ch GitChange, lines []string, r schema.PolicyRule) {
+					defer wg.Done()
+
+					violation, err := llmValidator.CheckRule(ctx, ch, lines, r)
+					if err != nil {
+						fmt.Printf("⚠️  Validation failed for rule %s: %v\n", r.ID, err)
+						return
+					}
+
+					mu.Lock()
+					defer mu.Unlock()
+					if violation != nil {
+						result.Failed++
+						result.Violations = append(result.Violations, *violation)
+					} else {
+						result.Passed++
+					}
+				}(change, addedLines, rule)
+			}
+
+			// Wait for all goroutines to complete
+			wg.Wait()
+		} else {
+			// For other engines, process sequentially
+			for _, change := range relevantChanges {
+				if change.Status == "D" {
+					continue // Skip deleted files
 				}
-				if violation != nil {
-					result.Failed++
-					result.Violations = append(result.Violations, *violation)
-				} else {
-					result.Passed++
-				}
-			} else {
+
+				result.Checked++
+
 				// For other engines, validate the file
 				validationResult, err := engine.Validate(ctx, coreRule, []string{change.FilePath})
 				if err != nil {

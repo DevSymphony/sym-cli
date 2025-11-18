@@ -57,28 +57,28 @@ func TestParseValidationResponse_NoViolation(t *testing.T) {
 
 func TestParseValidationResponse_WithViolation(t *testing.T) {
 	tests := []struct {
-		name        string
-		response    string
-		expectDesc  bool
-		expectSugg  bool
+		name       string
+		response   string
+		expectDesc bool
+		expectSugg bool
 	}{
 		{
-			name:        "with description and suggestion",
-			response:    `{"violates": true, "description": "Hardcoded API key found", "suggestion": "Use environment variables"}`,
-			expectDesc:  true,
-			expectSugg:  true,
+			name:       "with description and suggestion",
+			response:   `{"violates": true, "description": "Hardcoded API key found", "suggestion": "Use environment variables"}`,
+			expectDesc: true,
+			expectSugg: true,
 		},
 		{
-			name:        "with description only",
-			response:    `{"violates": true, "description": "Security issue detected", "suggestion": ""}`,
-			expectDesc:  true,
-			expectSugg:  false,
+			name:       "with description only",
+			response:   `{"violates": true, "description": "Security issue detected", "suggestion": ""}`,
+			expectDesc: true,
+			expectSugg: false,
 		},
 		{
-			name:        "minimal violation",
-			response:    `{"violates": true}`,
-			expectDesc:  true, // Should have default description
-			expectSugg:  false,
+			name:       "minimal violation",
+			response:   `{"violates": true}`,
+			expectDesc: true, // Should have default description
+			expectSugg: false,
 		},
 	}
 
