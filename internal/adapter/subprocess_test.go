@@ -10,6 +10,7 @@ func TestNewSubprocessExecutor(t *testing.T) {
 	executor := NewSubprocessExecutor()
 	if executor == nil {
 		t.Fatal("NewSubprocessExecutor() returned nil")
+		return
 	}
 
 	if executor.Timeout != 2*time.Minute {

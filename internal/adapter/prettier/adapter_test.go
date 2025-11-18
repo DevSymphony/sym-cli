@@ -14,6 +14,7 @@ func TestNewAdapter(t *testing.T) {
 	a := NewAdapter("", "")
 	if a == nil {
 		t.Fatal("NewAdapter() returned nil")
+		return
 	}
 
 	if a.ToolsDir == "" {
