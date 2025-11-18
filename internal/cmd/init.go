@@ -149,6 +149,17 @@ func runInit(cmd *cobra.Command, args []string) {
 		fmt.Println("✓ .sym/.env created with default policy path")
 	}
 
+	// MCP registration prompt
+	if !skipMCPRegister {
+		promptMCPRegistration()
+	}
+
+	// API key configuration prompt
+	if !skipAPIKey {
+		promptAPIKeyIfNeeded()
+	}
+
+	// Show dashboard guide after all initialization is complete
 	fmt.Println("\n🎯 What's Next: Use Symphony Dashboard")
 	fmt.Println()
 	fmt.Println("Start the web dashboard:")
@@ -160,16 +171,6 @@ func runInit(cmd *cobra.Command, args []string) {
 	fmt.Println("  ✅ Test validation - Check rules against your code in real-time")
 	fmt.Println()
 	fmt.Println("After setup, commit and push .sym/ folder to share with your team.")
-
-	// MCP registration prompt
-	if !skipMCPRegister {
-		promptMCPRegistration()
-	}
-
-	// API key configuration prompt
-	if !skipAPIKey {
-		promptAPIKeyIfNeeded()
-	}
 }
 
 // createDefaultPolicy creates a default policy file with RBAC roles
