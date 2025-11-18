@@ -1,0 +1,15 @@
+{
+  "app": {
+    "name": "Test Application",
+    "version": "1.0.0",
+    "environment": "development"
+  },
+  "api": {
+    "baseURL": "https://api.example.com",
+    "timeout": 30000
+  },
+  "features": {
+    "authentication": true,
+    "logging": true
+  }
+}

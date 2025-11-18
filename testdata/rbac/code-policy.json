@@ -1,0 +1,71 @@
+{
+  "version": "1.0.0",
+  "rbac": {
+    "roles": {
+      "admin": {
+        "permissions": [
+          {
+            "path": "**/*",
+            "read": true,
+            "write": true,
+            "execute": false
+          }
+        ]
+      },
+      "developer": {
+        "permissions": [
+          {
+            "path": "src/**",
+            "read": true,
+            "write": true,
+            "execute": false
+          },
+          {
+            "path": "tests/**",
+            "read": true,
+            "write": true,
+            "execute": false
+          },
+          {
+            "path": "src/core/**",
+            "read": true,
+            "write": false,
+            "execute": false
+          },
+          {
+            "path": "src/api/**",
+            "read": true,
+            "write": false,
+            "execute": false
+          }
+        ]
+      },
+      "viewer": {
+        "permissions": [
+          {
+            "path": "**/*",
+            "read": true,
+            "write": false,
+            "execute": false
+          }
+        ]
+      }
+    }
+  },
+  "rules": [],
+  "enforce": {
+    "stages": [
+      "pre-commit"
+    ],
+    "fail_on": [
+      "error"
+    ],
+    "rbac": {
+      "enabled": true,
+      "stages": [
+        "pre-commit"
+      ],
+      "on_violation": "block"
+    }
+  }
+}

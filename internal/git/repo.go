@@ -2,6 +2,7 @@ package git
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
 	"regexp"
 	"strings"
@@ -56,7 +57,15 @@ func IsGitRepo() bool {
 }
 
 // GetCurrentUser returns the current git user name
+// Checks GIT_AUTHOR_NAME environment variable first (for testing),
+// then falls back to git config user.name
 func GetCurrentUser() (string, error) {
+	// Check environment variable first (for testing)
+	if user := os.Getenv("GIT_AUTHOR_NAME"); user != "" {
+		return user, nil
+	}
+
+	// Fallback to git config
 	cmd := exec.Command("git", "config", "--get", "user.name")
 	output, err := cmd.Output()
 	if err != nil {

@@ -85,8 +85,25 @@ func createGitChangeFromFile(t *testing.T, filePath string) validator.GitChange 
 		}
 	}
 
+	// Convert absolute path to relative path from repo root
+	// FilePath should be relative like "testdata/rbac/src/components/Button.js"
+	// not absolute like "/workspace/testdata/rbac/src/components/Button.js"
+	relativePath := filePath
+	if filepath.IsAbs(filePath) {
+		// Get repo root
+		cwd, _ := os.Getwd()
+		projectRoot := filepath.Join(cwd, "../..")
+		absProjectRoot, _ := filepath.Abs(projectRoot)
+
+		// Make path relative to project root
+		relPath, err := filepath.Rel(absProjectRoot, filePath)
+		if err == nil {
+			relativePath = relPath
+		}
+	}
+
 	return validator.GitChange{
-		FilePath: filePath,
+		FilePath: relativePath,
 		Status:   "A", // Treat as Added file
 		Diff:     string(output),
 	}
@@ -126,4 +143,67 @@ func assertNoPolicyViolations(t *testing.T, result *validator.ValidationResult) 
 	if result.Checked > 0 {
 		assert.Equal(t, result.Checked, result.Passed, "All checks should pass")
 	}
+}
+
+// setupRBACEnvironment sets up the environment for RBAC testing
+// by setting the GIT_AUTHOR_NAME environment variable
+func setupRBACEnvironment(t *testing.T, username string) {
+	t.Helper()
+	t.Setenv("GIT_AUTHOR_NAME", username)
+	t.Logf("Set GIT_AUTHOR_NAME=%s for RBAC testing", username)
+}
+
+// createRBACTestValidator creates a validator with RBAC testdata policy
+// and sets up the git user environment
+func createRBACTestValidator(t *testing.T, username string) *validator.Validator {
+	t.Helper()
+	setupRBACEnvironment(t, username)
+	pol := loadPolicyFromTestdata(t, "testdata/rbac/code-policy.json")
+	return createTestValidator(t, pol)
+}
+
+// assertRBACViolation asserts that an RBAC violation occurred
+// for the expected user
+func assertRBACViolation(t *testing.T, result *validator.ValidationResult, expectedUser string) {
+	t.Helper()
+
+	// Find RBAC violations (RuleID is "rbac-permission-denied")
+	rbacViolations := []validator.Violation{}
+	for _, v := range result.Violations {
+		if v.RuleID == "rbac-permission-denied" {
+			rbacViolations = append(rbacViolations, v)
+		}
+	}
+
+	assert.Greater(t, len(rbacViolations), 0, "Should have RBAC violations")
+
+	// Log RBAC violations for debugging
+	if len(rbacViolations) > 0 {
+		t.Logf("Found %d RBAC violation(s) for user '%s':", len(rbacViolations), expectedUser)
+		for i, v := range rbacViolations {
+			t.Logf("  %d. %s (file: %s)", i+1, v.Message, v.File)
+		}
+	}
+}
+
+// assertNoRBACViolation asserts that no RBAC violations occurred
+func assertNoRBACViolation(t *testing.T, result *validator.ValidationResult) {
+	t.Helper()
+
+	// Check for RBAC violations (RuleID is "rbac-permission-denied")
+	rbacViolations := []validator.Violation{}
+	for _, v := range result.Violations {
+		if v.RuleID == "rbac-permission-denied" {
+			rbacViolations = append(rbacViolations, v)
+		}
+	}
+
+	if len(rbacViolations) > 0 {
+		t.Logf("Unexpected RBAC violations found:")
+		for i, v := range rbacViolations {
+			t.Logf("  %d. %s (file: %s)", i+1, v.Message, v.File)
+		}
+	}
+
+	assert.Equal(t, 0, len(rbacViolations), "Should have no RBAC violations")
 }
