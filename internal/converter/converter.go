@@ -77,6 +77,18 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 		},
 	}
 
+	// Step 3.1: Convert RBAC if present
+	if userPolicy.RBAC != nil {
+		codePolicy.RBAC = c.convertRBAC(userPolicy.RBAC)
+
+		// Enable RBAC enforcement
+		codePolicy.Enforce.RBACConfig = &schema.RBACEnforce{
+			Enabled:     true,
+			Stages:      []string{"pre-commit", "pre-push"},
+			OnViolation: "block",
+		}
+	}
+
 	// Track which linters each rule maps to
 	ruleToLinters := make(map[string][]string) // rule ID -> linter names
 
@@ -389,4 +401,74 @@ func (c *Converter) getLinterConverter(linterName string) linters.LinterConverte
 	default:
 		return nil
 	}
+}
+
+// convertRBAC converts UserRBAC to PolicyRBAC
+func (c *Converter) convertRBAC(userRBAC *schema.UserRBAC) *schema.PolicyRBAC {
+	if userRBAC == nil || len(userRBAC.Roles) == 0 {
+		return nil
+	}
+
+	policyRBAC := &schema.PolicyRBAC{
+		Roles: make(map[string]schema.PolicyRole),
+	}
+
+	for roleName, userRole := range userRBAC.Roles {
+		policyRole := schema.PolicyRole{
+			Permissions: []schema.Permission{},
+		}
+
+		// Convert allowWrite to write permissions
+		for _, path := range userRole.AllowWrite {
+			policyRole.Permissions = append(policyRole.Permissions, schema.Permission{
+				Path:    path,
+				Read:    true,
+				Write:   true,
+				Execute: false,
+			})
+		}
+
+		// Convert denyWrite to read-only permissions
+		for _, path := range userRole.DenyWrite {
+			policyRole.Permissions = append(policyRole.Permissions, schema.Permission{
+				Path:    path,
+				Read:    true,
+				Write:   false,
+				Execute: false,
+			})
+		}
+
+		// Convert allowExec to execute permissions
+		for _, path := range userRole.AllowExec {
+			policyRole.Permissions = append(policyRole.Permissions, schema.Permission{
+				Path:    path,
+				Read:    true,
+				Write:   false,
+				Execute: true,
+			})
+		}
+
+		// Add special permissions for policy/role editing
+		if userRole.CanEditPolicy {
+			policyRole.Permissions = append(policyRole.Permissions, schema.Permission{
+				Path:    ".sym/**",
+				Read:    true,
+				Write:   true,
+				Execute: false,
+			})
+		}
+
+		if userRole.CanEditRoles {
+			policyRole.Permissions = append(policyRole.Permissions, schema.Permission{
+				Path:    ".sym/user-policy.json",
+				Read:    true,
+				Write:   true,
+				Execute: false,
+			})
+		}
+
+		policyRBAC.Roles[roleName] = policyRole
+	}
+
+	return policyRBAC
 }
