@@ -1,9 +1,11 @@
 package integration
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
+	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/stretchr/testify/require"
 )
 
@@ -26,7 +28,10 @@ func TestValidator_JavaScript_Pattern_Violations(t *testing.T) {
 	// Test naming violations
 	t.Run("NamingViolations", func(t *testing.T) {
 		filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/pattern/naming-violations.js")
-		result, err := v.Validate(filePath)
+		changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+		ctx := context.Background()
+		result, err := v.ValidateChanges(ctx, changes)
 		require.NoError(t, err)
 		assertViolationsDetected(t, result)
 	})
@@ -34,7 +39,10 @@ func TestValidator_JavaScript_Pattern_Violations(t *testing.T) {
 	// Test security violations
 	t.Run("SecurityViolations", func(t *testing.T) {
 		filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/pattern/security-violations.js")
-		result, err := v.Validate(filePath)
+		changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+		ctx := context.Background()
+		result, err := v.ValidateChanges(ctx, changes)
 		require.NoError(t, err)
 		assertViolationsDetected(t, result)
 	})
@@ -49,7 +57,10 @@ func TestValidator_JavaScript_Pattern_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/pattern/valid.js")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }
@@ -68,7 +79,10 @@ func TestValidator_JavaScript_Length_Violations(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/length/length-violations.js")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertViolationsDetected(t, result)
 }
@@ -82,7 +96,10 @@ func TestValidator_JavaScript_Length_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/length/valid.js")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }
@@ -101,7 +118,10 @@ func TestValidator_JavaScript_Style_Violations(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/style/style-violations.js")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertViolationsDetected(t, result)
 }
@@ -115,7 +135,10 @@ func TestValidator_JavaScript_Style_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/style/valid.js")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }
@@ -134,7 +157,10 @@ func TestValidator_JavaScript_AST_Violations(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/ast/naming-violations.js")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertViolationsDetected(t, result)
 }
@@ -148,7 +174,10 @@ func TestValidator_JavaScript_AST_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/javascript/ast/valid.js")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }
@@ -167,7 +196,10 @@ func TestValidator_TypeScript_TypeChecker_Violations(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/typescript/typechecker/type-errors.ts")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertViolationsDetected(t, result)
 }
@@ -181,7 +213,10 @@ func TestValidator_TypeScript_TypeChecker_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/typescript/typechecker/valid.ts")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }
@@ -200,7 +235,10 @@ func TestValidator_Java_Pattern_Violations(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/java/pattern/NamingViolations.java")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertViolationsDetected(t, result)
 }
@@ -214,7 +252,10 @@ func TestValidator_Java_Pattern_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/java/pattern/ValidNaming.java")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }
@@ -233,7 +274,10 @@ func TestValidator_Java_Length_Violations(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/java/length/LengthViolations.java")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertViolationsDetected(t, result)
 }
@@ -247,7 +291,10 @@ func TestValidator_Java_Length_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/java/length/ValidLength.java")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }
@@ -266,7 +313,10 @@ func TestValidator_Java_Style_Violations(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/java/style/StyleViolations.java")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertViolationsDetected(t, result)
 }
@@ -280,7 +330,10 @@ func TestValidator_Java_Style_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/java/style/ValidStyle.java")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }
@@ -299,7 +352,10 @@ func TestValidator_Java_AST_Violations(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/java/ast/AstViolations.java")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertViolationsDetected(t, result)
 }
@@ -313,7 +369,10 @@ func TestValidator_Java_AST_Valid(t *testing.T) {
 	v := createTestValidator(t, policy)
 
 	filePath := filepath.Join(getTestdataDir(t), "testdata/java/ast/ValidAst.java")
-	result, err := v.Validate(filePath)
+	changes := []validator.GitChange{createGitChangeFromFile(t, filePath)}
+
+	ctx := context.Background()
+	result, err := v.ValidateChanges(ctx, changes)
 	require.NoError(t, err)
 	assertNoPolicyViolations(t, result)
 }

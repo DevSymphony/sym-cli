@@ -1,8 +1,10 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/exec"
 
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -79,16 +81,38 @@ func main() {
 		fmt.Printf("Testing: %s\n", file)
 		fmt.Printf("═══════════════════════════════════════════════\n\n")
 
-		result, err := v.Validate(file)
+		// Create GitChange from file using git diff
+		cmd := exec.Command("git", "diff", "--no-index", "/dev/null", file)
+		diffOutput, err := cmd.CombinedOutput()
+		// git diff --no-index returns exit code 1 when there are differences (expected)
+		if err != nil {
+			if exitErr, ok := err.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+				// Expected - continue
+			} else {
+				fmt.Printf("❌ Failed to generate diff: %v\n\n", err)
+				continue
+			}
+		}
+
+		changes := []validator.GitChange{{
+			FilePath: file,
+			Status:   "A",
+			Diff:     string(diffOutput),
+		}}
+
+		ctx := context.Background()
+		result, err := v.ValidateChanges(ctx, changes)
 		if err != nil {
 			fmt.Printf("❌ Validation error: %v\n\n", err)
 			continue
 		}
 
-		if result.Passed {
-			fmt.Printf("\n✅ PASSED: No violations\n\n")
+		if len(result.Violations) == 0 {
+			fmt.Printf("\n✅ PASSED: No violations\n")
+			fmt.Printf("   Checked: %d, Passed: %d, Failed: %d\n\n", result.Checked, result.Passed, result.Failed)
 		} else {
-			fmt.Printf("\n❌ FAILED: %d violation(s) found:\n", len(result.Violations))
+			fmt.Printf("\n❌ FAILED: %d violation(s) found\n", len(result.Violations))
+			fmt.Printf("   Checked: %d, Passed: %d, Failed: %d\n", result.Checked, result.Passed, result.Failed)
 			for i, violation := range result.Violations {
 				fmt.Printf("\n%d. [%s] %s\n", i+1, violation.Severity, violation.RuleID)
 				fmt.Printf("   File: %s:%d:%d\n", violation.File, violation.Line, violation.Column)
