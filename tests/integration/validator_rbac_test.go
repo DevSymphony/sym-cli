@@ -10,6 +10,10 @@ import (
 
 // TestValidator_RBAC_AdminFullAccess verifies that admin role has full write access
 func TestValidator_RBAC_AdminFullAccess(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "alice") // alice is admin
 
 	// Admin should be able to modify any file
@@ -39,6 +43,10 @@ func TestValidator_RBAC_AdminFullAccess(t *testing.T) {
 
 // TestValidator_RBAC_DeveloperAllowedFiles verifies that developer can modify allowed files
 func TestValidator_RBAC_DeveloperAllowedFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "charlie") // charlie is developer
 
 	// Developer should be able to modify src/components/* and tests/*
@@ -65,6 +73,10 @@ func TestValidator_RBAC_DeveloperAllowedFiles(t *testing.T) {
 
 // TestValidator_RBAC_DeveloperDeniedCoreFiles verifies that developer cannot modify core files
 func TestValidator_RBAC_DeveloperDeniedCoreFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "charlie") // charlie is developer
 
 	// Developer should NOT be able to modify src/core/*
@@ -84,6 +96,10 @@ func TestValidator_RBAC_DeveloperDeniedCoreFiles(t *testing.T) {
 
 // TestValidator_RBAC_DeveloperDeniedAPIFiles verifies that developer cannot modify API files
 func TestValidator_RBAC_DeveloperDeniedAPIFiles(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "charlie") // charlie is developer
 
 	// Developer should NOT be able to modify src/api/*
@@ -103,6 +119,10 @@ func TestValidator_RBAC_DeveloperDeniedAPIFiles(t *testing.T) {
 
 // TestValidator_RBAC_ViewerDenied verifies that viewer role has no write access
 func TestValidator_RBAC_ViewerDenied(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "frank") // frank is viewer
 
 	// Viewer should NOT be able to modify any file
@@ -130,6 +150,10 @@ func TestValidator_RBAC_ViewerDenied(t *testing.T) {
 
 // TestValidator_RBAC_MixedPermissions verifies mixed file permissions in a single commit
 func TestValidator_RBAC_MixedPermissions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "charlie") // charlie is developer
 
 	// Mix of allowed and denied files
@@ -155,6 +179,10 @@ func TestValidator_RBAC_MixedPermissions(t *testing.T) {
 
 // TestValidator_RBAC_DeletedFilesSkipped verifies that deleted files don't trigger RBAC
 func TestValidator_RBAC_DeletedFilesSkipped(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "charlie") // charlie is developer
 
 	// Deleted files should not trigger RBAC violations
@@ -181,6 +209,10 @@ func TestValidator_RBAC_DeletedFilesSkipped(t *testing.T) {
 
 // TestValidator_RBAC_Disabled verifies that RBAC can be disabled
 func TestValidator_RBAC_Disabled(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	setupRBACEnvironment(t, "charlie") // charlie is developer
 
 	// Load a policy with RBAC disabled
@@ -210,6 +242,10 @@ func TestValidator_RBAC_Disabled(t *testing.T) {
 
 // TestValidator_RBAC_UnknownUser verifies behavior with unknown users
 func TestValidator_RBAC_UnknownUser(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "unknown_user") // User not in roles.json
 
 	// Unknown user should have no permissions (default to viewer-like behavior)
@@ -230,6 +266,10 @@ func TestValidator_RBAC_UnknownUser(t *testing.T) {
 
 // TestValidator_RBAC_GlobPatternMatching verifies glob pattern matching works correctly
 func TestValidator_RBAC_GlobPatternMatching(t *testing.T) {
+	if testing.Short() {
+		t.Skip("Skipping integration test in short mode")
+	}
+
 	v := createRBACTestValidator(t, "charlie") // charlie is developer
 
 	// Test various glob patterns
