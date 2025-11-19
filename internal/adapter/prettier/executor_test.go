@@ -12,7 +12,7 @@ func TestExecute_FileCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	defer os.RemoveAll(tmpDir)
 
 	a := NewAdapter("", tmpDir)
 
@@ -60,7 +60,7 @@ func TestWriteConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	defer os.RemoveAll(tmpDir)
 
 	a := NewAdapter("", tmpDir)
 
@@ -70,7 +70,7 @@ func TestWriteConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeConfigFile() error = %v", err)
 	}
-	defer func() { _ = os.Remove(configPath) }()
+	defer os.Remove(configPath)
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Error("Config file was not created")
@@ -95,7 +95,7 @@ func TestExecute_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	defer os.RemoveAll(tmpDir)
 
 	// Create a test file with bad formatting
 	testFile := filepath.Join(tmpDir, "test.js")
@@ -117,10 +117,6 @@ func TestExecute_Integration(t *testing.T) {
 	}
 
 	if output == nil {
-		t.Skip("Prettier not available in test environment")
-		return
+		t.Error("Expected non-nil output")
 	}
-
-	// If we got here, Prettier is available and returned output
-	t.Logf("Prettier executed successfully, exit code: %d", output.ExitCode)
 }

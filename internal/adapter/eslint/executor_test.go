@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
@@ -14,7 +15,7 @@ func TestExecute_FileCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	defer os.RemoveAll(tmpDir)
 
 	a := NewAdapter("", tmpDir)
 
@@ -54,10 +55,7 @@ func TestGetESLintCommand(t *testing.T) {
 			cmd := a.getESLintCommand()
 
 			if tt.wantContain != "" && len(cmd) > 0 {
-				contains := false
-				if len(cmd) > 0 && findSubstring(cmd, tt.wantContain) {
-					contains = true
-				}
+				contains := strings.Contains(cmd, tt.wantContain)
 				if !contains && tt.toolsDir != "" {
 					t.Logf("Command %q doesn't contain %q (may use global)", cmd, tt.wantContain)
 				}
@@ -108,7 +106,7 @@ func TestWriteConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	defer os.RemoveAll(tmpDir)
 
 	a := NewAdapter("", tmpDir)
 
@@ -118,7 +116,7 @@ func TestWriteConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeConfigFile() error = %v", err)
 	}
-	defer func() { _ = os.Remove(configPath) }()
+	defer os.Remove(configPath)
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Error("Config file was not created")
@@ -143,7 +141,7 @@ func TestExecute_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer func() { _ = os.RemoveAll(tmpDir) }()
+	defer os.RemoveAll(tmpDir)
 
 	// Create a test file
 	testFile := filepath.Join(tmpDir, "test.js")

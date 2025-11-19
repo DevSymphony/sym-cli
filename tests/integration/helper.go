@@ -28,18 +28,6 @@ func getTestdataDir(t *testing.T) string {
 	return projectRoot
 }
 
-// getToolsDir returns the path to tools directory for test
-func getToolsDir(t *testing.T) string {
-	t.Helper()
-
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Fatalf("Failed to get home directory: %v", err)
-	}
-
-	return filepath.Join(home, ".symphony", "tools")
-}
-
 // loadPolicyFromTestdata loads a code-policy.json from testdata directory
 func loadPolicyFromTestdata(t *testing.T, relativePath string) *schema.CodePolicy {
 	t.Helper()

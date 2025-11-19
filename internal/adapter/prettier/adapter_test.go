@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
-	"github.com/DevSymphony/sym-cli/internal/engine/core"
 )
 
 func TestNewAdapter(t *testing.T) {
@@ -100,26 +99,6 @@ func TestInstall(t *testing.T) {
 	err = a.Install(ctx, config)
 	if err != nil {
 		t.Logf("Install failed (expected if npm unavailable): %v", err)
-	}
-}
-
-func TestGenerateConfig(t *testing.T) {
-	a := NewAdapter("", "")
-
-	rule := &core.Rule{
-		Check: map[string]interface{}{
-			"indent": 2,
-			"quote":  "single",
-		},
-	}
-
-	config, err := a.GenerateConfig(rule)
-	if err != nil {
-		t.Fatalf("GenerateConfig() error = %v", err)
-	}
-
-	if len(config) == 0 {
-		t.Error("GenerateConfig() returned empty config")
 	}
 }
 

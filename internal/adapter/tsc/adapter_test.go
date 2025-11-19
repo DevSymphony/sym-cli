@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
@@ -87,7 +88,7 @@ func TestInitPackageJSON(t *testing.T) {
 	}
 
 	for _, field := range expectedFields {
-		if !contains(string(content), field) {
+		if !strings.Contains(string(content), field) {
 			t.Errorf("package.json missing expected field: %s", field)
 		}
 	}
@@ -177,16 +178,3 @@ src/app.ts(20,10): error TS2339: Property 'bar' does not exist on type 'Object'.
 	}
 }
 
-// Helper function
-func contains(s, substr string) bool {
-	return len(s) > 0 && len(substr) > 0 && findSubstring(s, substr)
-}
-
-func findSubstring(s, substr string) bool {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return true
-		}
-	}
-	return false
-}
