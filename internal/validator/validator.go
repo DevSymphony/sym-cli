@@ -26,6 +26,11 @@ type Violation struct {
 	File     string
 	Line     int
 	Column   int
+	// Raw output from linter/validator
+	RawOutput   string // stdout from adapter execution
+	RawError    string // stderr from adapter execution
+	ToolName    string // which tool detected this (eslint, prettier, llm-validator, etc.)
+	ExecutionMs int64  // execution time in milliseconds
 }
 
 // Result represents validation result
@@ -197,6 +202,14 @@ func (v *Validator) executeRule(engineName string, rule schema.PolicyRule, files
 		return nil, fmt.Errorf("adapter execution failed: %w", err)
 	}
 
+	// Parse execution duration
+	var execMs int64
+	if output.Duration != "" {
+		if duration, parseErr := time.ParseDuration(output.Duration); parseErr == nil {
+			execMs = duration.Milliseconds()
+		}
+	}
+
 	// Parse output to violations
 	adapterViolations, err := adp.ParseOutput(output)
 	if err != nil {
@@ -207,13 +220,27 @@ func (v *Validator) executeRule(engineName string, rule schema.PolicyRule, files
 	violations := make([]Violation, 0, len(adapterViolations))
 	for _, av := range adapterViolations {
 		violations = append(violations, Violation{
-			RuleID:   rule.ID,
-			Severity: rule.Severity,
-			Message:  av.Message,
-			File:     av.File,
-			Line:     av.Line,
-			Column:   av.Column,
+			RuleID:      rule.ID,
+			Severity:    rule.Severity,
+			Message:     av.Message,
+			File:        av.File,
+			Line:        av.Line,
+			Column:      av.Column,
+			RawOutput:   output.Stdout,
+			RawError:    output.Stderr,
+			ToolName:    adp.Name(),
+			ExecutionMs: execMs,
 		})
+	}
+
+	// If verbose, log the raw output
+	if v.verbose && output.Stdout != "" {
+		fmt.Printf("   📋 Raw output (%dms):\n", execMs)
+		if len(output.Stdout) > 500 {
+			fmt.Printf("   %s...\n", output.Stdout[:500])
+		} else {
+			fmt.Printf("   %s\n", output.Stdout)
+		}
 	}
 
 	return violations, nil
@@ -237,12 +264,19 @@ func (v *Validator) executeLLMRule(rule schema.PolicyRule, files []string) ([]Vi
 		}
 	}
 
+	// Create a consolidated ToolOutput for all files
+	var allResponses strings.Builder
+	var allErrors strings.Builder
+	startTime := time.Now()
+	totalViolations := 0
+
 	violations := make([]Violation, 0)
 
-	for _, file := range files {
+	for fileIdx, file := range files {
 		// Read file content
 		content, err := os.ReadFile(file)
 		if err != nil {
+			allErrors.WriteString(fmt.Sprintf("[File %d/%d] %s: %v\n", fileIdx+1, len(files), file, err))
 			continue
 		}
 
@@ -267,25 +301,74 @@ Code:
 Does this code violate the convention?`, file, rule.Desc, string(content))
 
 		// Call LLM
+		fileStartTime := time.Now()
 		response, err := v.llmClient.Complete(v.ctx, systemPrompt, userPrompt)
+		fileExecMs := time.Since(fileStartTime).Milliseconds()
+
+		// Record response in consolidated output
+		allResponses.WriteString(fmt.Sprintf("=== File %d/%d: %s (%dms) ===\n", fileIdx+1, len(files), file, fileExecMs))
 		if err != nil {
+			allErrors.WriteString(fmt.Sprintf("[File %d/%d] LLM error: %v\n", fileIdx+1, len(files), err))
+			allResponses.WriteString(fmt.Sprintf("Error: %v\n\n", err))
 			continue
 		}
+
+		allResponses.WriteString(response)
+		allResponses.WriteString("\n\n")
 
 		// Parse response
 		result := parseValidationResponse(response)
 		if result.Violates {
+			totalViolations++
 			message := result.Description
 			if result.Suggestion != "" {
 				message += fmt.Sprintf(" | Suggestion: %s", result.Suggestion)
 			}
 
+			// Store violation (will update with consolidated output later)
 			violations = append(violations, Violation{
-				RuleID:   rule.ID,
-				Severity: rule.Severity,
-				Message:  message,
-				File:     file,
+				RuleID:      rule.ID,
+				Severity:    rule.Severity,
+				Message:     message,
+				File:        file,
+				RawOutput:   response, // Individual LLM response for this file
+				ToolName:    "llm-validator",
+				ExecutionMs: fileExecMs,
 			})
+		}
+	}
+
+	// Calculate total execution time
+	totalExecMs := time.Since(startTime).Milliseconds()
+
+	// Create consolidated ToolOutput in linter format
+	consolidatedStdout := allResponses.String()
+	consolidatedStderr := allErrors.String()
+
+	// Update all violations with consolidated output (like how linters include full output)
+	// Each violation gets the full stdout/stderr, just like ESLint violations all share the same JSON output
+	for i := range violations {
+		// Keep individual response in RawOutput, but add consolidated info
+		violations[i].RawOutput = fmt.Sprintf("=== Individual Response ===\n%s\n\n=== Consolidated Output ===\n%s",
+			violations[i].RawOutput, consolidatedStdout)
+		if consolidatedStderr != "" {
+			violations[i].RawError = consolidatedStderr
+		}
+	}
+
+	// If verbose, log the consolidated output (like adapter verbose output)
+	if v.verbose && consolidatedStdout != "" {
+		fmt.Printf("   📋 LLM consolidated output (%dms):\n", totalExecMs)
+		fmt.Printf("   - Checked: %d file(s)\n", len(files))
+		fmt.Printf("   - Violations: %d\n", totalViolations)
+		// Show first 500 chars of consolidated output
+		if len(consolidatedStdout) > 500 {
+			fmt.Printf("   %s...\n", consolidatedStdout[:500])
+		} else {
+			fmt.Printf("   %s\n", consolidatedStdout)
+		}
+		if consolidatedStderr != "" {
+			fmt.Printf("   ⚠️  Errors: %s\n", consolidatedStderr)
 		}
 	}
 
