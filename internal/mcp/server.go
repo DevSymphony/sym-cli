@@ -690,7 +690,7 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 	}
 
 	// Add note about saved results
-	textContent += fmt.Sprintf("\n💾 Validation results saved to .sym/validation-results.json\n")
+	textContent += "\n💾 Validation results saved to .sym/validation-results.json\n"
 
 	// Return MCP-compliant response with content array
 	return map[string]interface{}{
