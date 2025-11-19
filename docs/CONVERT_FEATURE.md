@@ -108,7 +108,7 @@ sym convert -i user-policy.json -o code-policy.json
 
 - `--targets`: Target linters (comma-separated or "all")
 - `--output-dir`: Output directory for generated files
-- `--openai-model`: OpenAI model to use (default: gpt-4o-mini)
+- `--openai-model`: OpenAI model to use (default: gpt-4o)
 - `--confidence-threshold`: Minimum confidence for inference (default: 0.7)
 - `--timeout`: API call timeout in seconds (default: 30)
 - `--verbose`: Enable verbose logging
@@ -182,7 +182,7 @@ sym convert -i user-policy.json -o code-policy.json
   "input_file": "user-policy.json",
   "total_rules": 5,
   "targets": ["eslint", "checkstyle", "pmd"],
-  "openai_model": "gpt-4o-mini",
+  "openai_model": "gpt-4o",
   "confidence_threshold": 0.7,
   "linters": {
     "eslint": {
@@ -362,19 +362,19 @@ go test ./internal/converter/linters/...
 - Reduce number of rules
 - Use caching (re-run with same rules)
 - Increase `--timeout` for large rule sets
-- Use faster OpenAI model (gpt-4o-mini)
+- Use faster OpenAI model (gpt-4o)
 
 ## Performance
 
 ### Benchmarks (5 rules, no cache)
 
-- **With LLM (gpt-4o-mini)**: ~5-10 seconds
+- **With LLM (gpt-4o)**: ~5-10 seconds
 - **Fallback only**: <1 second
 - **With cache**: <100ms
 
 ### Cost Estimation
 
-- **gpt-4o-mini**: ~$0.001 per rule
+- **gpt-4o**: ~$0.001 per rule
 - **gpt-4o**: ~$0.01 per rule
 - **Caching**: Reduces cost by ~90% for repeated rules
 

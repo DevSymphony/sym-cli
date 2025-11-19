@@ -374,7 +374,7 @@ go test ./tests/e2e/... -v -timeout 5m
 - **convert**: 규칙 당 1-3초 (LLM 호출)
 - **validate**: 규칙 당 2-5초 (LLM 호출)
 - **추천 모델**:
-  - 개발: `gpt-4o-mini` (빠르고 저렴)
+  - 개발: `gpt-4o` (빠르고 저렴)
   - 프로덕션: `gpt-4o` (더 정확)
 
 ## 다음 단계

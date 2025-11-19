@@ -39,26 +39,26 @@ func TestE2E_FullWorkflow(t *testing.T) {
 	t.Log("STEP 1: Creating user policy with natural language conventions")
 
 	userPolicy := schema.UserPolicy{
-		Version:	"1.0.0",
+		Version: "1.0.0",
 		Defaults: &schema.UserDefaults{
-			Languages:	[]string{"go"},
-			Severity:	"warning",
+			Languages: []string{"go"},
+			Severity:  "warning",
 		},
 		Rules: []schema.UserRule{
 			{
-				Say:		"API 키나 비밀번호를 코드에 하드코딩하면 안됩니다. 환경변수를 사용하세요",
-				Category:	"security",
-				Severity:	"error",
+				Say:      "API 키나 비밀번호를 코드에 하드코딩하면 안됩니다. 환경변수를 사용하세요",
+				Category: "security",
+				Severity: "error",
 			},
 			{
-				Say:		"모든 exported 함수는 godoc 주석이 있어야 합니다",
-				Category:	"documentation",
-				Severity:	"warning",
+				Say:      "모든 exported 함수는 godoc 주석이 있어야 합니다",
+				Category: "documentation",
+				Severity: "warning",
 			},
 			{
-				Say:		"에러를 반환하는 함수를 호출할 때는 반드시 에러를 체크해야 합니다",
-				Category:	"error_handling",
-				Severity:	"warning",
+				Say:      "에러를 반환하는 함수를 호출할 때는 반드시 에러를 체크해야 합니다",
+				Category: "error_handling",
+				Severity: "warning",
 			},
 		},
 	}
@@ -75,7 +75,7 @@ func TestE2E_FullWorkflow(t *testing.T) {
 
 	client := llm.NewClient(
 		apiKey,
-		llm.WithModel("gpt-4o-mini"),
+		llm.WithModel("gpt-4o"),
 		llm.WithTimeout(30*time.Second),
 	)
 
@@ -176,8 +176,8 @@ func ProcessData(data string) error {
 	t.Log("STEP 4a: Validating BAD code (should find violations)")
 	badChanges := []validator.GitChange{
 		{
-			FilePath:	badCodePath,
-			Diff:		badGeneratedCode,
+			FilePath: badCodePath,
+			Diff:     badGeneratedCode,
 		},
 	}
 
@@ -208,8 +208,8 @@ func ProcessData(data string) error {
 	t.Log("STEP 4b: Validating GOOD code (should pass or have fewer violations)")
 	goodChanges := []validator.GitChange{
 		{
-			FilePath:	goodCodePath,
-			Diff:		goodGeneratedCode,
+			FilePath: goodCodePath,
+			Diff:     goodGeneratedCode,
 		},
 	}
 
@@ -255,31 +255,31 @@ func TestE2E_MCPToolIntegration(t *testing.T) {
 
 	// Create a policy with multiple categories
 	policy := &schema.CodePolicy{
-		Version:	"1.0.0",
+		Version: "1.0.0",
 		Rules: []schema.PolicyRule{
 			{
-				ID:		"SEC-001",
-				Category:	"security",
-				Severity:	"error",
-				Message:	"No hardcoded secrets",
+				ID:       "SEC-001",
+				Category: "security",
+				Severity: "error",
+				Message:  "No hardcoded secrets",
 			},
 			{
-				ID:		"SEC-002",
-				Category:	"security",
-				Severity:	"error",
-				Message:	"No SQL injection",
+				ID:       "SEC-002",
+				Category: "security",
+				Severity: "error",
+				Message:  "No SQL injection",
 			},
 			{
-				ID:		"ARCH-001",
-				Category:	"architecture",
-				Severity:	"warning",
-				Message:	"Use repository pattern",
+				ID:       "ARCH-001",
+				Category: "architecture",
+				Severity: "warning",
+				Message:  "Use repository pattern",
 			},
 			{
-				ID:		"DOC-001",
-				Category:	"documentation",
-				Severity:	"warning",
-				Message:	"Document exported functions",
+				ID:       "DOC-001",
+				Category: "documentation",
+				Severity: "warning",
+				Message:  "Document exported functions",
 			},
 		},
 	}
@@ -317,15 +317,15 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 	}
 
 	policy := &schema.CodePolicy{
-		Version:	"1.0.0",
+		Version: "1.0.0",
 		Rules: []schema.PolicyRule{
 			{
-				ID:		"SEC-001",
-				Enabled:	true,
-				Category:	"security",
-				Severity:	"error",
-				Message:	"No hardcoded API keys",
-				Desc:		"API keys should not be hardcoded in source code",
+				ID:       "SEC-001",
+				Enabled:  true,
+				Category: "security",
+				Severity: "error",
+				Message:  "No hardcoded API keys",
+				Desc:     "API keys should not be hardcoded in source code",
 				Check: map[string]any{
 					"engine": "llm-validator",
 					"desc":   "API keys should not be hardcoded in source code",
@@ -334,7 +334,7 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 		},
 	}
 
-	client := llm.NewClient(apiKey, llm.WithModel("gpt-4o-mini"))
+	client := llm.NewClient(apiKey, llm.WithModel("gpt-4o"))
 	v := validator.NewLLMValidator(client, policy)
 	ctx := context.Background()
 

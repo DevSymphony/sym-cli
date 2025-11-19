@@ -101,8 +101,8 @@ Create a `user-policy.json` with natural language rules:
 ### Advanced Options
 
 - `--output-dir`: Custom output directory (default: `<git-root>/.sym`)
-- `--openai-model`: OpenAI model (default: `gpt-4o-mini`)
-  - `gpt-4o-mini` - Fast, cheap, good quality
+- `--openai-model`: OpenAI model (default: `gpt-4o`)
+  - `gpt-4o` - Fast, cheap, good quality
   - `gpt-4o` - Slower, more expensive, best quality
 - `--confidence-threshold`: Minimum confidence (default: `0.7`)
   - Range: 0.0 to 1.0
@@ -299,7 +299,7 @@ export OPENAI_API_KEY=sk-your-key-here
 sym convert --targets all --timeout 60
 
 # Use faster model (slightly less accurate)
-sym convert --targets all --openai-model gpt-4o-mini
+sym convert --targets all --openai-model gpt-4o
 
 # Or split rules into smaller batches
 ```

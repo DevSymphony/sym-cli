@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
@@ -54,10 +55,7 @@ func TestGetESLintCommand(t *testing.T) {
 			cmd := a.getESLintCommand()
 
 			if tt.wantContain != "" && len(cmd) > 0 {
-				contains := false
-				if len(cmd) > 0 && findSubstring(cmd, tt.wantContain) {
-					contains = true
-				}
+				contains := strings.Contains(cmd, tt.wantContain)
 				if !contains && tt.toolsDir != "" {
 					t.Logf("Command %q doesn't contain %q (may use global)", cmd, tt.wantContain)
 				}

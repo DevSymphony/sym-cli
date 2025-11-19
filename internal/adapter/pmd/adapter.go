@@ -142,10 +142,6 @@ func (a *Adapter) Install(ctx context.Context, config adapter.InstallConfig) err
 	return nil
 }
 
-// GenerateConfig generates PMD ruleset XML from a rule.
-func (a *Adapter) GenerateConfig(rule interface{}) ([]byte, error) {
-	return generateConfig(rule)
-}
 
 // Execute runs PMD with the given config and files.
 func (a *Adapter) Execute(ctx context.Context, config []byte, files []string) (*adapter.ToolOutput, error) {

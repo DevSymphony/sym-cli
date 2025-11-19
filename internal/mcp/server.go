@@ -42,7 +42,7 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 	}
 
 	llmClient := llm.NewClient(apiKey,
-		llm.WithModel("gpt-4o-mini"),
+		llm.WithModel("gpt-4o"),
 		llm.WithTimeout(30*time.Second),
 	)
 
@@ -974,13 +974,13 @@ func (s *Server) getRBACInfo() string {
 
 // ValidationResultRecord represents a single validation result with timestamp
 type ValidationResultRecord struct {
-	Timestamp   string          `json:"timestamp"`
-	Status      string          `json:"status"` // "passed", "warning", "failed"
-	TotalChecks int             `json:"total_checks"`
-	Passed      int             `json:"passed"`
-	Failed      int             `json:"failed"`
-	Violations  []ViolationItem `json:"violations"`
-	FilesChecked []string       `json:"files_checked"`
+	Timestamp    string          `json:"timestamp"`
+	Status       string          `json:"status"` // "passed", "warning", "failed"
+	TotalChecks  int             `json:"total_checks"`
+	Passed       int             `json:"passed"`
+	Failed       int             `json:"failed"`
+	Violations   []ViolationItem `json:"violations"`
+	FilesChecked []string        `json:"files_checked"`
 }
 
 // ValidationHistory represents the history of validation results

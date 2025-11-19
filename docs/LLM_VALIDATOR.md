@@ -86,7 +86,7 @@ Error: found 1 violation(s)
 
 - `--policy, -p`: code-policy.json 경로 (기본: .sym/code-policy.json)
 - `--staged`: staged 변경사항 검증
-- `--model`: OpenAI 모델 (기본: gpt-4o-mini)
+- `--model`: OpenAI 모델 (기본: gpt-4o)
 - `--timeout`: 규칙당 타임아웃 (초, 기본: 30)
 
 ## 통합

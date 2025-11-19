@@ -13,11 +13,11 @@ import (
 )
 
 const (
-	openAIAPIURL        = "https://api.openai.com/v1/chat/completions"
-	defaultModel        = "gpt-4o-mini"
-	defaultMaxTokens    = 1000
-	defaultTemperature  = 0.3
-	defaultTimeout      = 30 * time.Second
+	openAIAPIURL       = "https://api.openai.com/v1/chat/completions"
+	defaultModel       = "gpt-4o"
+	defaultMaxTokens   = 1000
+	defaultTemperature = 0.3
+	defaultTimeout     = 30 * time.Second
 )
 
 // Client represents an OpenAI API client

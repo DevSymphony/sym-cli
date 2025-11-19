@@ -188,8 +188,33 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 				},
 			}
 
-			// Add selector if languages are specified
-			if len(userRule.Languages) > 0 || len(userRule.Include) > 0 || len(userRule.Exclude) > 0 {
+			// Special handling for LLM validator - ensure required fields
+			if linterName == LLMValidatorEngine {
+				// LLM validator MUST have 'when' selector for file filtering
+				if policyRule.When == nil {
+					// Use languages from rule or defaults
+					languages := userRule.Languages
+					if len(languages) == 0 && userPolicy.Defaults != nil {
+						languages = userPolicy.Defaults.Languages
+					}
+					if len(languages) == 0 {
+						// Default to common languages if none specified
+						languages = []string{"javascript", "typescript"}
+					}
+
+					policyRule.When = &schema.Selector{
+						Languages: languages,
+					}
+				}
+
+				// Ensure desc is not empty (required for LLM prompt)
+				if policyRule.Desc == "" {
+					policyRule.Desc = "Code quality check"
+				}
+			}
+
+			// Add selector if languages are specified (for non-LLM linters)
+			if linterName != LLMValidatorEngine && (len(userRule.Languages) > 0 || len(userRule.Include) > 0 || len(userRule.Exclude) > 0) {
 				policyRule.When = &schema.Selector{
 					Languages: userRule.Languages,
 					Include:   userRule.Include,
