@@ -12,7 +12,7 @@ func TestExecute_FileCreation(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	a := NewAdapter("", tmpDir)
 
@@ -60,7 +60,7 @@ func TestWriteConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	a := NewAdapter("", tmpDir)
 
@@ -70,7 +70,7 @@ func TestWriteConfigFile(t *testing.T) {
 	if err != nil {
 		t.Fatalf("writeConfigFile() error = %v", err)
 	}
-	defer os.Remove(configPath)
+	defer func() { _ = os.Remove(configPath) }()
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		t.Error("Config file was not created")
@@ -95,7 +95,7 @@ func TestExecute_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
-	defer os.RemoveAll(tmpDir)
+	defer func() { _ = os.RemoveAll(tmpDir) }()
 
 	// Create a test file with bad formatting
 	testFile := filepath.Join(tmpDir, "test.js")
