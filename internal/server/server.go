@@ -686,54 +686,26 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 		llm.WithTimeout(timeout),
 	)
 
-	// Create converter with LLM client
-	conv := converter.NewConverter(converter.WithLLMClient(llmClient))
+	// Create converter with LLM client and output directory
+	conv := converter.NewConverter(llmClient, outputDir)
 
 	// Setup context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(30*len(userPolicy.Rules))*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(30*10)*time.Second)
 	defer cancel()
 
-	// Convert for all targets
-	targets := []string{"all"}
-	convResult, err := conv.ConvertMultiTarget(ctx, userPolicy, converter.MultiTargetConvertOptions{
-		Targets:             targets,
-		OutputDir:           outputDir,
-		ConfidenceThreshold: 0.7,
-	})
+	// Convert using new API
+	convResult, err := conv.Convert(ctx, userPolicy)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Conversion failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Write linter configuration files
+	// Files are already written by converter
 	filesWritten := []string{}
-	for linterName, config := range convResult.LinterConfigs {
-		outputPath := filepath.Join(outputDir, config.Filename)
-
-		if err := os.WriteFile(outputPath, config.Content, 0644); err != nil {
-			http.Error(w, fmt.Sprintf("Failed to write %s config: %v", linterName, err), http.StatusInternalServerError)
-			return
-		}
-
-		fmt.Printf("✓ Generated %s configuration: %s\n", linterName, outputPath)
-		filesWritten = append(filesWritten, config.Filename)
+	for _, filePath := range convResult.GeneratedFiles {
+		// Extract just the filename
+		filesWritten = append(filesWritten, filepath.Base(filePath))
 	}
-
-	// Write internal code policy
-	codePolicyPath := filepath.Join(outputDir, "code-policy.json")
-	codePolicyJSON, err := json.MarshalIndent(convResult.CodePolicy, "", "  ")
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to serialize code policy: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if err := os.WriteFile(codePolicyPath, codePolicyJSON, 0644); err != nil {
-		http.Error(w, fmt.Sprintf("Failed to write code policy: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	fmt.Printf("✓ Generated internal policy: %s\n", codePolicyPath)
-	filesWritten = append(filesWritten, "code-policy.json")
 
 	result := map[string]interface{}{
 		"status":       "success",

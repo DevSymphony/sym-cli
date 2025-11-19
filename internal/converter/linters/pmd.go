@@ -1,368 +1,196 @@
 package linters
 
 import (
+	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// PMDConverter converts rules to PMD ruleset XML configuration
-type PMDConverter struct {
-	verbose bool
-}
+// PMDLinterConverter converts rules to PMD XML using LLM
+type PMDLinterConverter struct{}
 
-// NewPMDConverter creates a new PMD converter
-func NewPMDConverter(verbose bool) *PMDConverter {
-	return &PMDConverter{
-		verbose: verbose,
-	}
+// NewPMDLinterConverter creates a new PMD converter
+func NewPMDLinterConverter() *PMDLinterConverter {
+	return &PMDLinterConverter{}
 }
 
 // Name returns the linter name
-func (c *PMDConverter) Name() string {
+func (c *PMDLinterConverter) Name() string {
 	return "pmd"
 }
 
 // SupportedLanguages returns supported languages
-func (c *PMDConverter) SupportedLanguages() []string {
+func (c *PMDLinterConverter) SupportedLanguages() []string {
 	return []string{"java"}
 }
 
-// SupportedCategories returns supported rule categories
-func (c *PMDConverter) SupportedCategories() []string {
-	return []string{
-		"naming",
-		"complexity",
-		"design",
-		"performance",
-		"security",
-		"error_handling",
-		"best_practices",
-		"code_style",
-	}
-}
-
-// PMDRuleset represents the root PMD ruleset
+// PMDRuleset represents PMD ruleset
 type PMDRuleset struct {
-	XMLName     xml.Name `xml:"ruleset"`
-	Name        string   `xml:"name,attr"`
-	XMLNS       string   `xml:"xmlns,attr"`
-	XMLNSXSI    string   `xml:"xmlns:xsi,attr"`
-	XSISchema   string   `xml:"xsi:schemaLocation,attr"`
-	Description string   `xml:"description"`
+	XMLName     xml.Name  `xml:"ruleset"`
+	Name        string    `xml:"name,attr"`
+	XMLNS       string    `xml:"xmlns,attr"`
+	XMLNSXSI    string    `xml:"xmlns:xsi,attr"`
+	XSISchema   string    `xml:"xsi:schemaLocation,attr"`
+	Description string    `xml:"description"`
 	Rules       []PMDRule `xml:"rule"`
 }
 
-// PMDRule represents a single PMD rule reference
+// PMDRule represents a PMD rule
 type PMDRule struct {
-	XMLName    xml.Name        `xml:"rule"`
-	Ref        string          `xml:"ref,attr,omitempty"`
-	Name       string          `xml:"name,attr,omitempty"`
-	Message    string          `xml:"message,attr,omitempty"`
-	Class      string          `xml:"class,attr,omitempty"`
-	Priority   int             `xml:"priority,omitempty"`
-	Properties []PMDProperty   `xml:"properties>property,omitempty"`
-	Comment    string          `xml:",comment"`
+	XMLName  xml.Name `xml:"rule"`
+	Ref      string   `xml:"ref,attr"`
+	Priority int      `xml:"priority,omitempty"`
 }
 
-// PMDProperty represents a property in PMD rule
-type PMDProperty struct {
-	XMLName xml.Name `xml:"property"`
-	Name    string   `xml:"name,attr"`
-	Value   string   `xml:"value,attr,omitempty"`
-	Type    string   `xml:"type,attr,omitempty"`
-}
-
-// Convert converts a user rule with intent to PMD rule
-func (c *PMDConverter) Convert(userRule *schema.UserRule, intent *llm.RuleIntent) (*LinterRule, error) {
-	if userRule == nil {
-		return nil, fmt.Errorf("user rule is nil")
+// ConvertRules converts user rules to PMD configuration using LLM
+func (c *PMDLinterConverter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error) {
+	if llmClient == nil {
+		return nil, fmt.Errorf("LLM client is required")
 	}
 
-	if intent == nil {
-		return nil, fmt.Errorf("rule intent is nil")
+	// Convert rules in parallel
+	type ruleResult struct {
+		index int
+		rule  *PMDRule
+		err   error
 	}
 
-	priority := c.mapSeverityToPriority(userRule.Severity)
+	results := make(chan ruleResult, len(rules))
+	var wg sync.WaitGroup
 
-	var rules []PMDRule
-	var err error
+	for i, rule := range rules {
+		wg.Add(1)
+		go func(idx int, r schema.UserRule) {
+			defer wg.Done()
 
-	switch intent.Engine {
-	case "pattern":
-		rules, err = c.convertPatternRule(intent, priority)
-	case "length":
-		rules, err = c.convertLengthRule(intent, priority)
-	case "style":
-		rules, err = c.convertStyleRule(intent, priority)
-	case "ast":
-		rules, err = c.convertASTRule(intent, priority)
-	default:
-		// Return empty config with comment for unsupported rules
-		return &LinterRule{
-			ID:       userRule.ID,
-			Severity: userRule.Severity,
-			Config:   make(map[string]any),
-			Comment:  fmt.Sprintf("Unsupported rule (engine: %s): %s", intent.Engine, userRule.Say),
-		}, nil
+			pmdRule, err := c.convertSingleRule(ctx, r, llmClient)
+			results <- ruleResult{
+				index: idx,
+				rule:  pmdRule,
+				err:   err,
+			}
+		}(i, rule)
 	}
 
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert rule: %w", err)
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect rules
+	var pmdRules []PMDRule
+	var errors []string
+
+	for result := range results {
+		if result.err != nil {
+			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
+			continue
+		}
+
+		if result.rule != nil {
+			pmdRules = append(pmdRules, *result.rule)
+		}
 	}
 
-	// Store rules in config map
-	config := map[string]any{
-		"rules": rules,
+	if len(pmdRules) == 0 {
+		return nil, fmt.Errorf("no rules converted: %v", errors)
 	}
 
-	return &LinterRule{
-		ID:       userRule.ID,
-		Severity: userRule.Severity,
-		Config:   config,
-		Comment:  userRule.Say,
-	}, nil
-}
-
-// GenerateConfig generates PMD ruleset XML configuration from rules
-func (c *PMDConverter) GenerateConfig(rules []*LinterRule) (*LinterConfig, error) {
+	// Build PMD ruleset
 	ruleset := PMDRuleset{
-		Name:        "Symphony Convention Rules",
+		Name:        "Symphony Rules",
 		XMLNS:       "http://pmd.sourceforge.net/ruleset/2.0.0",
 		XMLNSXSI:    "http://www.w3.org/2001/XMLSchema-instance",
 		XSISchema:   "http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd",
-		Description: "Generated PMD ruleset from Symphony user policy",
-		Rules:       []PMDRule{},
-	}
-
-	// Collect all PMD rules
-	for _, rule := range rules {
-		if rulesInterface, ok := rule.Config["rules"]; ok {
-			if pmdRules, ok := rulesInterface.([]PMDRule); ok {
-				for _, pmdRule := range pmdRules {
-					// Add comment if available
-					if rule.Comment != "" {
-						pmdRule.Comment = " " + rule.Comment + " "
-					}
-					ruleset.Rules = append(ruleset.Rules, pmdRule)
-				}
-			}
-		}
+		Description: "Generated from Symphony user policy",
+		Rules:       pmdRules,
 	}
 
 	// Marshal to XML
-	output, err := xml.MarshalIndent(ruleset, "", "  ")
+	content, err := xml.MarshalIndent(ruleset, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal PMD ruleset: %w", err)
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Add XML header
-	xmlHeader := `<?xml version="1.0"?>
-`
-	content := []byte(xmlHeader + string(output))
+	xmlHeader := `<?xml version="1.0"?>` + "\n"
+	fullContent := []byte(xmlHeader + string(content))
 
 	return &LinterConfig{
+		Filename: "pmd.xml",
+		Content:  fullContent,
 		Format:   "xml",
-		Filename: "pmd-ruleset.xml",
-		Content:  content,
 	}, nil
 }
 
-// convertPatternRule converts pattern engine rules to PMD rules
-func (c *PMDConverter) convertPatternRule(intent *llm.RuleIntent, priority int) ([]PMDRule, error) {
-	rules := []PMDRule{}
+// convertSingleRule converts a single rule using LLM
+func (c *PMDLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*PMDRule, error) {
+	systemPrompt := `You are a PMD configuration expert. Convert natural language Java coding rules to PMD rule references.
 
-	switch intent.Target {
-	case "class":
-		// Class naming convention
-		if caseStyle, ok := intent.Params["case"].(string); ok && strings.ToLower(caseStyle) == "pascalcase" {
-			rules = append(rules, PMDRule{
-				Ref:      "category/java/codestyle.xml/ClassNamingConventions",
-				Priority: priority,
-			})
-		}
-
-	case "method", "function":
-		// Method naming convention
-		if caseStyle, ok := intent.Params["case"].(string); ok && strings.ToLower(caseStyle) == "camelcase" {
-			rules = append(rules, PMDRule{
-				Ref:      "category/java/codestyle.xml/MethodNamingConventions",
-				Priority: priority,
-			})
-		}
-
-	case "variable":
-		// Variable naming convention
-		rules = append(rules, PMDRule{
-			Ref:      "category/java/codestyle.xml/LocalVariableNamingConventions",
-			Priority: priority,
-		})
-
-	case "import", "dependency":
-		// Import restrictions
-		rules = append(rules, PMDRule{
-			Ref:      "category/java/codestyle.xml/UnnecessaryImport",
-			Priority: priority,
-		})
-		rules = append(rules, PMDRule{
-			Ref:      "category/java/codestyle.xml/DuplicateImports",
-			Priority: priority,
-		})
-	}
-
-	return rules, nil
+Return ONLY a JSON object (no markdown fences):
+{
+  "rule_ref": "category/java/ruleset.xml/RuleName",
+  "priority": 1-5
 }
 
-// convertLengthRule converts length engine rules to PMD rules
-func (c *PMDConverter) convertLengthRule(intent *llm.RuleIntent, priority int) ([]PMDRule, error) {
-	rules := []PMDRule{}
+Common PMD rules:
+- Best Practices: rulesets/java/bestpractices.xml/UnusedPrivateMethod
+- Code Style: rulesets/java/codestyle.xml/ShortVariable
+- Design: rulesets/java/design.xml/TooManyMethods
+- Error Handling: rulesets/java/errorprone.xml/EmptyCatchBlock
+- Security: rulesets/java/security.xml/HardCodedCryptoKey
 
-	max := c.getIntParam(intent.Params, "max")
+Priority levels: 1=High, 2=Medium-High, 3=Medium, 4=Low, 5=Info
 
-	switch intent.Scope {
-	case "method", "function":
-		if max > 0 {
-			rules = append(rules, PMDRule{
-				Ref:      "category/java/design.xml/ExcessiveMethodLength",
-				Priority: priority,
-				Properties: []PMDProperty{
-					{Name: "minimum", Value: fmt.Sprintf("%d", max), Type: "Integer"},
-				},
-			})
-		}
-
-	case "class":
-		if max > 0 {
-			rules = append(rules, PMDRule{
-				Ref:      "category/java/design.xml/ExcessiveClassLength",
-				Priority: priority,
-				Properties: []PMDProperty{
-					{Name: "minimum", Value: fmt.Sprintf("%d", max), Type: "Integer"},
-				},
-			})
-		}
-
-	case "params", "parameters":
-		if max > 0 {
-			rules = append(rules, PMDRule{
-				Ref:      "category/java/design.xml/ExcessiveParameterList",
-				Priority: priority,
-				Properties: []PMDProperty{
-					{Name: "minimum", Value: fmt.Sprintf("%d", max), Type: "Integer"},
-				},
-			})
-		}
-	}
-
-	return rules, nil
+If cannot convert, return:
+{
+  "rule_ref": "",
+  "priority": 3
 }
 
-// convertStyleRule converts style engine rules to PMD rules
-func (c *PMDConverter) convertStyleRule(intent *llm.RuleIntent, priority int) ([]PMDRule, error) {
-	rules := []PMDRule{}
+Example:
 
-	// PMD has limited style rules compared to Checkstyle
-	// Add some common code style rules
-	rules = append(rules, PMDRule{
-		Ref:      "category/java/codestyle.xml/UnnecessaryModifier",
-		Priority: priority,
-	})
+Input: "Avoid unused private methods"
+Output:
+{
+  "rule_ref": "rulesets/java/bestpractices.xml/UnusedPrivateMethod",
+  "priority": 2
+}`
 
-	rules = append(rules, PMDRule{
-		Ref:      "category/java/codestyle.xml/UselessParentheses",
-		Priority: priority,
-	})
+	userPrompt := fmt.Sprintf("Convert this Java rule to PMD rule reference:\n\n%s", rule.Say)
 
-	return rules, nil
-}
-
-// convertASTRule converts AST engine rules to PMD rules
-func (c *PMDConverter) convertASTRule(intent *llm.RuleIntent, priority int) ([]PMDRule, error) {
-	rules := []PMDRule{}
-
-	// Cyclomatic complexity
-	if complexity := c.getIntParam(intent.Params, "complexity"); complexity > 0 {
-		rules = append(rules, PMDRule{
-			Ref:      "category/java/design.xml/CyclomaticComplexity",
-			Priority: priority,
-			Properties: []PMDProperty{
-				{
-					Name:  "methodReportLevel",
-					Value: fmt.Sprintf("%d", complexity),
-					Type:  "Integer",
-				},
-			},
-		})
+	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
 
-	// Nesting depth
-	if depth := c.getIntParam(intent.Params, "depth"); depth > 0 {
-		rules = append(rules, PMDRule{
-			Ref:      "category/java/design.xml/AvoidDeeplyNestedIfStmts",
-			Priority: priority,
-			Properties: []PMDProperty{
-				{
-					Name:  "problemDepth",
-					Value: fmt.Sprintf("%d", depth),
-					Type:  "Integer",
-				},
-			},
-		})
+	// Parse response
+	response = strings.TrimSpace(response)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	var result struct {
+		RuleRef  string `json:"rule_ref"`
+		Priority int    `json:"priority"`
 	}
 
-	// Cognitive complexity
-	if cognitiveComplexity := c.getIntParam(intent.Params, "cognitiveComplexity"); cognitiveComplexity > 0 {
-		rules = append(rules, PMDRule{
-			Ref:      "category/java/design.xml/CognitiveComplexity",
-			Priority: priority,
-			Properties: []PMDProperty{
-				{
-					Name:  "reportLevel",
-					Value: fmt.Sprintf("%d", cognitiveComplexity),
-					Type:  "Integer",
-				},
-			},
-		})
+	if err := json.Unmarshal([]byte(response), &result); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
-	return rules, nil
-}
-
-// mapSeverityToPriority maps Symphony severity to PMD priority (1-5, lower is more severe)
-func (c *PMDConverter) mapSeverityToPriority(severity string) int {
-	switch strings.ToLower(severity) {
-	case "error":
-		return 1
-	case "warning", "warn":
-		return 3
-	case "info":
-		return 5
-	default:
-		return 1
+	if result.RuleRef == "" {
+		return nil, nil
 	}
-}
 
-// getIntParam safely extracts an integer parameter
-func (c *PMDConverter) getIntParam(params map[string]any, key string) int {
-	if val, ok := params[key]; ok {
-		switch v := val.(type) {
-		case int:
-			return v
-		case float64:
-			return int(v)
-		case string:
-			var i int
-			_, _ = fmt.Sscanf(v, "%d", &i)
-			return i
-		}
-	}
-	return 0
-}
-
-func init() {
-	// Register PMD converter on package initialization
-	Register(NewPMDConverter(false))
+	return &PMDRule{
+		Ref:      result.RuleRef,
+		Priority: result.Priority,
+	}, nil
 }

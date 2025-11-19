@@ -1,370 +1,240 @@
 package linters
 
 import (
+	"context"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// CheckstyleConverter converts rules to Checkstyle XML configuration
-type CheckstyleConverter struct {
-	verbose bool
-}
+// CheckstyleLinterConverter converts rules to Checkstyle XML using LLM
+type CheckstyleLinterConverter struct{}
 
-// NewCheckstyleConverter creates a new Checkstyle converter
-func NewCheckstyleConverter(verbose bool) *CheckstyleConverter {
-	return &CheckstyleConverter{
-		verbose: verbose,
-	}
+// NewCheckstyleLinterConverter creates a new Checkstyle converter
+func NewCheckstyleLinterConverter() *CheckstyleLinterConverter {
+	return &CheckstyleLinterConverter{}
 }
 
 // Name returns the linter name
-func (c *CheckstyleConverter) Name() string {
+func (c *CheckstyleLinterConverter) Name() string {
 	return "checkstyle"
 }
 
 // SupportedLanguages returns supported languages
-func (c *CheckstyleConverter) SupportedLanguages() []string {
+func (c *CheckstyleLinterConverter) SupportedLanguages() []string {
 	return []string{"java"}
 }
 
-// SupportedCategories returns supported rule categories
-func (c *CheckstyleConverter) SupportedCategories() []string {
-	return []string{
-		"naming",
-		"formatting",
-		"style",
-		"length",
-		"complexity",
-		"whitespace",
-		"javadoc",
-		"imports",
-	}
-}
-
-// CheckstyleModule represents a Checkstyle module in XML
+// CheckstyleModule represents a Checkstyle module
 type CheckstyleModule struct {
-	XMLName    xml.Name            `xml:"module"`
-	Name       string              `xml:"name,attr"`
-	Properties []CheckstyleProperty `xml:"property,omitempty"`
-	Modules    []CheckstyleModule  `xml:"module,omitempty"`
-	Comment    string              `xml:",comment"`
+	XMLName    xml.Name              `xml:"module"`
+	Name       string                `xml:"name,attr"`
+	Properties []CheckstyleProperty  `xml:"property,omitempty"`
+	Modules    []CheckstyleModule    `xml:"module,omitempty"`
 }
 
-// CheckstyleProperty represents a property in Checkstyle XML
+// CheckstyleProperty represents a property
 type CheckstyleProperty struct {
 	XMLName xml.Name `xml:"property"`
 	Name    string   `xml:"name,attr"`
 	Value   string   `xml:"value,attr"`
 }
 
-// CheckstyleConfig represents the root Checkstyle configuration
+// CheckstyleConfig represents root configuration
 type CheckstyleConfig struct {
-	XMLName xml.Name         `xml:"module"`
-	Name    string           `xml:"name,attr"`
+	XMLName xml.Name           `xml:"module"`
+	Name    string             `xml:"name,attr"`
 	Modules []CheckstyleModule `xml:"module"`
 }
 
-// Convert converts a user rule with intent to Checkstyle module
-func (c *CheckstyleConverter) Convert(userRule *schema.UserRule, intent *llm.RuleIntent) (*LinterRule, error) {
-	if userRule == nil {
-		return nil, fmt.Errorf("user rule is nil")
+// ConvertRules converts user rules to Checkstyle configuration using LLM
+func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error) {
+	if llmClient == nil {
+		return nil, fmt.Errorf("LLM client is required")
 	}
 
-	if intent == nil {
-		return nil, fmt.Errorf("rule intent is nil")
+	// Convert rules in parallel
+	type moduleResult struct {
+		index  int
+		module *CheckstyleModule
+		err    error
 	}
 
-	severity := c.mapSeverity(userRule.Severity)
+	results := make(chan moduleResult, len(rules))
+	var wg sync.WaitGroup
 
-	var modules []CheckstyleModule
-	var err error
+	for i, rule := range rules {
+		wg.Add(1)
+		go func(idx int, r schema.UserRule) {
+			defer wg.Done()
 
-	switch intent.Engine {
-	case "pattern":
-		modules, err = c.convertPatternRule(intent, severity)
-	case "length":
-		modules, err = c.convertLengthRule(intent, severity)
-	case "style":
-		modules, err = c.convertStyleRule(intent, severity)
-	case "ast":
-		modules, err = c.convertASTRule(intent, severity)
-	default:
-		// Return empty config with comment for unsupported rules
-		return &LinterRule{
-			ID:       userRule.ID,
-			Severity: severity,
-			Config:   make(map[string]any),
-			Comment:  fmt.Sprintf("Unsupported rule (engine: %s): %s", intent.Engine, userRule.Say),
-		}, nil
-	}
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to convert rule: %w", err)
-	}
-
-	// Store modules in config map
-	config := map[string]any{
-		"modules": modules,
-	}
-
-	return &LinterRule{
-		ID:       userRule.ID,
-		Severity: severity,
-		Config:   config,
-		Comment:  userRule.Say,
-	}, nil
-}
-
-// GenerateConfig generates Checkstyle XML configuration from rules
-func (c *CheckstyleConverter) GenerateConfig(rules []*LinterRule) (*LinterConfig, error) {
-	rootModule := CheckstyleConfig{
-		Name:    "Checker",
-		Modules: []CheckstyleModule{},
-	}
-
-	// TreeWalker module for most rules
-	treeWalker := CheckstyleModule{
-		Name:    "TreeWalker",
-		Modules: []CheckstyleModule{},
-	}
-
-	// Collect all modules from rules
-	for _, rule := range rules {
-		if modulesInterface, ok := rule.Config["modules"]; ok {
-			if modules, ok := modulesInterface.([]CheckstyleModule); ok {
-				for _, module := range modules {
-					// Add comment if available
-					if rule.Comment != "" {
-						module.Comment = " " + rule.Comment + " "
-					}
-					treeWalker.Modules = append(treeWalker.Modules, module)
-				}
+			module, err := c.convertSingleRule(ctx, r, llmClient)
+			results <- moduleResult{
+				index:  idx,
+				module: module,
+				err:    err,
 			}
+		}(i, rule)
+	}
+
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect modules
+	var modules []CheckstyleModule
+	var errors []string
+
+	for result := range results {
+		if result.err != nil {
+			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
+			continue
+		}
+
+		if result.module != nil {
+			modules = append(modules, *result.module)
 		}
 	}
 
-	// Add TreeWalker to root if it has modules
-	if len(treeWalker.Modules) > 0 {
-		rootModule.Modules = append(rootModule.Modules, treeWalker)
+	if len(modules) == 0 {
+		return nil, fmt.Errorf("no rules converted: %v", errors)
+	}
+
+	// Build Checkstyle configuration
+	treeWalker := CheckstyleModule{
+		Name:    "TreeWalker",
+		Modules: modules,
+	}
+
+	config := CheckstyleConfig{
+		Name:    "Checker",
+		Modules: []CheckstyleModule{treeWalker},
 	}
 
 	// Marshal to XML
-	output, err := xml.MarshalIndent(rootModule, "", "  ")
+	content, err := xml.MarshalIndent(config, "", "  ")
 	if err != nil {
-		return nil, fmt.Errorf("failed to marshal Checkstyle config: %w", err)
+		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	// Add XML header and DOCTYPE
+	// Add XML header
 	xmlHeader := `<?xml version="1.0"?>
 <!DOCTYPE module PUBLIC
     "-//Checkstyle//DTD Checkstyle Configuration 1.3//EN"
     "https://checkstyle.org/dtds/configuration_1_3.dtd">
 `
-	content := []byte(xmlHeader + string(output))
+	fullContent := []byte(xmlHeader + string(content))
 
 	return &LinterConfig{
-		Format:   "xml",
 		Filename: "checkstyle.xml",
-		Content:  content,
+		Content:  fullContent,
+		Format:   "xml",
 	}, nil
 }
 
-// convertPatternRule converts pattern engine rules to Checkstyle modules
-func (c *CheckstyleConverter) convertPatternRule(intent *llm.RuleIntent, severity string) ([]CheckstyleModule, error) {
-	modules := []CheckstyleModule{}
+// convertSingleRule converts a single rule using LLM
+func (c *CheckstyleLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*CheckstyleModule, error) {
+	systemPrompt := `You are a Checkstyle configuration expert. Convert natural language Java coding rules to Checkstyle modules.
 
-	switch intent.Target {
-	case "identifier", "variable", "class", "method", "function":
-		// Naming conventions
-		if caseStyle, ok := intent.Params["case"].(string); ok {
-			format := c.caseToRegex(caseStyle)
-
-			switch intent.Target {
-			case "class":
-				modules = append(modules, CheckstyleModule{
-					Name: "TypeName",
-					Properties: []CheckstyleProperty{
-						{Name: "format", Value: format},
-						{Name: "severity", Value: severity},
-					},
-				})
-
-			case "method", "function":
-				modules = append(modules, CheckstyleModule{
-					Name: "MethodName",
-					Properties: []CheckstyleProperty{
-						{Name: "format", Value: format},
-						{Name: "severity", Value: severity},
-					},
-				})
-
-			case "variable":
-				modules = append(modules, CheckstyleModule{
-					Name: "LocalVariableName",
-					Properties: []CheckstyleProperty{
-						{Name: "format", Value: format},
-						{Name: "severity", Value: severity},
-					},
-				})
-
-			default:
-				// Generic member name
-				modules = append(modules, CheckstyleModule{
-					Name: "MemberName",
-					Properties: []CheckstyleProperty{
-						{Name: "format", Value: format},
-						{Name: "severity", Value: severity},
-					},
-				})
-			}
-		} else if len(intent.Patterns) > 0 {
-			// Use the first pattern
-			pattern := intent.Patterns[0]
-			modules = append(modules, CheckstyleModule{
-				Name: "MemberName",
-				Properties: []CheckstyleProperty{
-					{Name: "format", Value: pattern},
-					{Name: "severity", Value: severity},
-				},
-			})
-		}
-
-	case "import", "dependency":
-		// Import control
-		if len(intent.Patterns) > 0 {
-			for _, pattern := range intent.Patterns {
-				modules = append(modules, CheckstyleModule{
-					Name: "IllegalImport",
-					Properties: []CheckstyleProperty{
-						{Name: "illegalPkgs", Value: pattern},
-						{Name: "severity", Value: severity},
-					},
-				})
-			}
-		}
-	}
-
-	return modules, nil
+Return ONLY a JSON object (no markdown fences):
+{
+  "module_name": "CheckstyleModuleName",
+  "severity": "error|warning|info",
+  "properties": {"key": "value", ...}
 }
 
-// convertLengthRule converts length engine rules to Checkstyle modules
-func (c *CheckstyleConverter) convertLengthRule(intent *llm.RuleIntent, severity string) ([]CheckstyleModule, error) {
-	modules := []CheckstyleModule{}
+Common Checkstyle modules:
+- Naming: TypeName, MethodName, ParameterName, LocalVariableName, ConstantName
+- Length: LineLength, MethodLength, ParameterNumber, FileLength
+- Style: Indentation, WhitespaceAround, NeedBraces, LeftCurly, RightCurly
+- Imports: AvoidStarImport, IllegalImport, UnusedImports
+- Complexity: CyclomaticComplexity, NPathComplexity
+- JavaDoc: JavadocMethod, JavadocType, MissingJavadocMethod
 
-	max := c.getIntParam(intent.Params, "max")
-
-	switch intent.Scope {
-	case "line":
-		if max > 0 {
-			modules = append(modules, CheckstyleModule{
-				Name: "LineLength",
-				Properties: []CheckstyleProperty{
-					{Name: "max", Value: fmt.Sprintf("%d", max)},
-					{Name: "severity", Value: severity},
-				},
-			})
-		}
-
-	case "file":
-		if max > 0 {
-			modules = append(modules, CheckstyleModule{
-				Name: "FileLength",
-				Properties: []CheckstyleProperty{
-					{Name: "max", Value: fmt.Sprintf("%d", max)},
-					{Name: "severity", Value: severity},
-				},
-			})
-		}
-
-	case "method", "function":
-		if max > 0 {
-			modules = append(modules, CheckstyleModule{
-				Name: "MethodLength",
-				Properties: []CheckstyleProperty{
-					{Name: "max", Value: fmt.Sprintf("%d", max)},
-					{Name: "severity", Value: severity},
-				},
-			})
-		}
-
-	case "params", "parameters":
-		if max > 0 {
-			modules = append(modules, CheckstyleModule{
-				Name: "ParameterNumber",
-				Properties: []CheckstyleProperty{
-					{Name: "max", Value: fmt.Sprintf("%d", max)},
-					{Name: "severity", Value: severity},
-				},
-			})
-		}
-	}
-
-	return modules, nil
+If cannot convert, return:
+{
+  "module_name": "",
+  "severity": "error",
+  "properties": {}
 }
 
-// convertStyleRule converts style engine rules to Checkstyle modules
-func (c *CheckstyleConverter) convertStyleRule(intent *llm.RuleIntent, severity string) ([]CheckstyleModule, error) {
-	modules := []CheckstyleModule{}
+Examples:
 
-	// Indentation
-	if indent := c.getIntParam(intent.Params, "indent"); indent > 0 {
-		modules = append(modules, CheckstyleModule{
-			Name: "Indentation",
-			Properties: []CheckstyleProperty{
-				{Name: "basicOffset", Value: fmt.Sprintf("%d", indent)},
-				{Name: "braceAdjustment", Value: "0"},
-				{Name: "caseIndent", Value: fmt.Sprintf("%d", indent)},
-				{Name: "severity", Value: severity},
-			},
-		})
+Input: "Methods must not exceed 50 lines"
+Output:
+{
+  "module_name": "MethodLength",
+  "severity": "error",
+  "properties": {"max": "50"}
+}
+
+Input: "Use camelCase for local variables"
+Output:
+{
+  "module_name": "LocalVariableName",
+  "severity": "error",
+  "properties": {"format": "^[a-z][a-zA-Z0-9]*$"}
+}`
+
+	userPrompt := fmt.Sprintf("Convert this Java rule to Checkstyle module:\n\n%s", rule.Say)
+
+	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	if err != nil {
+		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
 
-	// Whitespace around operators
-	modules = append(modules, CheckstyleModule{
-		Name: "WhitespaceAround",
-		Properties: []CheckstyleProperty{
-			{Name: "severity", Value: severity},
-		},
+	// Parse response
+	response = strings.TrimSpace(response)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	var result struct {
+		ModuleName string            `json:"module_name"`
+		Severity   string            `json:"severity"`
+		Properties map[string]string `json:"properties"`
+	}
+
+	if err := json.Unmarshal([]byte(response), &result); err != nil {
+		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+	}
+
+	if result.ModuleName == "" {
+		return nil, nil
+	}
+
+	// Build module
+	module := &CheckstyleModule{
+		Name:       result.ModuleName,
+		Properties: []CheckstyleProperty{},
+	}
+
+	// Add severity
+	module.Properties = append(module.Properties, CheckstyleProperty{
+		Name:  "severity",
+		Value: mapCheckstyleSeverity(result.Severity),
 	})
 
-	return modules, nil
-}
-
-// convertASTRule converts AST engine rules to Checkstyle modules
-func (c *CheckstyleConverter) convertASTRule(intent *llm.RuleIntent, severity string) ([]CheckstyleModule, error) {
-	modules := []CheckstyleModule{}
-
-	// Cyclomatic complexity
-	if complexity := c.getIntParam(intent.Params, "complexity"); complexity > 0 {
-		modules = append(modules, CheckstyleModule{
-			Name: "CyclomaticComplexity",
-			Properties: []CheckstyleProperty{
-				{Name: "max", Value: fmt.Sprintf("%d", complexity)},
-				{Name: "severity", Value: severity},
-			},
+	// Add other properties
+	for key, value := range result.Properties {
+		module.Properties = append(module.Properties, CheckstyleProperty{
+			Name:  key,
+			Value: value,
 		})
 	}
 
-	// Nesting depth
-	if depth := c.getIntParam(intent.Params, "depth"); depth > 0 {
-		modules = append(modules, CheckstyleModule{
-			Name: "NestedIfDepth",
-			Properties: []CheckstyleProperty{
-				{Name: "max", Value: fmt.Sprintf("%d", depth)},
-				{Name: "severity", Value: severity},
-			},
-		})
-	}
-
-	return modules, nil
+	return module, nil
 }
 
-// mapSeverity maps Symphony severity to Checkstyle severity
-func (c *CheckstyleConverter) mapSeverity(severity string) string {
+// mapCheckstyleSeverity maps severity to Checkstyle severity
+func mapCheckstyleSeverity(severity string) string {
 	switch strings.ToLower(severity) {
 	case "error":
 		return "error"
@@ -375,42 +245,4 @@ func (c *CheckstyleConverter) mapSeverity(severity string) string {
 	default:
 		return "error"
 	}
-}
-
-// caseToRegex converts case style name to regex pattern (Java conventions)
-func (c *CheckstyleConverter) caseToRegex(caseStyle string) string {
-	switch strings.ToLower(caseStyle) {
-	case "pascalcase":
-		return "^[A-Z][a-zA-Z0-9]*$"
-	case "camelcase":
-		return "^[a-z][a-zA-Z0-9]*$"
-	case "snake_case":
-		return "^[a-z][a-z0-9_]*$"
-	case "screaming_snake_case":
-		return "^[A-Z][A-Z0-9_]*$"
-	default:
-		return "^[a-zA-Z][a-zA-Z0-9]*$"
-	}
-}
-
-// getIntParam safely extracts an integer parameter
-func (c *CheckstyleConverter) getIntParam(params map[string]any, key string) int {
-	if val, ok := params[key]; ok {
-		switch v := val.(type) {
-		case int:
-			return v
-		case float64:
-			return int(v)
-		case string:
-			var i int
-			_, _ = fmt.Sscanf(v, "%d", &i)
-			return i
-		}
-	}
-	return 0
-}
-
-func init() {
-	// Register Checkstyle converter on package initialization
-	Register(NewCheckstyleConverter(false))
 }

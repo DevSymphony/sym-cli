@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -49,7 +50,10 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 		return result, nil
 	}
 
-	// Check each change against LLM rules
+	// Check each change against LLM rules using goroutines for parallel processing
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
 	for _, change := range changes {
 		if change.Status == "D" {
 			continue // Skip deleted files
@@ -65,25 +69,37 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 			continue
 		}
 
-		// Validate against each LLM rule
+		// Validate against each LLM rule in parallel
 		for _, rule := range llmRules {
+			mu.Lock()
 			result.Checked++
+			mu.Unlock()
 
-			violation, err := v.CheckRule(ctx, change, addedLines, rule)
-			if err != nil {
-				// Log error but continue
-				fmt.Printf("Warning: failed to check rule %s: %v\n", rule.ID, err)
-				continue
-			}
+			wg.Add(1)
+			go func(ch GitChange, lines []string, r schema.PolicyRule) {
+				defer wg.Done()
 
-			if violation != nil {
-				result.Failed++
-				result.Violations = append(result.Violations, *violation)
-			} else {
-				result.Passed++
-			}
+				violation, err := v.CheckRule(ctx, ch, lines, r)
+				if err != nil {
+					// Log error but continue
+					fmt.Printf("Warning: failed to check rule %s: %v\n", r.ID, err)
+					return
+				}
+
+				mu.Lock()
+				defer mu.Unlock()
+				if violation != nil {
+					result.Failed++
+					result.Violations = append(result.Violations, *violation)
+				} else {
+					result.Passed++
+				}
+			}(change, addedLines, rule)
 		}
 	}
+
+	// Wait for all goroutines to complete
+	wg.Wait()
 
 	return result, nil
 }
