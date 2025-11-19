@@ -9,8 +9,8 @@ require (
 )
 
 require (
-	github.com/modelcontextprotocol/go-sdk v1.1.0
 	github.com/manifoldco/promptui v0.9.0
+	github.com/modelcontextprotocol/go-sdk v1.1.0
 	github.com/stretchr/testify v1.11.1
 )
 
