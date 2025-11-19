@@ -113,12 +113,6 @@ func (a *Adapter) Install(ctx context.Context, config adapter.InstallConfig) err
 	return nil
 }
 
-// GenerateConfig generates ESLint config from a rule.
-// Returns .eslintrc.json content.
-func (a *Adapter) GenerateConfig(rule interface{}) ([]byte, error) {
-	// Implementation in config.go
-	return generateConfig(rule)
-}
 
 // Execute runs ESLint with the given config and files.
 func (a *Adapter) Execute(ctx context.Context, config []byte, files []string) (*adapter.ToolOutput, error) {

@@ -96,10 +96,6 @@ func (a *Adapter) Install(ctx context.Context, config adapter.InstallConfig) err
 	return err
 }
 
-// GenerateConfig generates Prettier config from a rule.
-func (a *Adapter) GenerateConfig(rule interface{}) ([]byte, error) {
-	return generateConfig(rule)
-}
 
 // Execute runs Prettier with the given config and files.
 // mode: "check" or "write"

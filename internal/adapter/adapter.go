@@ -26,11 +26,8 @@ type Adapter interface {
 	// Returns error if installation fails.
 	Install(ctx context.Context, config InstallConfig) error
 
-	// GenerateConfig generates tool-specific config from a rule.
-	// Returns config content (JSON, XML, YAML, etc.).
-	GenerateConfig(rule interface{}) ([]byte, error)
-
 	// Execute runs the tool with the given config and files.
+	// Config is read from .sym directory (e.g., .sym/.eslintrc.json).
 	// Returns raw tool output.
 	Execute(ctx context.Context, config []byte, files []string) (*ToolOutput, error)
 
