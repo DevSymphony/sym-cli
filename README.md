@@ -289,22 +289,11 @@ sym-cli/
 │   └── adapter/               # ESLint, Prettier 어댑터
 ├── pkg/
 │   └── schema/                # 스키마 타입 정의
-├── scripts/                   # 빌드 스크립트
-├── examples/                  # 예제 파일
 ├── tests/                     # 테스트
-├── testdata/                  # 통합 테스트 데이터
-│   ├── javascript/           # JavaScript 테스트 파일
-│   │   ├── pattern/          # 패턴 매칭 테스트
-│   │   ├── length/           # 길이 제한 테스트
-│   │   ├── style/            # 코드 스타일 테스트
-│   │   └── ast/              # AST 구조 테스트
-│   ├── typescript/           # TypeScript 테스트 파일
-│   │   └── typechecker/      # 타입 체킹 테스트
-│   └── java/                 # Java 테스트 파일
-│       ├── pattern/          # 패턴 매칭 테스트
-│       ├── length/           # 길이 제한 테스트
-│       ├── style/            # 코드 스타일 테스트
-│       └── ast/              # AST 구조 테스트
+│   └── testdata/             # 통합 테스트 데이터
+│       ├── javascript/       # JavaScript 테스트 파일
+│       ├── typescript/       # TypeScript 테스트 파일
+│       └── java/             # Java 테스트 파일
 ├── .sym/                      # 정책 및 역할 파일 (gitignore)
 ├── Makefile
 └── README.md
@@ -349,12 +338,12 @@ go test ./tests/integration/... -v
 ```
 
 **통합 테스트 데이터**:
-- `testdata/javascript/`: JavaScript 엔진 테스트 (pattern, length, style, ast)
-- `testdata/typescript/`: TypeScript 타입체커 테스트
-- `testdata/java/`: Java 엔진 테스트 (Checkstyle, PMD 검증)
+- `tests/testdata/javascript/`: JavaScript 엔진 테스트 (pattern, length, style, ast)
+- `tests/testdata/typescript/`: TypeScript 타입체커 테스트
+- `tests/testdata/java/`: Java 엔진 테스트 (Checkstyle, PMD 검증)
 
 각 디렉토리는 위반 케이스와 정상 케이스를 포함하여 검증 엔진의 정확성을 보장합니다.
-자세한 내용은 [testdata/README.md](testdata/README.md)를 참고하세요.
+자세한 내용은 [tests/testdata/README.md](tests/testdata/README.md)를 참고하세요.
 
 테스트 커버리지 리포트는 [여기](https://devsymphony.github.io/sym-cli/coverage.html)에서 확인할 수 있습니다.
 

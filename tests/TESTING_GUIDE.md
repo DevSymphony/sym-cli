@@ -143,10 +143,10 @@ go test -v ./tests/e2e/... -timeout 5m
 
 ### testdata 디렉토리
 
-검증 엔진의 정확성을 보장하기 위한 테스트 데이터는 `testdata/` 디렉토리에 엔진별, 언어별로 구조화되어 있습니다:
+검증 엔진의 정확성을 보장하기 위한 테스트 데이터는 `tests/testdata/` 디렉토리에 엔진별, 언어별로 구조화되어 있습니다:
 
 ```
-testdata/
+tests/testdata/
 ├── javascript/
 │   ├── pattern/      # 패턴 매칭 및 네이밍 컨벤션 테스트
 │   │   ├── naming-violations.js
@@ -192,7 +192,7 @@ testdata/
 - AST Engine: 구조 검증 (ESLint/PMD)
 - TypeChecker Engine: 타입 검증 (TSC)
 
-자세한 내용은 [testdata/README.md](../testdata/README.md)를 참고하세요.
+자세한 내용은 [testdata/README.md](testdata/README.md)를 참고하세요.
 
 ## E2E 테스트 데이터
 

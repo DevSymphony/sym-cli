@@ -74,10 +74,10 @@ Rules with `engine: "llm-validator"` cannot be checked by traditional linters an
 
 ### Integration Test Data
 
-Validation engines are tested using structured test data in `testdata/`:
+Validation engines are tested using structured test data in `tests/testdata/`:
 
 ```
-testdata/
+tests/testdata/
 ├── javascript/      # ESLint-based validation tests
 │   ├── pattern/     # Naming conventions, regex patterns
 │   ├── length/      # Line/function length limits
@@ -110,4 +110,4 @@ go test ./tests/integration/... -v -run TestASTEngine
 go test ./tests/integration/... -v -run TestTypeChecker
 ```
 
-For detailed test data structure, see [testdata/README.md](../testdata/README.md).
+For detailed test data structure, see [tests/testdata/README.md](../tests/testdata/README.md).

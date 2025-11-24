@@ -24,11 +24,11 @@
   - 파일은 멀티 모듈 형태로 각 기능별로 구성되어 있어야 해
 
 ## 빌드, 테스트, 개발 명령어
-- 재현성을 위해 Make 타깃 또는 스크립트를 선호하세요:
-  - `make dev` 또는 `./scripts/dev` — 자동 리로드로 로컬에서 앱 실행
-  - `make test` 또는 `./scripts/test` — 전체 테스트 스위트 실행
-  - `make lint` 또는 `./scripts/lint` — 린터/포매터 실행
-  - `make build` 또는 `./scripts/build` — 릴리스 아티팩트 생성
+- 재현성을 위해 Make 타깃을 선호하세요:
+  - `make build` — 현재 플랫폼용 빌드
+  - `make build-all` — 모든 플랫폼용 빌드
+  - `make test` — 전체 테스트 스위트 실행
+  - `make lint` — 린터/포매터 실행
 - 서비스 사전 요구사항(DB, 큐, 환경 변수)은 `docs/`에 문서화하세요.
 
 - Go 전용 권장 명령(가능하면 Make 타깃으로 래핑):
