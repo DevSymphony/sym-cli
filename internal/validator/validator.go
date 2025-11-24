@@ -713,13 +713,3 @@ func (v *Validator) Close() error {
 	}
 	return nil
 }
-
-// CanAutoFix checks if violations can be auto-fixed
-func (v *Result) CanAutoFix() bool {
-	return false
-}
-
-// AutoFix attempts to automatically fix violations
-func (v *Validator) AutoFix(result *Result) error {
-	return fmt.Errorf("auto-fix not implemented yet")
-}
