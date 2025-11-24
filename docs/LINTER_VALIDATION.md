@@ -20,18 +20,6 @@ The convert feature generates linter-specific configurations from natural langua
 - **SonarQube**: Multi-language static analysis
 - **LLM Validator**: Custom rules that cannot be expressed in traditional linters
 
-## Validation Scripts
-
-### Validate ESLint Config
-```bash
-./scripts/validate-eslint.sh
-```
-
-### Validate Checkstyle Config
-```bash
-./scripts/validate-checkstyle.sh
-```
-
 ## Engine Assignment
 
 Each rule in `code-policy.json` has an `engine` field that specifies which tool validates it:
@@ -49,12 +37,7 @@ Each rule in `code-policy.json` has an `engine` field that specifies which tool 
    ```bash
    sym convert -i user-policy.json --targets eslint,checkstyle,pmd
    ```
-3. **Validate** generated configs:
-   ```bash
-   ./scripts/validate-eslint.sh
-   ./scripts/validate-checkstyle.sh
-   ```
-4. **Run linters** on git changes:
+3. **Run linters** on git changes:
    ```bash
    # JavaScript/TypeScript
    eslint --config .sym/.eslintrc.json src/**/*.{js,ts}
