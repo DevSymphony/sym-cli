@@ -301,6 +301,21 @@ sym-cli/
 
 ## 🔧 개발
 
+### 필수 도구
+
+| 도구 | 버전 | 용도 |
+|------|------|------|
+| Go | 1.21+ | CLI 빌드 및 실행 |
+| Node.js & npm | 18+ | ESLint, Prettier, TSC 어댑터 |
+| Java JDK | 21+ (선택) | Checkstyle, PMD 어댑터 |
+
+```bash
+# 설치 확인
+go version      # go1.21 이상
+node --version  # v18 이상
+java -version   # openjdk 21 이상 (Java 검증 시 필요)
+```
+
 ### 개발 환경 설정
 
 ```bash
@@ -309,6 +324,20 @@ make setup
 
 # CSS 감시 모드 (개발 중 자동 리빌드)
 make watch-css
+```
+
+### 외부 도구 자동 설치
+
+CLI는 검증 도구를 처음 사용할 때 자동으로 설치합니다:
+
+```
+~/.symphony/tools/
+├── node_modules/           # npm으로 설치
+│   ├── eslint/
+│   ├── prettier/
+│   └── typescript/
+├── checkstyle-10.26.1.jar  # Maven Central에서 다운로드
+└── pmd-<version>/          # GitHub Releases에서 다운로드
 ```
 
 ### 빌드
@@ -361,6 +390,23 @@ make tidy
 
 # 클린업
 make clean
+```
+
+### 트러블슈팅
+
+**Java 테스트 실패 ("java not found")**
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y default-jdk
+
+# macOS
+brew install openjdk@21
+```
+
+**ESLint/Prettier 설치 실패**
+```bash
+npm --version  # npm 설치 확인
+cd ~/.symphony/tools && npm install eslint@^8.0.0 prettier@latest
 ```
 
 ## 📋 환경 변수
