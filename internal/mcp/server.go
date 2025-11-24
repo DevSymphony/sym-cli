@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
@@ -78,9 +77,8 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 }
 
 // Server is a MCP (Model Context Protocol) server.
-// It communicates via JSON-RPC over stdio or HTTP.
+// It communicates via JSON-RPC over stdio.
 type Server struct {
-	host       string
 	port       int
 	configPath string
 	userPolicy *schema.UserPolicy
@@ -89,9 +87,8 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server instance.
-func NewServer(host string, port int, configPath string) *Server {
+func NewServer(port int, configPath string) *Server {
 	return &Server{
-		host:       host,
 		port:       port,
 		configPath: configPath,
 		loader:     policy.NewLoader(false), // verbose = false for MCP
@@ -99,7 +96,7 @@ func NewServer(host string, port int, configPath string) *Server {
 }
 
 // Start starts the MCP server.
-// It communicates via JSON-RPC over stdio or HTTP.
+// It communicates via JSON-RPC over stdio.
 func (s *Server) Start() error {
 	// Determine the directory to look for policy files
 	var dir string
@@ -180,138 +177,17 @@ func (s *Server) Start() error {
 		}
 	}
 
-	if s.port > 0 {
-		return s.startHTTPServer()
-	}
-
 	fmt.Fprintln(os.Stderr, "Symphony MCP server started (stdio mode)")
-	fmt.Fprintf(os.Stderr, "Listening on: %s:%d\n", s.host, s.port)
 	fmt.Fprintln(os.Stderr, "Available tools: query_conventions, validate_code")
 
 	// Use official MCP go-sdk for stdio to ensure spec-compliant framing and lifecycle
 	return s.runStdioWithSDK(context.Background())
 }
 
-// startHTTPServer starts HTTP server for JSON-RPC.
-func (s *Server) startHTTPServer() error {
-	addr := fmt.Sprintf("%s:%d", s.host, s.port)
-
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", s.handleHTTPRequest)
-	mux.HandleFunc("/health", s.handleHealthCheck)
-
-	server := &http.Server{
-		Addr:              addr,
-		Handler:           mux,
-		ReadHeaderTimeout: 10 * time.Second,
-		ReadTimeout:       30 * time.Second,
-		WriteTimeout:      30 * time.Second,
-		IdleTimeout:       60 * time.Second,
-		MaxHeaderBytes:    1 << 20, // 1MB
-	}
-
-	fmt.Fprintf(os.Stderr, "Symphony MCP server started (HTTP mode)\n")
-	fmt.Fprintf(os.Stderr, "Listening on: http://%s\n", addr)
-	fmt.Fprintf(os.Stderr, "Available tools: query_conventions, validate_code\n")
-
-	return server.ListenAndServe()
-}
-
-// handleHealthCheck handles health check requests.
-func (s *Server) handleHealthCheck(w http.ResponseWriter, r *http.Request) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(map[string]interface{}{
-		"status":  "ok",
-		"version": "1.0.0",
-	}); err != nil {
-		// Log error but don't fail - headers already sent
-		_ = err
-	}
-}
-
-// handleHTTPRequest handles HTTP JSON-RPC requests.
-func (s *Server) handleHTTPRequest(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
-		return
-	}
-
-	var req JSONRPCRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusBadRequest)
-		_ = json.NewEncoder(w).Encode(JSONRPCResponse{
-			JSONRPC: "2.0",
-			Error: &RPCError{
-				Code:    -32700,
-				Message: "parse error",
-			},
-			ID: nil,
-		})
-		return
-	}
-
-	var result interface{}
-	var rpcErr *RPCError
-
-	switch req.Method {
-	case "initialize":
-		result, rpcErr = s.handleInitialize(req.Params)
-	case "initialized":
-		// Notification - no response needed, but we'll send empty result
-		result = nil
-	case "tools/list":
-		result, rpcErr = s.handleToolsList(req.Params)
-	case "tools/call":
-		result, rpcErr = s.handleToolsCall(req.Params)
-	case "query_conventions":
-		result, rpcErr = s.handleQueryConventions(req.Params)
-	case "validate_code":
-		result, rpcErr = s.handleValidateCode(req.Params)
-	default:
-		rpcErr = &RPCError{
-			Code:    -32601,
-			Message: fmt.Sprintf("method not found: %s", req.Method),
-		}
-	}
-
-	resp := JSONRPCResponse{
-		JSONRPC: "2.0",
-		Result:  result,
-		Error:   rpcErr,
-		ID:      req.ID,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if rpcErr != nil {
-		w.WriteHeader(http.StatusBadRequest)
-	} else {
-		w.WriteHeader(http.StatusOK)
-	}
-	_ = json.NewEncoder(w).Encode(resp)
-}
-
-// JSONRPCRequest is a JSON-RPC 2.0 request.
-type JSONRPCRequest struct {
-	JSONRPC string                 `json:"jsonrpc"`
-	Method  string                 `json:"method"`
-	Params  map[string]interface{} `json:"params"`
-	ID      interface{}            `json:"id"`
-}
-
-// JSONRPCResponse is a JSON-RPC 2.0 response.
-type JSONRPCResponse struct {
-	JSONRPC string      `json:"jsonrpc"`
-	Result  interface{} `json:"result,omitempty"`
-	Error   *RPCError   `json:"error,omitempty"`
-	ID      interface{} `json:"id"`
-}
-
-// RPCError is a JSON-RPC error.
+// RPCError is an error type used for internal error handling.
 type RPCError struct {
-	Code    int    `json:"code"`
-	Message string `json:"message"`
+	Code    int
+	Message string
 }
 
 // QueryConventionsInput represents the input schema for the query_conventions tool (go-sdk).
@@ -722,144 +598,6 @@ func (s *Server) getValidationPolicy() (*schema.CodePolicy, error) {
 		return s.codePolicy, nil
 	}
 	return nil, fmt.Errorf("no code policy loaded - validation requires code policy")
-}
-
-// handleInitialize handles MCP initialize request.
-// This is the first request from the client to establish protocol version and capabilities.
-func (s *Server) handleInitialize(params map[string]interface{}) (interface{}, *RPCError) {
-	return map[string]interface{}{
-		"protocolVersion": "2024-11-05",
-		"capabilities": map[string]interface{}{
-			"tools": map[string]interface{}{},
-		},
-		"serverInfo": map[string]interface{}{
-			"name":    "symphony",
-			"version": "1.0.0",
-		},
-		"instructions": `Symphony Code Convention Enforcer
-
-MANDATORY WORKFLOW for all coding tasks:
-
-STEP 1 [BEFORE CODE]: Query Conventions
-→ Call query_conventions tool FIRST before writing any code
-→ Filter by category (security, style, architecture, etc.)
-→ Filter by language/files you'll work with
-→ Review and understand the conventions
-
-STEP 2 [DURING CODE]: Write Code
-→ Implement your code following the conventions from Step 1
-→ Keep security, style, and architecture guidelines in mind
-
-STEP 3 [AFTER CODE]: Validate Code
-→ Call validate_code tool LAST after completing implementation
-→ MANDATORY: Must validate before marking task complete
-→ Fix any violations found and re-validate
-→ Only proceed when validation passes with no errors
-
-This 3-step workflow ensures all code meets project standards. Never skip steps 1 and 3.`,
-	}, nil
-}
-
-// handleToolsList handles tools/list request.
-// Returns the list of available tools that clients can call.
-func (s *Server) handleToolsList(params map[string]interface{}) (interface{}, *RPCError) {
-	tools := []map[string]interface{}{
-		{
-			"name": "query_conventions",
-			"description": `⚠️  CALL THIS FIRST - BEFORE WRITING ANY CODE ⚠️
-
-This tool is MANDATORY before you start coding. Query project conventions to understand what rules your code must follow.
-
-Usage:
-- Filter by category: security, style, error_handling, architecture, performance, testing, documentation
-- Filter by languages: javascript, typescript, python, go, java, etc.
-
-Example: Before adding a login feature, call query_conventions(category="security") first.
-
-DO NOT write code before calling this tool. Violations will be caught by validate_code later.`,
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"category": map[string]interface{}{
-						"type":        "string",
-						"description": "Filter by category (optional). Leave empty or use 'all' to fetch all categories. Options: security, style, documentation, error_handling, architecture, performance, testing",
-					},
-					"languages": map[string]interface{}{
-						"type":        "array",
-						"items":       map[string]string{"type": "string"},
-						"description": "Programming languages to filter by (optional). Leave empty to get conventions for all languages. Examples: go, javascript, typescript, python, java",
-					},
-				},
-			},
-		},
-		{
-			"name": "validate_code",
-			"description": `[STEP 3 - ALWAYS CALL LAST] Validate your git changes against all project conventions.
-
-CRITICAL WORKFLOW:
-1. Call this tool AFTER you have written or modified code
-2. MANDATORY: Always validate before considering the task complete
-3. If violations are found, fix them and validate again
-4. Only mark the task as done after validation passes with no errors
-
-This tool automatically validates:
-- All STAGED changes (git add)
-- All UNSTAGED changes (modified but not staged)
-- Only checks the ADDED/MODIFIED lines in your diffs (not entire files)
-
-This is the final quality gate. Never skip this validation step.
-
-The tool will check your changes for:
-- Security violations (hardcoded secrets, SQL injection, XSS, etc.)
-- Style violations (formatting, naming, documentation)
-- Architecture violations (separation of concerns, patterns)
-- Error handling violations (missing error checks, empty catch blocks)
-
-If violations are found, you MUST fix them before proceeding.`,
-			"inputSchema": map[string]interface{}{
-				"type": "object",
-				"properties": map[string]interface{}{
-					"role": map[string]interface{}{
-						"type":        "string",
-						"description": "RBAC role for validation (optional)",
-					},
-				},
-			},
-		},
-	}
-
-	return map[string]interface{}{
-		"tools": tools,
-	}, nil
-}
-
-// handleToolsCall handles tools/call request.
-// This routes tool calls to the appropriate handler based on tool name.
-func (s *Server) handleToolsCall(params map[string]interface{}) (interface{}, *RPCError) {
-	toolName, ok := params["name"].(string)
-	if !ok {
-		return nil, &RPCError{
-			Code:    -32602,
-			Message: "tool name is required",
-		}
-	}
-
-	arguments, ok := params["arguments"].(map[string]interface{})
-	if !ok {
-		arguments = make(map[string]interface{})
-	}
-
-	switch toolName {
-	case "query_conventions":
-		return s.handleQueryConventions(arguments)
-	case "validate_code":
-		return s.handleValidateCode(arguments)
-	default:
-		return nil, &RPCError{
-			Code:    -32601,
-			Message: fmt.Sprintf("unknown tool: %s", toolName),
-		}
-	}
 }
 
 // needsConversion checks if user policy needs to be converted to code policy.
