@@ -72,22 +72,22 @@ func (c *PrettierLinterConverter) ConvertRules(ctx context.Context, rules []sche
 
 // convertSingleRule converts a single user rule to Prettier config using LLM
 func (c *PrettierLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (map[string]interface{}, error) {
-	systemPrompt := `You are a Prettier configuration expert. Convert natural language formatting rules to Prettier configuration options.
+	// Build list of valid Prettier options for the prompt
+	validOptions := GetPrettierOptionNames()
+	validOptionsStr := strings.Join(validOptions, ", ")
+
+	systemPrompt := fmt.Sprintf(`You are a Prettier configuration expert. Convert natural language formatting rules to Prettier configuration options.
+
+IMPORTANT: You MUST ONLY use options from this exact list of valid Prettier options:
+%s
 
 Return ONLY a JSON object (no markdown fences) with Prettier options.
+If the rule cannot be expressed with Prettier options, return empty object: {}
 
-Available Prettier options:
-- semi: true/false (use semicolons)
-- singleQuote: true/false (use single quotes)
-- tabWidth: number (spaces per indentation level)
-- useTabs: true/false (use tabs instead of spaces)
-- trailingComma: "none"/"es5"/"all" (trailing commas)
-- printWidth: number (line length)
-- arrowParens: "always"/"avoid" (arrow function parentheses)
-- bracketSpacing: true/false (spaces in object literals)
-- endOfLine: "lf"/"crlf"/"auto"
-
-If the rule is not about formatting, return empty object: {}
+CRITICAL RULES:
+1. ONLY use option names from the list above
+2. Do NOT invent new options
+3. If no option can enforce this rule, return {}
 
 Examples:
 
@@ -114,7 +114,12 @@ Input: "Maximum line length is 120 characters"
 Output:
 {
   "printWidth": 120
-}`
+}
+
+Input: "Sort imports alphabetically"
+Output:
+{}
+(Reason: No native Prettier option for this)`, validOptionsStr)
 
 	userPrompt := fmt.Sprintf("Convert this rule to Prettier configuration:\n\n%s", rule.Say)
 
@@ -136,7 +141,18 @@ Output:
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
-	return config, nil
+	// VALIDATION: Filter out invalid options
+	validConfig := make(map[string]interface{})
+	for key, value := range config {
+		validation := ValidatePrettierOption(key, value)
+		if validation.Valid {
+			validConfig[key] = value
+		} else {
+			fmt.Printf("⚠️  Invalid Prettier option '%s': %s\n", key, validation.Message)
+		}
+	}
+
+	return validConfig, nil
 }
 
 // TSCLinterConverter converts rules to TypeScript compiler configuration
@@ -212,25 +228,22 @@ func (c *TSCLinterConverter) ConvertRules(ctx context.Context, rules []schema.Us
 
 // convertSingleRule converts a single user rule to TypeScript compiler option using LLM
 func (c *TSCLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (map[string]interface{}, error) {
-	systemPrompt := `You are a TypeScript compiler configuration expert. Convert natural language type-checking rules to tsconfig.json compiler options.
+	// Build list of valid TSC options for the prompt
+	validOptions := GetTSCOptionNames()
+	validOptionsStr := strings.Join(validOptions, ", ")
+
+	systemPrompt := fmt.Sprintf(`You are a TypeScript compiler configuration expert. Convert natural language type-checking rules to tsconfig.json compiler options.
+
+IMPORTANT: You MUST ONLY use options from this exact list of valid TypeScript compiler options:
+%s
 
 Return ONLY a JSON object (no markdown fences) with TypeScript compiler options.
+If the rule cannot be expressed with TypeScript compiler options, return empty object: {}
 
-Available TypeScript compiler options:
-- strict: true/false (enable all strict checks)
-- noImplicitAny: true/false (error on implicit any)
-- strictNullChecks: true/false (strict null checking)
-- strictFunctionTypes: true/false (strict function types)
-- strictBindCallApply: true/false (strict bind/call/apply)
-- noUnusedLocals: true/false (error on unused locals)
-- noUnusedParameters: true/false (error on unused parameters)
-- noImplicitReturns: true/false (error on implicit returns)
-- noFallthroughCasesInSwitch: true/false (error on fallthrough)
-- noUncheckedIndexedAccess: true/false (undefined in index signatures)
-- allowUnreachableCode: true/false (allow unreachable code)
-- allowUnusedLabels: true/false (allow unused labels)
-
-If the rule is not about TypeScript type-checking, return empty object: {}
+CRITICAL RULES:
+1. ONLY use option names from the list above
+2. Do NOT invent new options
+3. If no option can enforce this rule, return {}
 
 Examples:
 
@@ -257,7 +270,12 @@ Input: "Enable all strict type checks"
 Output:
 {
   "strict": true
-}`
+}
+
+Input: "Functions must have return type annotations"
+Output:
+{}
+(Reason: No native TSC option for this - requires plugin)`, validOptionsStr)
 
 	userPrompt := fmt.Sprintf("Convert this rule to TypeScript compiler configuration:\n\n%s", rule.Say)
 
@@ -279,5 +297,16 @@ Output:
 		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
 	}
 
-	return config, nil
+	// VALIDATION: Filter out invalid options
+	validConfig := make(map[string]interface{})
+	for key, value := range config {
+		validation := ValidateTSCOption(key, value)
+		if validation.Valid {
+			validConfig[key] = value
+		} else {
+			fmt.Printf("⚠️  Invalid TSC option '%s': %s\n", key, validation.Message)
+		}
+	}
+
+	return validConfig, nil
 }
