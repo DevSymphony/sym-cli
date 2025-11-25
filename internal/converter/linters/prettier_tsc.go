@@ -123,8 +123,8 @@ Output:
 
 	userPrompt := fmt.Sprintf("Convert this rule to Prettier configuration:\n\n%s", rule.Say)
 
-	// Call LLM
-	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	// Call LLM with minimal reasoning (fast, simple conversion task)
+	response, err := llmClient.CompleteMinimal(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
@@ -279,8 +279,8 @@ Output:
 
 	userPrompt := fmt.Sprintf("Convert this rule to TypeScript compiler configuration:\n\n%s", rule.Say)
 
-	// Call LLM
-	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	// Call LLM with minimal reasoning (fast, simple conversion task)
+	response, err := llmClient.CompleteMinimal(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}

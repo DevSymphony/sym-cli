@@ -255,7 +255,8 @@ Output:
 
 	userPrompt := fmt.Sprintf("Convert this Java rule to Checkstyle module:\n\n%s", rule.Say)
 
-	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	// Call LLM with minimal reasoning
+	response, err := llmClient.CompleteMinimal(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
@@ -285,6 +286,9 @@ Output:
 		return nil, nil
 	}
 
+	// Filter properties to only include valid ones for this module
+	filteredProps := filterValidProperties(result.ModuleName, result.Properties)
+
 	// Build module
 	module := &checkstyleModule{
 		Name:       result.ModuleName,
@@ -297,8 +301,11 @@ Output:
 		Value: mapCheckstyleSeverity(result.Severity),
 	})
 
-	// Add other properties
-	for key, value := range result.Properties {
+	// Add filtered properties
+	for key, value := range filteredProps {
+		if key == "severity" {
+			continue // Already added above
+		}
 		module.Properties = append(module.Properties, checkstyleProperty{
 			Name:  key,
 			Value: value,
@@ -320,4 +327,196 @@ func mapCheckstyleSeverity(severity string) string {
 	default:
 		return "error"
 	}
+}
+
+// validCheckstyleProperties defines valid properties for each Checkstyle module
+// This prevents LLM from generating invalid properties that cause runtime errors
+var validCheckstyleProperties = map[string]map[string]bool{
+	"TypeName": {
+		"severity": true,
+		"format":   true,
+		"tokens":   true,
+	},
+	"MethodName": {
+		"severity":         true,
+		"format":           true,
+		"allowClassName":   true,
+		"applyToPublic":    true,
+		"applyToProtected": true,
+		"applyToPackage":   true,
+		"applyToPrivate":   true,
+		"tokens":           true,
+	},
+	"ParameterName": {
+		"severity":         true,
+		"format":           true,
+		"ignoreOverridden": true,
+		"accessModifiers":  true,
+	},
+	"LocalVariableName": {
+		"severity":                 true,
+		"format":                   true,
+		"allowOneCharVarInForLoop": true,
+	},
+	"ConstantName": {
+		"severity":         true,
+		"format":           true,
+		"applyToPublic":    true,
+		"applyToProtected": true,
+		"applyToPackage":   true,
+		"applyToPrivate":   true,
+	},
+	"LineLength": {
+		"severity":       true,
+		"max":            true,
+		"ignorePattern":  true,
+		"fileExtensions": true,
+	},
+	"MethodLength": {
+		"severity":   true,
+		"max":        true,
+		"countEmpty": true,
+		"tokens":     true,
+	},
+	"ParameterNumber": {
+		"severity":                true,
+		"max":                     true,
+		"ignoreOverriddenMethods": true,
+		"tokens":                  true,
+	},
+	"FileLength": {
+		"severity":       true,
+		"max":            true,
+		"fileExtensions": true,
+	},
+	"Indentation": {
+		"severity":                true,
+		"basicOffset":             true,
+		"braceAdjustment":         true,
+		"caseIndent":              true,
+		"throwsIndent":            true,
+		"arrayInitIndent":         true,
+		"lineWrappingIndentation": true,
+		"forceStrictCondition":    true,
+	},
+	"WhitespaceAround": {
+		"severity":               true,
+		"allowEmptyConstructors": true,
+		"allowEmptyMethods":      true,
+		"allowEmptyTypes":        true,
+		"allowEmptyLoops":        true,
+		"allowEmptyLambdas":      true,
+		"allowEmptyCatches":      true,
+		"ignoreEnhancedForColon": true,
+		"tokens":                 true,
+	},
+	"NeedBraces": {
+		"severity":                 true,
+		"allowSingleLineStatement": true,
+		"allowEmptyLoopBody":       true,
+		"tokens":                   true,
+	},
+	"LeftCurly": {
+		"severity":    true,
+		"option":      true,
+		"ignoreEnums": true,
+		"tokens":      true,
+	},
+	"RightCurly": {
+		"severity": true,
+		"option":   true,
+		"tokens":   true,
+	},
+	"AvoidStarImport": {
+		"severity":                 true,
+		"excludes":                 true,
+		"allowClassImports":        true,
+		"allowStaticMemberImports": true,
+	},
+	"IllegalImport": {
+		"severity":       true,
+		"illegalPkgs":    true,
+		"illegalClasses": true,
+		"regexp":         true,
+	},
+	"UnusedImports": {
+		"severity":       true,
+		"processJavadoc": true,
+	},
+	"CyclomaticComplexity": {
+		"severity":                         true,
+		"max":                              true,
+		"switchBlockAsSingleDecisionPoint": true,
+		"tokens":                           true,
+	},
+	"NPathComplexity": {
+		"severity": true,
+		"max":      true,
+	},
+	"JavadocMethod": {
+		"severity":              true,
+		"accessModifiers":       true,
+		"allowMissingParamTags": true,
+		"allowMissingReturnTag": true,
+		"allowedAnnotations":    true,
+		"validateThrows":        true,
+		"tokens":                true,
+	},
+	"JavadocType": {
+		"severity":              true,
+		"scope":                 true,
+		"excludeScope":          true,
+		"authorFormat":          true,
+		"versionFormat":         true,
+		"allowMissingParamTags": true,
+		"allowUnknownTags":      true,
+		"allowedAnnotations":    true,
+		"tokens":                true,
+	},
+	"MissingJavadocMethod": {
+		"severity":                    true,
+		"minLineCount":                true,
+		"allowedAnnotations":          true,
+		"scope":                       true,
+		"excludeScope":                true,
+		"allowMissingPropertyJavadoc": true,
+		"ignoreMethodNamesRegex":      true,
+		"tokens":                      true,
+	},
+	"EmptyBlock": {
+		"severity": true,
+		"option":   true,
+		"tokens":   true,
+	},
+	"MagicNumber": {
+		"severity":                        true,
+		"ignoreNumbers":                   true,
+		"ignoreHashCodeMethod":            true,
+		"ignoreAnnotation":                true,
+		"ignoreFieldDeclaration":          true,
+		"ignoreAnnotationElementDefaults": true,
+		"constantWaiverParentToken":       true,
+		"tokens":                          true,
+	},
+}
+
+// filterValidProperties filters out invalid properties for a given module
+func filterValidProperties(moduleName string, properties map[string]string) map[string]string {
+	validProps, hasDefinedProps := validCheckstyleProperties[moduleName]
+	if !hasDefinedProps {
+		// If module is not in our whitelist, only allow severity
+		result := make(map[string]string)
+		if sev, ok := properties["severity"]; ok {
+			result["severity"] = sev
+		}
+		return result
+	}
+
+	result := make(map[string]string)
+	for key, value := range properties {
+		if validProps[key] {
+			result[key] = value
+		}
+	}
+	return result
 }

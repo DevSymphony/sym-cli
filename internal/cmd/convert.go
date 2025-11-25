@@ -41,8 +41,8 @@ map them to appropriate linter rules.`,
   # Convert for specific linter
   sym convert -i user-policy.json --targets eslint
 
-  # Convert for multiple linters with specific model
-  sym convert -i user-policy.json --targets checkstyle,pmd --openai-model gpt-4o
+  # Convert for Java with specific model
+  sym convert -i user-policy.json --targets checkstyle,pmd --openai-model gpt-5-mini
 
   # Use custom output directory
   sym convert -i user-policy.json --targets all --output-dir ./custom-dir
@@ -57,7 +57,7 @@ func init() {
 	convertCmd.Flags().StringVarP(&convertOutputFile, "output", "o", "", "output code policy file (legacy mode)")
 	convertCmd.Flags().StringSliceVar(&convertTargets, "targets", []string{}, buildTargetsDescription())
 	convertCmd.Flags().StringVar(&convertOutputDir, "output-dir", "", "output directory for linter configs (default: same as input file directory)")
-	convertCmd.Flags().StringVar(&convertOpenAIModel, "openai-model", "gpt-4o", "OpenAI model to use for inference")
+	convertCmd.Flags().StringVar(&convertOpenAIModel, "openai-model", "gpt-5-mini", "OpenAI model to use for inference")
 	convertCmd.Flags().Float64Var(&convertConfidenceThreshold, "confidence-threshold", 0.7, "minimum confidence for LLM inference (0.0-1.0)")
 	convertCmd.Flags().IntVar(&convertTimeout, "timeout", 30, "timeout for API calls in seconds")
 }

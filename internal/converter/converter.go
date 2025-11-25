@@ -381,8 +381,8 @@ Reason: Requires knowing which packages are "large"`, linterDescriptions, routin
 
 	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
 
-	// Call LLM
-	response, err := c.llmClient.Complete(ctx, systemPrompt, userPrompt)
+	// Call LLM with low reasoning (needs some thought for linter selection)
+	response, err := c.llmClient.CompleteLow(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
 		return []string{} // Will fall back to llm-validator

@@ -41,7 +41,7 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 	}
 
 	llmClient := llm.NewClient(apiKey,
-		llm.WithModel("gpt-4o"),
+		llm.WithModel("gpt-5-mini"),
 		llm.WithTimeout(30*time.Second),
 	)
 
