@@ -40,31 +40,10 @@ func WithModel(model string) ClientOption {
 	}
 }
 
-// WithMaxTokens sets the maximum tokens for responses
-func WithMaxTokens(maxTokens int) ClientOption {
-	return func(c *Client) {
-		c.maxTokens = maxTokens
-	}
-}
-
-// WithTemperature sets the sampling temperature
-func WithTemperature(temperature float64) ClientOption {
-	return func(c *Client) {
-		c.temperature = temperature
-	}
-}
-
 // WithTimeout sets the HTTP client timeout
 func WithTimeout(timeout time.Duration) ClientOption {
 	return func(c *Client) {
 		c.httpClient.Timeout = timeout
-	}
-}
-
-// WithVerbose enables verbose logging
-func WithVerbose(verbose bool) ClientOption {
-	return func(c *Client) {
-		c.verbose = verbose
 	}
 }
 
@@ -202,19 +181,4 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string) 
 	}
 
 	return content, nil
-}
-
-// CheckAvailability checks if the OpenAI API is available
-func (c *Client) CheckAvailability(ctx context.Context) error {
-	if c.apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
-	}
-
-	// Simple test request
-	_, err := c.Complete(ctx, "You are a test assistant.", "Say 'OK'")
-	if err != nil {
-		return fmt.Errorf("OpenAI API not available: %w", err)
-	}
-
-	return nil
 }
