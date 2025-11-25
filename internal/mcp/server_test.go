@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"testing"
@@ -208,53 +207,4 @@ func TestQueryConventions(t *testing.T) {
 		assert.Contains(t, text, "SEC-001")
 		assert.NotContains(t, text, "DOC-001")
 	})
-}
-
-func TestFilterConventionsWithDefaults(t *testing.T) {
-	// Create test server with user policy that has defaults
-	userPolicy := &UserPolicyForTest{
-		Defaults: DefaultsForTest{
-			Severity: "error",
-		},
-		Rules: []UserRuleForTest{
-			{
-				ID:        "TEST-001",
-				Say:       "Test rule without severity",
-				Category:  "testing",
-				Languages: []string{"go"},
-				// No severity or message specified
-			},
-			{
-				ID:        "TEST-002",
-				Say:       "Test rule with severity",
-				Category:  "testing",
-				Languages: []string{"go"},
-				Severity:  "warning",
-				Message:   "Custom message",
-			},
-		},
-	}
-
-	// Convert to JSON and back to ensure proper structure
-	data, _ := json.Marshal(userPolicy)
-	t.Logf("User policy: %s", string(data))
-}
-
-// Test helper types to match schema.UserPolicy structure
-type UserPolicyForTest struct {
-	Defaults DefaultsForTest     `json:"defaults"`
-	Rules    []UserRuleForTest   `json:"rules"`
-}
-
-type DefaultsForTest struct {
-	Severity string `json:"severity"`
-}
-
-type UserRuleForTest struct {
-	ID        string   `json:"id"`
-	Say       string   `json:"say"`
-	Category  string   `json:"category"`
-	Languages []string `json:"languages"`
-	Severity  string   `json:"severity,omitempty"`
-	Message   string   `json:"message,omitempty"`
 }

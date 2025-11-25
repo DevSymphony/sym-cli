@@ -12,26 +12,21 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	mcpConfig string
-	mcpHost   string
-	mcpPort   int
-)
+var mcpConfig string
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
 	Short: "Start MCP server to integrate with LLM tools",
 	Long: `Start Model Context Protocol (MCP) server.
-LLM-based coding tools can query conventions and validate code through stdio or HTTP.
+LLM-based coding tools can query conventions and validate code through stdio.
 
 Tools provided by MCP server:
 - query_conventions: Query conventions for given context
 - validate_code: Validate code compliance with conventions
 
-By default, communicates via stdio. If --port is specified, starts HTTP server.`,
+Communicates via stdio for integration with Claude Desktop, Claude Code, Cursor, and other MCP clients.`,
 	Example: `  sym mcp
-  sym mcp --config code-policy.json
-  sym mcp --port 4000 --host 0.0.0.0`,
+  sym mcp --config code-policy.json`,
 	RunE: runMCP,
 }
 
@@ -39,8 +34,6 @@ func init() {
 	rootCmd.AddCommand(mcpCmd)
 
 	mcpCmd.Flags().StringVarP(&mcpConfig, "config", "c", "", "policy file path (code-policy.json)")
-	mcpCmd.Flags().StringVar(&mcpHost, "host", "127.0.0.1", "server host (HTTP mode only)")
-	mcpCmd.Flags().IntVarP(&mcpPort, "port", "p", 0, "server port (0 = stdio mode, >0 = HTTP mode)")
 }
 
 func runMCP(cmd *cobra.Command, args []string) error {
@@ -81,7 +74,7 @@ func runMCP(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start MCP server - it will handle conversion automatically if needed
-	server := mcp.NewServer(mcpHost, mcpPort, configPath)
+	server := mcp.NewServer(configPath)
 	return server.Start()
 }
 

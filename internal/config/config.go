@@ -44,8 +44,8 @@ func init() {
 	tokenPath = filepath.Join(configDir, "token.json")
 }
 
-// EnsureConfigDir creates the config directory if it doesn't exist
-func EnsureConfigDir() error {
+// ensureConfigDir creates the config directory if it doesn't exist
+func ensureConfigDir() error {
 	return os.MkdirAll(configDir, 0700)
 }
 
@@ -70,7 +70,7 @@ func LoadConfig() (*Config, error) {
 
 // SaveConfig saves the configuration to file
 func SaveConfig(cfg *Config) error {
-	if err := EnsureConfigDir(); err != nil {
+	if err := ensureConfigDir(); err != nil {
 		return err
 	}
 
@@ -103,7 +103,7 @@ func LoadToken() (*Token, error) {
 
 // SaveToken saves the access token to file
 func SaveToken(token *Token) error {
-	if err := EnsureConfigDir(); err != nil {
+	if err := ensureConfigDir(); err != nil {
 		return err
 	}
 

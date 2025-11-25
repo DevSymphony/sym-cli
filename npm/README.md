@@ -2,29 +2,24 @@
 
 LLM-friendly convention linter for AI coding tools.
 
-## Installation
-
-### One-line MCP Setup
+## Quick Start
 
 ```bash
-claude mcp add symphony npx @dev-symphony/sym@latest mcp
-```
-
-### Direct Installation
-
-```bash
+# 1. Install
 npm install -g @dev-symphony/sym
+
+# 2. Initialize (GitHub OAuth login + MCP auto-setup)
+sym login
+sym init
 ```
 
-## Usage
+> **Note**: `OPENAI_API_KEY` environment variable is required for LLM-based convention conversion.
 
-### MCP Configuration
+## MCP Configuration
 
-Add to your MCP config file:
+MCP is auto-configured during `sym init`.
 
-- macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-- Windows: `%APPDATA%/Claude/claude_desktop_config.json`
-- Linux: `~/.config/Claude/claude_desktop_config.json`
+For manual setup:
 
 ```json
 {

@@ -24,8 +24,6 @@ type User struct {
 
 type OAuthTokenResponse struct {
 	AccessToken string `json:"access_token"`
-	TokenType   string `json:"token_type"`
-	Scope       string `json:"scope"`
 }
 
 // NewClient creates a new GitHub API client

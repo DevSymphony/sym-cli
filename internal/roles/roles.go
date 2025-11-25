@@ -86,26 +86,6 @@ func GetUserRole(username string) (string, error) {
 	return "none", nil
 }
 
-// IsAdmin checks if a user is in the "admin" role
-// NOTE: This is deprecated. Use RBAC canEditPolicy permission instead.
-func IsAdmin(username string) (bool, error) {
-	roles, err := LoadRoles()
-	if err != nil {
-		return false, err
-	}
-
-	// Check if admin role exists and contains the user
-	if adminUsers, exists := roles["admin"]; exists {
-		for _, admin := range adminUsers {
-			if admin == username {
-				return true, nil
-			}
-		}
-	}
-
-	return false, nil
-}
-
 // RolesExists checks if roles.json file exists
 func RolesExists() (bool, error) {
 	rolesPath, err := GetRolesPath()

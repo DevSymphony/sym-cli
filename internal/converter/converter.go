@@ -14,8 +14,8 @@ import (
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// LanguageLinterMapping defines which linters are available for each language
-var LanguageLinterMapping = map[string][]string{
+// languageLinterMapping defines which linters are available for each language
+var languageLinterMapping = map[string][]string{
 	"javascript": {"eslint", "prettier"},
 	"js":         {"eslint", "prettier"},
 	"typescript": {"tsc", "eslint", "prettier"},
@@ -25,8 +25,8 @@ var LanguageLinterMapping = map[string][]string{
 	"java":       {"checkstyle", "pmd"},
 }
 
-// Special linter for rules that don't fit any specific external linter
-const LLMValidatorEngine = "llm-validator"
+// llmValidatorEngine is the special linter for rules that don't fit any specific external linter
+const llmValidatorEngine = "llm-validator"
 
 // Converter is the main converter with language-based routing
 type Converter struct {
@@ -115,7 +115,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 		}
 
 		// Skip llm-validator - it will be handled in CodePolicy only
-		if linterName == LLMValidatorEngine {
+		if linterName == llmValidatorEngine {
 			continue
 		}
 
@@ -189,7 +189,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 			}
 
 			// Special handling for LLM validator - ensure required fields
-			if linterName == LLMValidatorEngine {
+			if linterName == llmValidatorEngine {
 				// LLM validator MUST have 'when' selector for file filtering
 				if policyRule.When == nil {
 					// Use languages from rule or defaults
@@ -214,7 +214,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 			}
 
 			// Add selector if languages are specified (for non-LLM linters)
-			if linterName != LLMValidatorEngine && (len(userRule.Languages) > 0 || len(userRule.Include) > 0 || len(userRule.Exclude) > 0) {
+			if linterName != llmValidatorEngine && (len(userRule.Languages) > 0 || len(userRule.Include) > 0 || len(userRule.Exclude) > 0) {
 				policyRule.When = &schema.Selector{
 					Languages: userRule.Languages,
 					Include:   userRule.Include,
@@ -274,7 +274,7 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 		availableLinters := c.getAvailableLinters(languages)
 		if len(availableLinters) == 0 {
 			// No language-specific linters, use llm-validator
-			linterRules[LLMValidatorEngine] = append(linterRules[LLMValidatorEngine], rule)
+			linterRules[llmValidatorEngine] = append(linterRules[llmValidatorEngine], rule)
 			continue
 		}
 
@@ -283,7 +283,7 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 
 		if len(selectedLinters) == 0 {
 			// LLM couldn't map to any linter, use llm-validator
-			linterRules[LLMValidatorEngine] = append(linterRules[LLMValidatorEngine], rule)
+			linterRules[llmValidatorEngine] = append(linterRules[llmValidatorEngine], rule)
 		} else {
 			// Add rule to selected linters
 			for _, linter := range selectedLinters {
@@ -304,7 +304,7 @@ func (c *Converter) getAvailableLinters(languages []string) []string {
 
 	linterSet := make(map[string]bool)
 	for _, lang := range languages {
-		if linters, ok := LanguageLinterMapping[lang]; ok {
+		if linters, ok := languageLinterMapping[lang]; ok {
 			for _, linter := range linters {
 				linterSet[linter] = true
 			}

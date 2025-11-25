@@ -1,20 +1,31 @@
-.claude/
+# Build outputs
 bin/
-!npm/bin/
-!npm/bin/*.js
-npm/bin/sym-*
+dist/
+*.exe
+
+# Dependencies
+node_modules/
 
 # Test coverage
 coverage.out
 coverage.html
-node_modules/
-.sym/
-*.coverprofile
 coverage.txt
+*.coverprofile
 
-# Symphony API key configuration
-.sym/.env
-.vscode
-.cursor
-sym-cli.exe
+# IDE
+.vscode/
+.cursor/
+.idea/
+
+# OS
+.DS_Store
+
+# Project specific
+.claude/
+.sym/
 .mcp.json
+
+# npm package binaries (keep JS wrapper)
+!npm/bin/
+!npm/bin/*.js
+npm/bin/sym-*

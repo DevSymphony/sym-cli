@@ -33,12 +33,6 @@ type Violation struct {
 	ExecutionMs int64  // execution time in milliseconds
 }
 
-// Result represents validation result
-type Result struct {
-	Violations []Violation
-	Passed     bool
-}
-
 // Validator validates code against policy using adapters directly
 // This replaces the old engine-based architecture
 type Validator struct {
@@ -79,90 +73,6 @@ func NewValidator(policy *schema.CodePolicy, verbose bool) *Validator {
 // SetLLMClient sets the LLM client for this validator
 func (v *Validator) SetLLMClient(client *llm.Client) {
 	v.llmClient = client
-}
-
-// Validate validates the given path using adapters directly
-func (v *Validator) Validate(path string) (*Result, error) {
-	if v.policy == nil {
-		return nil, fmt.Errorf("policy is not loaded")
-	}
-
-	result := &Result{
-		Violations: make([]Violation, 0),
-		Passed:     true,
-	}
-
-	if v.verbose {
-		fmt.Printf("🔍 Validating %s against %d rule(s)...\n", path, len(v.policy.Rules))
-	}
-
-	// Check RBAC permissions if enabled
-	if err := v.checkRBAC(path, result); err != nil {
-		if v.verbose {
-			fmt.Printf("⚠️  RBAC check error: %v\n", err)
-		}
-	}
-
-	// Validate each enabled rule
-	for _, rule := range v.policy.Rules {
-		if !rule.Enabled {
-			continue
-		}
-
-		engineName := getEngineName(rule)
-		if engineName == "" {
-			if v.verbose {
-				fmt.Printf("⚠️  Rule %s has no engine specified, skipping\n", rule.ID)
-			}
-			continue
-		}
-
-		// Get files that match this rule's selector
-		files, err := v.selectFilesForRule(path, &rule)
-		if err != nil {
-			fmt.Printf("⚠️  Failed to select files for rule %s: %v\n", rule.ID, err)
-			continue
-		}
-
-		if len(files) == 0 {
-			if v.verbose {
-				fmt.Printf("   Rule %s: no matching files\n", rule.ID)
-			}
-			continue
-		}
-
-		if v.verbose {
-			fmt.Printf("   Rule %s (%s): checking %d file(s)...\n", rule.ID, engineName, len(files))
-		}
-
-		// Execute validation based on engine type
-		violations, err := v.executeRule(engineName, rule, files)
-		if err != nil {
-			fmt.Printf("⚠️  Validation failed for rule %s: %v\n", rule.ID, err)
-			continue
-		}
-
-		if len(violations) > 0 {
-			result.Violations = append(result.Violations, violations...)
-			if v.verbose {
-				fmt.Printf("   ❌ Found %d violation(s)\n", len(violations))
-			}
-		} else if v.verbose {
-			fmt.Printf("   ✓ Passed\n")
-		}
-	}
-
-	result.Passed = len(result.Violations) == 0
-
-	if v.verbose {
-		if result.Passed {
-			fmt.Printf("\n✅ Validation passed: no violations found\n")
-		} else {
-			fmt.Printf("\n❌ Validation failed: %d violation(s) found\n", len(result.Violations))
-		}
-	}
-
-	return result, nil
 }
 
 // executeRule executes a rule using the appropriate adapter
@@ -429,87 +339,6 @@ func getEngineName(rule schema.PolicyRule) string {
 	return ""
 }
 
-// checkRBAC checks RBAC permissions
-func (v *Validator) checkRBAC(path string, result *Result) error {
-	if v.policy.Enforce.RBACConfig == nil || !v.policy.Enforce.RBACConfig.Enabled {
-		return nil
-	}
-
-	username, err := git.GetCurrentUser()
-	if err != nil {
-		return err
-	}
-
-	if v.verbose {
-		fmt.Printf("🔐 Checking RBAC permissions for user: %s\n", username)
-	}
-
-	fileInfo, err := os.Stat(path)
-	if err == nil && !fileInfo.IsDir() {
-		rbacResult, err := roles.ValidateFilePermissions(username, []string{path})
-		if err != nil {
-			return err
-		}
-
-		if !rbacResult.Allowed {
-			for _, deniedFile := range rbacResult.DeniedFiles {
-				result.Violations = append(result.Violations, Violation{
-					RuleID:   "rbac-permission-denied",
-					Severity: "error",
-					Message:  fmt.Sprintf("User '%s' does not have permission to modify this file", username),
-					File:     deniedFile,
-					Line:     0,
-					Column:   0,
-				})
-			}
-			result.Passed = false
-
-			if v.verbose {
-				fmt.Printf("❌ RBAC: %d file(s) denied for user %s\n", len(rbacResult.DeniedFiles), username)
-			}
-		} else if v.verbose {
-			fmt.Printf("✓ RBAC: User %s has permission to modify all files\n", username)
-		}
-	}
-
-	return nil
-}
-
-// selectFilesForRule selects files that match the rule's selector
-func (v *Validator) selectFilesForRule(basePath string, rule *schema.PolicyRule) ([]string, error) {
-	fileInfo, err := os.Stat(basePath)
-	if err != nil {
-		return nil, err
-	}
-
-	if !fileInfo.IsDir() {
-		// Single file - check if it matches selector
-		if rule.When != nil {
-			lang := GetLanguageFromFile(basePath)
-			if len(rule.When.Languages) > 0 {
-				matched := false
-				for _, ruleLang := range rule.When.Languages {
-					if ruleLang == lang {
-						matched = true
-						break
-					}
-				}
-				if !matched {
-					return []string{}, nil
-				}
-			}
-		}
-		return []string{basePath}, nil
-	}
-
-	// Directory - use selector to find files
-	if rule.When == nil {
-		return v.selector.SelectFiles(nil)
-	}
-
-	return v.selector.SelectFiles(rule.When)
-}
-
 // ValidateChanges validates git changes using adapters directly
 func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*ValidationResult, error) {
 	if v.policy == nil {
@@ -712,14 +541,4 @@ func (v *Validator) Close() error {
 		v.ctxCancel()
 	}
 	return nil
-}
-
-// CanAutoFix checks if violations can be auto-fixed
-func (v *Result) CanAutoFix() bool {
-	return false
-}
-
-// AutoFix attempts to automatically fix violations
-func (v *Validator) AutoFix(result *Result) error {
-	return fmt.Errorf("auto-fix not implemented yet")
 }

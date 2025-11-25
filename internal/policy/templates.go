@@ -99,8 +99,3 @@ func GetTemplate(name string) (*schema.UserPolicy, error) {
 
 	return &policy, nil
 }
-
-// ApplyTemplate applies a template to create a new policy
-func ApplyTemplate(templateName string) (*schema.UserPolicy, error) {
-	return GetTemplate(templateName)
-}

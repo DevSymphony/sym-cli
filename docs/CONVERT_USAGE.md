@@ -1,66 +1,66 @@
-# Convert Command Usage Guide
+# Convert 명령어 사용 가이드
 
-## Quick Start
+## 빠른 시작
 
-Convert natural language rules to linter configurations:
+자연어 규칙을 linter 설정으로 변환:
 
 ```bash
-# Convert to all supported linters (outputs to <git-root>/.sym)
+# 모든 지원 linter로 변환 (출력: <git-root>/.sym)
 sym convert -i user-policy.json --targets all
 
-# Convert only for JavaScript/TypeScript
+# JavaScript/TypeScript만
 sym convert -i user-policy.json --targets eslint
 
-# Convert for Java
+# Java만
 sym convert -i user-policy.json --targets checkstyle,pmd
 ```
 
-## Default Output Directory
+## 기본 출력 디렉토리
 
-**Important**: The convert command automatically creates a `.sym` directory at your git repository root and saves all generated files there.
+**중요**: convert 명령어는 Git 저장소 루트에 `.sym` 디렉토리를 자동 생성하고 모든 파일을 저장합니다.
 
-### Directory Structure
+### 디렉토리 구조
 
 ```
 your-project/
-├── .git/
-├── .sym/                      # Auto-generated
-│   ├── .eslintrc.json        # ESLint config
-│   ├── checkstyle.xml        # Checkstyle config
-│   ├── pmd-ruleset.xml       # PMD config
-│   ├── code-policy.json      # Internal policy
-│   └── conversion-report.json # Conversion report
-├── src/
-└── user-policy.json          # Your input file
++-- .git/
++-- .sym/                      # 자동 생성
+|   +-- .eslintrc.json        # ESLint 설정
+|   +-- checkstyle.xml        # Checkstyle 설정
+|   +-- pmd-ruleset.xml       # PMD 설정
+|   +-- code-policy.json      # 내부 정책
+|   +-- conversion-report.json # 변환 리포트
++-- src/
++-- user-policy.json          # 입력 파일
 ```
 
-### Why .sym?
+### 왜 .sym인가?
 
-- **Consistent location**: Always at git root, easy to find
-- **Version control**: Add to `.gitignore` to keep generated files out of git
-- **CI/CD friendly**: Scripts can always find configs at `<git-root>/.sym`
+- **일관된 위치**: 항상 Git 루트에 있어 찾기 쉬움
+- **버전 관리**: `.gitignore`에 추가하여 생성 파일을 Git에서 제외 가능
+- **CI/CD 친화적**: 스크립트가 항상 `<git-root>/.sym`에서 설정 찾음
 
-### Custom Output Directory
+### 커스텀 출력 디렉토리
 
-If you need a different location:
+다른 위치가 필요한 경우:
 
 ```bash
 sym convert -i user-policy.json --targets all --output-dir ./custom-dir
 ```
 
-## Prerequisites
+## 사전 요구사항
 
-1. **Git repository**: Run the command from within a git repository
-2. **OpenAI API key** (optional): Set `OPENAI_API_KEY` for better inference
+1. **Git 저장소**: Git 저장소 내에서 명령어 실행
+2. **OpenAI API 키** (선택): 더 나은 추론을 위해 `OPENAI_API_KEY` 설정
    ```bash
    export OPENAI_API_KEY=sk-...
    ```
 
-Without API key, fallback pattern matching is used (lower accuracy).
+API 키 없이도 폴백 패턴 매칭 사용 (정확도 낮음)
 
-## User Policy File
+## 사용자 정책 파일
 
-Create a `user-policy.json` with natural language rules:
+자연어 규칙으로 `user-policy.json` 작성:
 
 ```json
 {
@@ -71,134 +71,132 @@ Create a `user-policy.json` with natural language rules:
   },
   "rules": [
     {
-      "say": "Class names must be PascalCase",
+      "say": "클래스 이름은 PascalCase여야 합니다",
       "category": "naming",
       "languages": ["javascript", "typescript", "java"]
     },
     {
-      "say": "Maximum line length is 100 characters",
+      "say": "한 줄은 최대 100자입니다",
       "category": "length"
     },
     {
-      "say": "Use 4 spaces for indentation",
+      "say": "들여쓰기는 4칸 공백을 사용합니다",
       "category": "style"
     }
   ]
 }
 ```
 
-## Command Options
+## 명령어 옵션
 
-### Basic Options
+### 기본 옵션
 
-- `-i, --input`: Input user policy file (default: `user-policy.json`)
-- `--targets`: Target linters (comma-separated or `all`)
+- `-i, --input`: 입력 사용자 정책 파일 (기본값: `user-policy.json`)
+- `--targets`: 타겟 linter (쉼표 구분 또는 `all`)
   - `eslint` - JavaScript/TypeScript
   - `checkstyle` - Java
   - `pmd` - Java
-  - `all` - All supported linters
+  - `all` - 모든 지원 linter
 
-### Advanced Options
+### 고급 옵션
 
-- `--output-dir`: Custom output directory (default: `<git-root>/.sym`)
-- `--openai-model`: OpenAI model (default: `gpt-4o`)
-  - `gpt-4o` - Fast, cheap, good quality
-  - `gpt-4o` - Slower, more expensive, best quality
-- `--confidence-threshold`: Minimum confidence (default: `0.7`)
-  - Range: 0.0 to 1.0
-  - Lower values = more rules converted, more warnings
-- `--timeout`: API timeout in seconds (default: `30`)
-- `-v, --verbose`: Enable detailed logging
+- `--output-dir`: 커스텀 출력 디렉토리 (기본값: `<git-root>/.sym`)
+- `--openai-model`: OpenAI 모델 (기본값: `gpt-4o`)
+- `--confidence-threshold`: 최소 신뢰도 (기본값: `0.7`)
+  - 범위: 0.0 ~ 1.0
+  - 낮은 값 = 더 많은 규칙 변환, 더 많은 경고
+- `--timeout`: API 타임아웃 초 (기본값: `30`)
+- `-v, --verbose`: 상세 로깅 활성화
 
-### Legacy Mode
+### 레거시 모드
 
-Generate only internal `code-policy.json`:
+내부 `code-policy.json`만 생성:
 
 ```bash
 sym convert -i user-policy.json -o code-policy.json
 ```
 
-## Example Workflows
+## 예제 워크플로우
 
-### JavaScript/TypeScript Project
+### JavaScript/TypeScript 프로젝트
 
 ```bash
-# 1. Create user-policy.json
+# 1. user-policy.json 작성
 cat > user-policy.json <<EOF
 {
   "rules": [
     {
-      "say": "Class names must be PascalCase",
+      "say": "클래스 이름은 PascalCase여야 합니다",
       "category": "naming"
     },
     {
-      "say": "Use single quotes for strings",
+      "say": "문자열에는 작은따옴표를 사용합니다",
       "category": "style"
     }
   ]
 }
 EOF
 
-# 2. Convert to ESLint config
+# 2. ESLint 설정으로 변환
 sym convert -i user-policy.json --targets eslint
 
-# 3. Use generated config
+# 3. 생성된 설정 사용
 npx eslint --config .sym/.eslintrc.json src/
 ```
 
-### Java Project
+### Java 프로젝트
 
 ```bash
-# 1. Create user-policy.json with Java rules
+# 1. Java 규칙으로 user-policy.json 작성
 sym convert -i user-policy.json --targets checkstyle,pmd
 
-# 2. Use Checkstyle
+# 2. Checkstyle 사용
 java -jar checkstyle.jar -c .sym/checkstyle.xml src/
 
-# 3. Use PMD
+# 3. PMD 사용
 pmd check -R .sym/pmd-ruleset.xml -d src/
 ```
 
-### Multi-Language Project
+### 다중 언어 프로젝트
 
 ```bash
-# Convert for all languages at once
+# 모든 언어를 한 번에 변환
 sym convert -i user-policy.json --targets all
 
-# Files generated:
+# 생성되는 파일:
 # - .sym/.eslintrc.json (JS/TS)
 # - .sym/checkstyle.xml (Java)
 # - .sym/pmd-ruleset.xml (Java)
 ```
 
-## Output Files
+## 출력 파일
 
-### Generated Files
+### 생성 파일
 
-1. **`.eslintrc.json`**: ESLint configuration
-   - Rules: naming, length, style, complexity
-   - Comments with original "say" text
+1. **`.eslintrc.json`**: ESLint 설정
+   - 규칙: naming, length, style, complexity
+   - 원본 "say" 텍스트를 주석으로 포함
 
-2. **`checkstyle.xml`**: Checkstyle configuration
-   - Modules: TypeName, LineLength, Indentation, etc.
-   - Properties configured from params
+2. **`checkstyle.xml`**: Checkstyle 설정
+   - 모듈: TypeName, LineLength, Indentation 등
+   - params에서 속성 설정
 
-3. **`pmd-ruleset.xml`**: PMD ruleset
-   - Rule references to PMD categories
-   - Priority mapped from severity
+3. **`pmd-ruleset.xml`**: PMD 규칙셋
+   - PMD 카테고리에 대한 규칙 참조
+   - severity에서 priority 매핑
 
-4. **`code-policy.json`**: Internal validation policy
-   - Used by `sym validate` command
-   - Structured rule definitions
+4. **`code-policy.json`**: 내부 검증 정책
+   - `sym validate` 명령어에서 사용
+   - 구조화된 규칙 정의
 
-5. **`conversion-report.json`**: Conversion report
-   - Statistics per linter
-   - Warnings and errors
-   - Confidence scores
+5. **`conversion-report.json`**: 변환 리포트
+   - linter별 통계
+   - 경고 및 에러
+   - 신뢰도 점수
 
-### Conversion Report
+### 변환 리포트
 
-The report helps you understand what was converted:
+리포트를 통해 변환 결과 확인:
 
 ```json
 {
@@ -213,98 +211,98 @@ The report helps you understand what was converted:
     }
   },
   "warnings": [
-    "eslint: Rule 2: low confidence (0.40 < 0.70): Maximum line length is 100 characters"
+    "eslint: Rule 2: low confidence (0.40 < 0.70): 한 줄은 최대 100자입니다"
   ]
 }
 ```
 
-## Confidence and Warnings
+## 신뢰도와 경고
 
-### Confidence Scores
+### 신뢰도 점수
 
-Rules are assigned confidence scores (0.0-1.0):
-- **High (0.8-1.0)**: Strong match, rule will work well
-- **Medium (0.6-0.8)**: Good match, may need tweaking
-- **Low (0.4-0.6)**: Uncertain, check generated rule
-- **Very Low (0.0-0.4)**: Pattern matching fallback only
+규칙에 신뢰도 점수 (0.0-1.0) 부여:
+- **높음 (0.8-1.0)**: 강한 매칭, 규칙이 잘 작동
+- **중간 (0.6-0.8)**: 좋은 매칭, 조정 필요할 수 있음
+- **낮음 (0.4-0.6)**: 불확실, 생성된 규칙 확인 필요
+- **매우 낮음 (0.0-0.4)**: 패턴 매칭 폴백만 사용
 
-### Low Confidence Warnings
+### 낮은 신뢰도 경고
 
-When a rule has low confidence:
+규칙의 신뢰도가 낮을 때:
 ```
-⚠ eslint: Rule 2: low confidence (0.40 < 0.70): Maximum line length is 100 characters
+warning: eslint: Rule 2: low confidence (0.40 < 0.70): 한 줄은 최대 100자입니다
 ```
 
-**What to do:**
-1. Review the generated rule in the config file
-2. Adjust manually if needed
-3. Provide more specific `category` and `params` in user rule
-4. Use OpenAI API instead of fallback for better accuracy
+**대응 방법:**
+1. 설정 파일에서 생성된 규칙 검토
+2. 필요 시 수동 조정
+3. 사용자 규칙에서 더 구체적인 `category`와 `params` 제공
+4. 더 나은 정확도를 위해 폴백 대신 OpenAI API 사용
 
-### Adjusting Threshold
+### 임계값 조정
 
 ```bash
-# Stricter (fewer warnings, may miss rules)
+# 더 엄격하게 (경고 줄이기, 일부 규칙 누락 가능)
 sym convert -i user-policy.json --targets all --confidence-threshold 0.8
 
-# More lenient (more warnings, more rules)
+# 더 관대하게 (경고 많아지고 규칙 많아짐)
 sym convert -i user-policy.json --targets all --confidence-threshold 0.5
 ```
 
-## Troubleshooting
+## 문제 해결
 
 ### "not in a git repository"
 
-**Problem**: Command fails with git repository error
+**문제**: Git 저장소 오류로 명령어 실패
 
-**Solution**:
+**해결**:
 ```bash
-# Either initialize git
+# Git 초기화
 git init
 
-# Or use custom output directory
+# 또는 커스텀 출력 디렉토리 사용
 sym convert --targets all --output-dir ./linter-configs
 ```
 
 ### "OPENAI_API_KEY not set"
 
-**Problem**: Warning about missing API key
+**문제**: API 키 누락 경고
 
-**Solution**:
+**해결**:
 ```bash
-# Set the API key (recommended)
+# API 키 설정 (권장)
 export OPENAI_API_KEY=sk-your-key-here
 
-# Or accept fallback mode (lower accuracy)
-# Conversion will still work, just with pattern matching
+# 또는 폴백 모드 수용 (정확도 낮음)
+# 변환은 작동하지만 패턴 매칭만 사용
 ```
 
-### Generated rules don't work
+### 생성된 규칙이 작동하지 않음
 
-**Problem**: Linter rejects generated config
+**문제**: Linter가 생성된 설정을 거부
 
-**Solution**:
-1. Check linter version compatibility
-2. Review conversion-report.json for errors
-3. Manually adjust the problematic rule
-4. Report issue with your user-policy.json
+**해결**:
+1. Linter 버전 호환성 확인
+2. conversion-report.json에서 에러 확인
+3. 문제가 되는 규칙 수동 조정
+4. user-policy.json과 함께 이슈 보고
 
-### Slow conversion
+### 변환이 느림
 
-**Problem**: Takes too long to convert
+**문제**: 변환에 너무 오래 걸림
 
-**Solution**:
+**해결**:
 ```bash
-# Increase timeout
+# 타임아웃 늘리기
 sym convert --targets all --timeout 60
 
-# Use faster model (slightly less accurate)
+# 더 빠른 모델 사용
 sym convert --targets all --openai-model gpt-4o
 
-# Or split rules into smaller batches
+# 또는 규칙을 작은 배치로 분할
 ```
 
-## CI/CD Integration
+## CI/CD 통합
 
 ### GitHub Actions
 
@@ -343,53 +341,52 @@ validate:
     - merge_requests
 ```
 
-## Tips and Best Practices
+## 팁과 모범 사례
 
-### Writing Better Rules
+### 더 나은 규칙 작성
 
-1. **Be specific**: "Class names must be PascalCase" vs "use good names"
-2. **Include params**: Provide numeric values in `params` field
-3. **Set category**: Helps inference choose correct engine type
-4. **Specify languages**: Target specific languages when needed
+1. **구체적으로**: "클래스 이름은 PascalCase여야 합니다" vs "좋은 이름 사용"
+2. **params 포함**: `params` 필드에 숫자 값 제공
+3. **category 설정**: 올바른 엔진 타입 선택에 도움
+4. **언어 지정**: 필요 시 특정 언어 타겟팅
 
-### Managing Generated Files
+### 생성된 파일 관리
 
 ```bash
-# Add to .gitignore (already done by default)
+# .gitignore에 추가
 echo ".sym/" >> .gitignore
 
-# But commit user-policy.json
+# user-policy.json은 커밋
 git add user-policy.json
 git commit -m "Add coding conventions policy"
 ```
 
-### Sharing Configs
+### 설정 공유
 
 ```bash
-# Share with team
+# 팀과 공유
 git add .sym/*.{json,xml}
 git commit -m "Add generated linter configs"
 
-# Or regenerate on each machine
-# (Each developer runs: sym convert -i user-policy.json --targets all)
+# 또는 각 머신에서 재생성
+# (각 개발자가 실행: sym convert -i user-policy.json --targets all)
 ```
 
-### Updating Rules
+### 규칙 업데이트
 
 ```bash
-# 1. Edit user-policy.json
-# 2. Regenerate configs
+# 1. user-policy.json 편집
+# 2. 설정 재생성
 sym convert -i user-policy.json --targets all
 
-# 3. Review changes
+# 3. 변경사항 검토
 git diff .sym/
 
-# 4. Apply to project
+# 4. 프로젝트에 적용
 npx eslint --config .sym/.eslintrc.json src/
 ```
 
-## Next Steps
+## 다음 단계
 
-- [Full Feature Documentation](CONVERT_FEATURE.md)
-- [User Policy Schema Reference](../tests/testdata/user-policy-example.json)
-- [Contributing Guide](../AGENTS.md)
+- [전체 기능 문서](CONVERT_FEATURE.md)
+- [기여 가이드](../AGENTS.md)

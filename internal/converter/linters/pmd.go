@@ -30,19 +30,19 @@ func (c *PMDLinterConverter) SupportedLanguages() []string {
 	return []string{"java"}
 }
 
-// PMDRuleset represents PMD ruleset
-type PMDRuleset struct {
+// pmdRuleset represents PMD ruleset
+type pmdRuleset struct {
 	XMLName     xml.Name  `xml:"ruleset"`
 	Name        string    `xml:"name,attr"`
 	XMLNS       string    `xml:"xmlns,attr"`
 	XMLNSXSI    string    `xml:"xmlns:xsi,attr"`
 	XSISchema   string    `xml:"xsi:schemaLocation,attr"`
 	Description string    `xml:"description"`
-	Rules       []PMDRule `xml:"rule"`
+	Rules       []pmdRule `xml:"rule"`
 }
 
-// PMDRule represents a PMD rule
-type PMDRule struct {
+// pmdRule represents a PMD rule
+type pmdRule struct {
 	XMLName  xml.Name `xml:"rule"`
 	Ref      string   `xml:"ref,attr"`
 	Priority int      `xml:"priority,omitempty"`
@@ -57,7 +57,7 @@ func (c *PMDLinterConverter) ConvertRules(ctx context.Context, rules []schema.Us
 	// Convert rules in parallel
 	type ruleResult struct {
 		index int
-		rule  *PMDRule
+		rule  *pmdRule
 		err   error
 	}
 
@@ -84,7 +84,7 @@ func (c *PMDLinterConverter) ConvertRules(ctx context.Context, rules []schema.Us
 	}()
 
 	// Collect rules
-	var pmdRules []PMDRule
+	var pmdRules []pmdRule
 	var errors []string
 
 	for result := range results {
@@ -103,7 +103,7 @@ func (c *PMDLinterConverter) ConvertRules(ctx context.Context, rules []schema.Us
 	}
 
 	// Build PMD ruleset
-	ruleset := PMDRuleset{
+	ruleset := pmdRuleset{
 		Name:        "Symphony Rules",
 		XMLNS:       "http://pmd.sourceforge.net/ruleset/2.0.0",
 		XMLNSXSI:    "http://www.w3.org/2001/XMLSchema-instance",
@@ -129,7 +129,7 @@ func (c *PMDLinterConverter) ConvertRules(ctx context.Context, rules []schema.Us
 }
 
 // convertSingleRule converts a single rule using LLM
-func (c *PMDLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*PMDRule, error) {
+func (c *PMDLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*pmdRule, error) {
 	systemPrompt := `You are a PMD configuration expert. Convert natural language Java coding rules to PMD rule references.
 
 Return ONLY a JSON object (no markdown fences):
@@ -189,7 +189,7 @@ Output:
 		return nil, nil
 	}
 
-	return &PMDRule{
+	return &pmdRule{
 		Ref:      result.RuleRef,
 		Priority: result.Priority,
 	}, nil

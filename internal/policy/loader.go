@@ -10,14 +10,11 @@ import (
 
 // Loader handles loading policy files
 type Loader struct {
-	verbose bool
 }
 
 // NewLoader creates a new policy loader
 func NewLoader(verbose bool) *Loader {
-	return &Loader{
-		verbose: verbose,
-	}
+	return &Loader{}
 }
 
 // LoadUserPolicy loads user-friendly policy (A schema)
@@ -48,18 +45,4 @@ func (l *Loader) LoadCodePolicy(path string) (*schema.CodePolicy, error) {
 	}
 
 	return &policy, nil
-}
-
-// SaveCodePolicy saves policy to file
-func (l *Loader) SaveCodePolicy(path string, policy *schema.CodePolicy) error {
-	data, err := json.MarshalIndent(policy, "", "  ")
-	if err != nil {
-		return fmt.Errorf("failed to marshal policy: %w", err)
-	}
-
-	if err := os.WriteFile(path, data, 0644); err != nil {
-		return fmt.Errorf("failed to write policy file: %w", err)
-	}
-
-	return nil
 }
