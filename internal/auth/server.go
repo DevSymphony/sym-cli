@@ -11,15 +11,15 @@ import (
 	"github.com/pkg/browser"
 )
 
-// SessionResponse is the response from /authStart
-type SessionResponse struct {
+// sessionResponse is the response from /authStart
+type sessionResponse struct {
 	SessionCode string `json:"session_code"`
 	AuthURL     string `json:"auth_url"`
 	ExpiresIn   int    `json:"expires_in"`
 }
 
-// StatusResponse is the response from /authStatus
-type StatusResponse struct {
+// statusResponse is the response from /authStatus
+type statusResponse struct {
 	Status         string `json:"status"`
 	Message        string `json:"message,omitempty"`
 	Error          string `json:"error,omitempty"`
@@ -64,7 +64,7 @@ func AuthenticateWithServer(serverURL string) (string, string, error) {
 }
 
 // startAuthSession starts a new authentication session
-func startAuthSession(serverURL string) (*SessionResponse, error) {
+func startAuthSession(serverURL string) (*sessionResponse, error) {
 	url := serverURL + "/authStart"
 
 	requestBody := map[string]string{
@@ -87,7 +87,7 @@ func startAuthSession(serverURL string) (*SessionResponse, error) {
 		return nil, fmt.Errorf("server returned error: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
-	var session SessionResponse
+	var session sessionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&session); err != nil {
 		return nil, fmt.Errorf("failed to parse server response: %w", err)
 	}
@@ -147,7 +147,7 @@ func pollForToken(serverURL, sessionCode string, expiresIn int) (string, string,
 }
 
 // checkAuthStatus checks the authentication status
-func checkAuthStatus(url string) (*StatusResponse, error) {
+func checkAuthStatus(url string) (*statusResponse, error) {
 	resp, err := http.Get(url)
 	if err != nil {
 		return nil, err
@@ -160,14 +160,14 @@ func checkAuthStatus(url string) (*StatusResponse, error) {
 
 	if resp.StatusCode == http.StatusGone {
 		// Session expired
-		var status StatusResponse
+		var status statusResponse
 		_ = json.NewDecoder(resp.Body).Decode(&status)
 		return &status, nil
 	}
 
 	if resp.StatusCode == http.StatusForbidden {
 		// Denied
-		var status StatusResponse
+		var status statusResponse
 		_ = json.NewDecoder(resp.Body).Decode(&status)
 		return &status, nil
 	}
@@ -177,7 +177,7 @@ func checkAuthStatus(url string) (*StatusResponse, error) {
 		return nil, fmt.Errorf("server error: %s (status: %d)", string(body), resp.StatusCode)
 	}
 
-	var status StatusResponse
+	var status statusResponse
 	if err := json.NewDecoder(resp.Body).Decode(&status); err != nil {
 		return nil, err
 	}
