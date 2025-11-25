@@ -12,21 +12,21 @@ import (
 )
 
 // DefaultRegistry creates and populates a registry with all available adapters.
+// Note: Adapters are stateless and use CWD at execution time for working directory.
 func DefaultRegistry() *Registry {
 	reg := NewRegistry()
 
 	// Determine tools directory
 	toolsDir := getToolsDir()
-	workDir := getWorkDir()
 
 	// Register JavaScript/TypeScript adapters
-	_ = reg.Register(eslint.NewAdapter(toolsDir, workDir))
-	_ = reg.Register(prettier.NewAdapter(toolsDir, workDir))
-	_ = reg.Register(tsc.NewAdapter(toolsDir, workDir))
+	_ = reg.Register(eslint.NewAdapter(toolsDir))
+	_ = reg.Register(prettier.NewAdapter(toolsDir))
+	_ = reg.Register(tsc.NewAdapter(toolsDir))
 
 	// Register Java adapters
-	_ = reg.Register(checkstyle.NewAdapter(toolsDir, workDir))
-	_ = reg.Register(pmd.NewAdapter(toolsDir, workDir))
+	_ = reg.Register(checkstyle.NewAdapter(toolsDir))
+	_ = reg.Register(pmd.NewAdapter(toolsDir))
 
 	return reg
 }
@@ -35,10 +35,4 @@ func DefaultRegistry() *Registry {
 func getToolsDir() string {
 	home, _ := os.UserHomeDir()
 	return filepath.Join(home, ".sym", "tools")
-}
-
-// getWorkDir returns the current working directory.
-func getWorkDir() string {
-	wd, _ := os.Getwd()
-	return wd
 }

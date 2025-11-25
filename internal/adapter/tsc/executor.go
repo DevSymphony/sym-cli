@@ -29,8 +29,21 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 		return nil, fmt.Errorf("failed to marshal updated tsconfig: %w", err)
 	}
 
-	// Write tsconfig.json to a temporary location
-	configPath := filepath.Join(a.WorkDir, ".symphony-tsconfig.json")
+	// Write tsconfig.json to a temporary location with unique filename
+	// Use ToolsDir/.tmp to avoid conflicts with project files
+	tmpDir := filepath.Join(a.ToolsDir, ".tmp")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+
+	// Create unique temp file for concurrent execution safety
+	tmpFile, err := os.CreateTemp(tmpDir, "tsconfig-*.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp tsconfig: %w", err)
+	}
+	configPath := tmpFile.Name()
+	tmpFile.Close() // Close for WriteFile to reopen
+
 	if err := os.WriteFile(configPath, updatedConfig, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write tsconfig: %w", err)
 	}
@@ -51,8 +64,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 		"--pretty", "false",
 	}
 
-	// Execute tsc
-	a.executor.WorkDir = a.WorkDir
+	// Execute tsc (uses CWD by default)
 	output, err := a.executor.Execute(ctx, tscPath, args...)
 
 	// TSC returns non-zero exit code when there are type errors

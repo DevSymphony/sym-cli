@@ -10,14 +10,14 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/adapter"
 )
 
-func TestExecute_FileCreation(t *testing.T) {
+func TestExecute_TempFileCleanup(t *testing.T) {
 	tmpDir, err := os.MkdirTemp("", "eslint-exec-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	a := NewAdapter("", tmpDir)
+	a := NewAdapter(tmpDir)
 
 	ctx := context.Background()
 	config := []byte(`{"rules": {"semi": [2, "always"]}}`)
@@ -25,9 +25,11 @@ func TestExecute_FileCreation(t *testing.T) {
 
 	_, _ = a.execute(ctx, config, files)
 
-	configPath := filepath.Join(tmpDir, ".symphony-eslintrc.json")
-	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
-		t.Error("Config file should have been cleaned up")
+	// Config files are created in ToolsDir/.tmp and should be cleaned up
+	tmpConfigDir := filepath.Join(tmpDir, ".tmp")
+	configFiles, _ := filepath.Glob(filepath.Join(tmpConfigDir, "eslintrc-*.json"))
+	if len(configFiles) > 0 {
+		t.Error("Config files should have been cleaned up")
 	}
 }
 
@@ -51,7 +53,7 @@ func TestGetESLintCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			a := NewAdapter(tt.toolsDir, "")
+			a := NewAdapter(tt.toolsDir)
 			cmd := a.getESLintCommand()
 
 			if tt.wantContain != "" && len(cmd) > 0 {
@@ -65,7 +67,7 @@ func TestGetESLintCommand(t *testing.T) {
 }
 
 func TestGetExecutionArgs(t *testing.T) {
-	a := NewAdapter("", "/work/dir")
+	a := NewAdapter("")
 
 	configPath := "/tmp/config.json"
 	files := []string{"file1.js", "file2.js"}
@@ -108,7 +110,7 @@ func TestWriteConfigFile(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	a := NewAdapter("", tmpDir)
+	a := NewAdapter(tmpDir)
 
 	config := []byte(`{"rules": {"semi": [2, "always"]}}`)
 
@@ -150,7 +152,7 @@ func TestExecute_Integration(t *testing.T) {
 		t.Fatalf("Failed to write test file: %v", err)
 	}
 
-	a := NewAdapter("", tmpDir)
+	a := NewAdapter(tmpDir)
 
 	ctx := context.Background()
 	config := []byte(`{"rules": {"semi": [2, "always"]}}`)

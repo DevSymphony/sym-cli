@@ -29,13 +29,13 @@ const (
 // - Performance rules: inefficient code patterns
 // - Security rules: hardcoded credentials, SQL injection
 // - Error handling rules: empty catch blocks, exception handling
+//
+// Note: Adapter is goroutine-safe and stateless. WorkDir is determined
+// by CWD at execution time, not stored in the adapter.
 type Adapter struct {
 	// ToolsDir is where PMD is installed.
 	// Default: ~/.sym/tools
 	ToolsDir string
-
-	// WorkDir is the project root.
-	WorkDir string
 
 	// PMDPath is the path to pmd executable.
 	// Empty = use default location
@@ -46,7 +46,7 @@ type Adapter struct {
 }
 
 // NewAdapter creates a new PMD adapter.
-func NewAdapter(toolsDir, workDir string) *Adapter {
+func NewAdapter(toolsDir string) *Adapter {
 	if toolsDir == "" {
 		home, _ := os.UserHomeDir()
 		toolsDir = filepath.Join(home, ".sym", "tools")
@@ -54,7 +54,6 @@ func NewAdapter(toolsDir, workDir string) *Adapter {
 
 	return &Adapter{
 		ToolsDir: toolsDir,
-		WorkDir:  workDir,
 		executor: adapter.NewSubprocessExecutor(),
 	}
 }

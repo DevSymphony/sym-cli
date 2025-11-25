@@ -17,23 +17,23 @@ import (
 // - Style validation (--check mode)
 // - Auto-fixing (--write mode)
 // - Config: indent, quote, semi, trailingComma, etc.
+//
+// Note: Adapter is goroutine-safe and stateless. WorkDir is determined
+// by CWD at execution time, not stored in the adapter.
 type Adapter struct {
 	ToolsDir string
-	WorkDir  string
 	executor *adapter.SubprocessExecutor
 }
 
 // NewAdapter creates a new Prettier adapter.
-func NewAdapter(toolsDir, workDir string) *Adapter {
+func NewAdapter(toolsDir string) *Adapter {
 	if toolsDir == "" {
 		home, _ := os.UserHomeDir()
-		// symphonyclient integration: .symphony → .sym directory
 		toolsDir = filepath.Join(home, ".sym", "tools")
 	}
 
 	return &Adapter{
 		ToolsDir: toolsDir,
-		WorkDir:  workDir,
 		executor: adapter.NewSubprocessExecutor(),
 	}
 }

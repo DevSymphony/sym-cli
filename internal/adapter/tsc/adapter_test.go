@@ -11,7 +11,7 @@ import (
 )
 
 func TestNewAdapter(t *testing.T) {
-	adapter := NewAdapter("", "")
+	adapter := NewAdapter("")
 	if adapter == nil {
 		t.Fatal("NewAdapter() returned nil")
 	}
@@ -22,30 +22,25 @@ func TestNewAdapter(t *testing.T) {
 	}
 }
 
-func TestNewAdapter_CustomDirs(t *testing.T) {
+func TestNewAdapter_CustomToolsDir(t *testing.T) {
 	toolsDir := "/custom/tools"
-	workDir := "/custom/work"
 
-	adapter := NewAdapter(toolsDir, workDir)
+	adapter := NewAdapter(toolsDir)
 
 	if adapter.ToolsDir != toolsDir {
 		t.Errorf("ToolsDir = %q, want %q", adapter.ToolsDir, toolsDir)
 	}
-
-	if adapter.WorkDir != workDir {
-		t.Errorf("WorkDir = %q, want %q", adapter.WorkDir, workDir)
-	}
 }
 
 func TestName(t *testing.T) {
-	adapter := NewAdapter("", "")
+	adapter := NewAdapter("")
 	if adapter.Name() != "tsc" {
 		t.Errorf("Name() = %q, want %q", adapter.Name(), "tsc")
 	}
 }
 
 func TestGetTSCPath(t *testing.T) {
-	adapter := NewAdapter("/test/tools", "")
+	adapter := NewAdapter("/test/tools")
 	expected := filepath.Join("/test/tools", "node_modules", ".bin", "tsc")
 
 	got := adapter.getTSCPath()
@@ -62,7 +57,7 @@ func TestInitPackageJSON(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	adapter := NewAdapter(tmpDir, "")
+	adapter := NewAdapter(tmpDir)
 
 	if err := adapter.initPackageJSON(); err != nil {
 		t.Fatalf("initPackageJSON() error = %v", err)
@@ -96,7 +91,7 @@ func TestInitPackageJSON(t *testing.T) {
 
 func TestCheckAvailability_NotFound(t *testing.T) {
 	// Use a non-existent directory
-	adapter := NewAdapter("/nonexistent/path", "")
+	adapter := NewAdapter("/nonexistent/path")
 
 	ctx := context.Background()
 	err := adapter.CheckAvailability(ctx)
@@ -116,7 +111,7 @@ func TestInstall_MissingNPM(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	a := NewAdapter(tmpDir, "")
+	a := NewAdapter(tmpDir)
 
 	ctx := context.Background()
 	config := adapter.InstallConfig{
@@ -134,32 +129,40 @@ func TestInstall_MissingNPM(t *testing.T) {
 	}
 }
 
-func TestExecute_FileCreation(t *testing.T) {
-	// Create temporary work directory
+func TestExecute_TempFileCleanup(t *testing.T) {
+	// Create temporary tools directory
 	tmpDir, err := os.MkdirTemp("", "tsc-exec-test-*")
 	if err != nil {
 		t.Fatalf("Failed to create temp dir: %v", err)
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	adapter := NewAdapter("", tmpDir)
+	adapter := NewAdapter(tmpDir)
 
 	ctx := context.Background()
 	config := []byte(`{"compilerOptions": {"strict": true}}`)
 	files := []string{"test.ts"}
 
-	// Execute (will fail because tsc not installed, but we can test config file creation)
+	// Execute (will fail because tsc not installed, but we can test temp file cleanup)
 	_, _ = adapter.Execute(ctx, config, files)
 
-	// Config file should have been created and cleaned up
-	configPath := filepath.Join(tmpDir, ".symphony-tsconfig.json")
-	if _, err := os.Stat(configPath); !os.IsNotExist(err) {
-		t.Error("Config file should have been cleaned up")
+	// Temp directory should exist (created by executor)
+	tmpConfigDir := filepath.Join(tmpDir, ".tmp")
+	if _, err := os.Stat(tmpConfigDir); os.IsNotExist(err) {
+		// Dir might not exist if execution failed early, which is fine
+		t.Log("Temp dir not created (execution may have failed early)")
+		return
+	}
+
+	// Any tsconfig files should have been cleaned up
+	files2, _ := filepath.Glob(filepath.Join(tmpConfigDir, "tsconfig-*.json"))
+	if len(files2) > 0 {
+		t.Error("Temp config files should have been cleaned up")
 	}
 }
 
 func TestParseOutput_Integration(t *testing.T) {
-	a := NewAdapter("", "")
+	a := NewAdapter("")
 
 	output := &adapter.ToolOutput{
 		Stdout: `src/main.ts(10,5): error TS2304: Cannot find name 'foo'.

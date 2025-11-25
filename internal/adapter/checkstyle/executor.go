@@ -38,9 +38,8 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	}
 	args = append(args, files...)
 
-	// Execute
+	// Execute (uses CWD by default)
 	start := time.Now()
-	a.executor.WorkDir = a.WorkDir
 
 	output, err := a.executor.Execute(ctx, a.JavaPath, args...)
 	duration := time.Since(start)

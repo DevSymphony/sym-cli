@@ -41,9 +41,8 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 		"--no-cache", // Disable cache for consistent results
 	}
 
-	// Execute
+	// Execute (uses CWD by default)
 	start := time.Now()
-	a.executor.WorkDir = a.WorkDir
 
 	output, err := a.executor.Execute(ctx, pmdPath, args...)
 	duration := time.Since(start)
