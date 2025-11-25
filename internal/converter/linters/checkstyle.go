@@ -30,26 +30,26 @@ func (c *CheckstyleLinterConverter) SupportedLanguages() []string {
 	return []string{"java"}
 }
 
-// CheckstyleModule represents a Checkstyle module
-type CheckstyleModule struct {
-	XMLName    xml.Name              `xml:"module"`
-	Name       string                `xml:"name,attr"`
-	Properties []CheckstyleProperty  `xml:"property,omitempty"`
-	Modules    []CheckstyleModule    `xml:"module,omitempty"`
+// checkstyleModule represents a Checkstyle module
+type checkstyleModule struct {
+	XMLName    xml.Name             `xml:"module"`
+	Name       string               `xml:"name,attr"`
+	Properties []checkstyleProperty `xml:"property,omitempty"`
+	Modules    []checkstyleModule   `xml:"module,omitempty"`
 }
 
-// CheckstyleProperty represents a property
-type CheckstyleProperty struct {
+// checkstyleProperty represents a property
+type checkstyleProperty struct {
 	XMLName xml.Name `xml:"property"`
 	Name    string   `xml:"name,attr"`
 	Value   string   `xml:"value,attr"`
 }
 
-// CheckstyleConfig represents root configuration
-type CheckstyleConfig struct {
+// checkstyleConfig represents root configuration
+type checkstyleConfig struct {
 	XMLName xml.Name           `xml:"module"`
 	Name    string             `xml:"name,attr"`
-	Modules []CheckstyleModule `xml:"module"`
+	Modules []checkstyleModule `xml:"module"`
 }
 
 // ConvertRules converts user rules to Checkstyle configuration using LLM
@@ -61,7 +61,7 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 	// Convert rules in parallel
 	type moduleResult struct {
 		index  int
-		module *CheckstyleModule
+		module *checkstyleModule
 		err    error
 	}
 
@@ -88,7 +88,7 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 	}()
 
 	// Collect modules
-	var modules []CheckstyleModule
+	var modules []checkstyleModule
 	var errors []string
 
 	for result := range results {
@@ -107,14 +107,14 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 	}
 
 	// Build Checkstyle configuration
-	treeWalker := CheckstyleModule{
+	treeWalker := checkstyleModule{
 		Name:    "TreeWalker",
 		Modules: modules,
 	}
 
-	config := CheckstyleConfig{
+	config := checkstyleConfig{
 		Name:    "Checker",
-		Modules: []CheckstyleModule{treeWalker},
+		Modules: []checkstyleModule{treeWalker},
 	}
 
 	// Marshal to XML
@@ -139,7 +139,7 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 }
 
 // convertSingleRule converts a single rule using LLM
-func (c *CheckstyleLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*CheckstyleModule, error) {
+func (c *CheckstyleLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*checkstyleModule, error) {
 	systemPrompt := `You are a Checkstyle configuration expert. Convert natural language Java coding rules to Checkstyle modules.
 
 Return ONLY a JSON object (no markdown fences):
@@ -211,20 +211,20 @@ Output:
 	}
 
 	// Build module
-	module := &CheckstyleModule{
+	module := &checkstyleModule{
 		Name:       result.ModuleName,
-		Properties: []CheckstyleProperty{},
+		Properties: []checkstyleProperty{},
 	}
 
 	// Add severity
-	module.Properties = append(module.Properties, CheckstyleProperty{
+	module.Properties = append(module.Properties, checkstyleProperty{
 		Name:  "severity",
 		Value: mapCheckstyleSeverity(result.Severity),
 	})
 
 	// Add other properties
 	for key, value := range result.Properties {
-		module.Properties = append(module.Properties, CheckstyleProperty{
+		module.Properties = append(module.Properties, checkstyleProperty{
 			Name:  key,
 			Value: value,
 		})
