@@ -4,56 +4,7 @@ import (
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/roles"
-	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
-
-// Test matchPattern function with various glob patterns
-func TestMatchPattern(t *testing.T) {
-	tests := []struct {
-		pattern  string
-		path     string
-		expected bool
-	}{
-		// ** patterns
-		{"src/**", "src/components/Button.js", true},
-		{"src/**", "src/utils/helper.js", true},
-		{"src/**", "lib/main.js", false},
-		{"src/components/**", "src/components/ui/Button.js", true},
-		{"src/components/**", "src/utils/helper.js", false},
-
-		// ** with suffix
-		{"**/*.js", "src/components/Button.js", true},
-		{"**/*.js", "lib/utils.js", true},
-		{"**/*.js", "src/styles.css", false},
-		{"src/**/test", "src/components/test", true},
-		{"src/**/test", "src/a/b/c/test", true},
-
-		// * patterns
-		{"src/*.js", "src/main.js", true},
-		{"src/*.js", "src/components/Button.js", false},
-
-		// Exact match
-		{"src/main.js", "src/main.js", true},
-		{"src/main.js", "src/app.js", false},
-
-		// Directory prefix
-		{"src/components/", "src/components/Button.js", true},
-		{"src/components/", "src/utils/helper.js", false},
-	}
-
-	for _, tt := range tests {
-		// Since matchPattern is not exported, we'll test through checkFilePermission
-		role := &schema.UserRole{
-			AllowWrite: []string{tt.pattern},
-			DenyWrite:  []string{},
-		}
-		// This will use matchPattern internally
-		_ = role
-		// We can't directly test matchPattern since it's not exported
-		// So this test is commented out for now
-		t.Skip("matchPattern is not exported, test through integration")
-	}
-}
 
 // Test complex RBAC scenarios with admin, developer, viewer roles
 func TestComplexRBACPatterns(t *testing.T) {
