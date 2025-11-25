@@ -60,7 +60,7 @@ func NewValidator(policy *schema.CodePolicy, verbose bool) *Validator {
 	return &Validator{
 		policy:          policy,
 		verbose:         verbose,
-		adapterRegistry: adapterRegistry.DefaultRegistry(),
+		adapterRegistry: adapterRegistry.Global(),
 		workDir:         workDir,
 		symDir:          symDir,
 		selector:        NewFileSelector(workDir),
@@ -288,23 +288,10 @@ Does this code violate the convention?`, file, rule.Desc, string(content))
 // getAdapterConfig gets config for an adapter
 // First checks .sym directory for existing config files, then generates from rule
 func (v *Validator) getAdapterConfig(adapterName string, rule schema.PolicyRule) ([]byte, error) {
-	// Check for existing config in .sym directory
-	var configPath string
-	switch adapterName {
-	case "eslint":
-		configPath = filepath.Join(v.symDir, ".eslintrc.json")
-	case "prettier":
-		configPath = filepath.Join(v.symDir, ".prettierrc.json")
-	case "tsc":
-		configPath = filepath.Join(v.symDir, "tsconfig.json")
-	case "checkstyle":
-		configPath = filepath.Join(v.symDir, "checkstyle.xml")
-	case "pmd":
-		configPath = filepath.Join(v.symDir, "pmd-ruleset.xml")
-	}
-
-	// If config exists in .sym, use it
-	if configPath != "" {
+	// Check for existing config in .sym directory (using registry)
+	configFile := v.adapterRegistry.GetConfigFile(adapterName)
+	if configFile != "" {
+		configPath := filepath.Join(v.symDir, configFile)
 		if data, err := os.ReadFile(configPath); err == nil {
 			if v.verbose {
 				fmt.Printf("   📄 Using config from %s\n", configPath)

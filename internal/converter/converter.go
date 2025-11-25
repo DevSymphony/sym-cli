@@ -9,21 +9,11 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
 	"github.com/DevSymphony/sym-cli/internal/converter/linters"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
-
-// languageLinterMapping defines which linters are available for each language
-var languageLinterMapping = map[string][]string{
-	"javascript": {"eslint", "prettier"},
-	"js":         {"eslint", "prettier"},
-	"typescript": {"tsc", "eslint", "prettier"},
-	"ts":         {"tsc", "eslint", "prettier"},
-	"tsx":        {"tsc", "eslint", "prettier"},
-	"jsx":        {"eslint", "prettier"},
-	"java":       {"checkstyle", "pmd"},
-}
 
 // llmValidatorEngine is the special linter for rules that don't fit any specific external linter
 const llmValidatorEngine = "llm-validator"
@@ -297,9 +287,12 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 
 // getAvailableLinters returns available linters for given languages
 func (c *Converter) getAvailableLinters(languages []string) []string {
+	// Build language mapping dynamically from registry
+	languageLinterMapping := registry.Global().BuildLanguageMapping()
+
 	if len(languages) == 0 {
-		// If no languages specified, include all linters
-		languages = []string{"javascript", "typescript", "java"}
+		// If no languages specified, return all registered tools
+		return registry.Global().GetAllToolNames()
 	}
 
 	linterSet := make(map[string]bool)
@@ -412,20 +405,12 @@ Reason: Requires knowing which packages are "large"`, availableLinters)
 
 // getLinterConverter returns the appropriate converter for a linter
 func (c *Converter) getLinterConverter(linterName string) linters.LinterConverter {
-	switch linterName {
-	case "eslint":
-		return linters.NewESLintLinterConverter()
-	case "prettier":
-		return linters.NewPrettierLinterConverter()
-	case "tsc":
-		return linters.NewTSCLinterConverter()
-	case "checkstyle":
-		return linters.NewCheckstyleLinterConverter()
-	case "pmd":
-		return linters.NewPMDLinterConverter()
-	default:
+	// Use registry to get converter (no hardcoding)
+	converter, ok := registry.Global().GetConverter(linterName)
+	if !ok {
 		return nil
 	}
+	return converter
 }
 
 // convertRBAC converts UserRBAC to PolicyRBAC
