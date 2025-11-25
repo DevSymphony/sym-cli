@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"sort"
 	"strings"
 	"sync"
 
@@ -142,7 +143,15 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 
 // convertSingleRule converts a single user rule to ESLint rule using LLM
 func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (string, interface{}, error) {
-	systemPrompt := `You are an ESLint configuration expert. Convert natural language coding rules to ESLint rule configurations.
+	// Build list of valid ESLint rules for the prompt
+	validRules := GetESLintRuleNames()
+	sort.Strings(validRules)
+	validRulesStr := strings.Join(validRules, ", ")
+
+	systemPrompt := fmt.Sprintf(`You are an ESLint configuration expert. Convert natural language coding rules to ESLint rule configurations.
+
+IMPORTANT: You MUST ONLY use rules from this exact list of valid ESLint rules:
+%s
 
 Return ONLY a JSON object (no markdown fences) with this structure:
 {
@@ -151,22 +160,11 @@ Return ONLY a JSON object (no markdown fences) with this structure:
   "options": {...}
 }
 
-Common ESLint rules:
-- Naming: camelcase, id-match, id-length, new-cap
-- Console: no-console, no-debugger, no-alert
-- Code Quality: no-unused-vars, no-undef, eqeqeq, prefer-const, no-var
-- Complexity: complexity, max-depth, max-nested-callbacks, max-lines-per-function
-- Length: max-len, max-lines, max-params, max-statements
-- Style: indent, quotes, semi, comma-dangle, brace-style
-- Imports: no-restricted-imports
-- Security: no-eval, no-implied-eval, no-new-func
-
-If the rule cannot be expressed in ESLint, return:
-{
-  "rule_name": "",
-  "severity": "off",
-  "options": null
-}
+CRITICAL RULES:
+1. ONLY use rule names from the list above - do NOT invent or guess rule names
+2. If no rule from the list can enforce this requirement, return rule_name as empty string ""
+3. Do NOT suggest plugin rules (e.g., @typescript-eslint/*, eslint-plugin-*)
+4. When in doubt, return empty rule_name - it's better to skip than use wrong rule
 
 Examples:
 
@@ -192,7 +190,25 @@ Output:
   "rule_name": "camelcase",
   "severity": "error",
   "options": {"properties": "always"}
-}`
+}
+
+Input: "File names must be kebab-case"
+Output:
+{
+  "rule_name": "",
+  "severity": "off",
+  "options": null
+}
+(Reason: No native ESLint rule for file naming)
+
+Input: "No hardcoded API keys"
+Output:
+{
+  "rule_name": "",
+  "severity": "off",
+  "options": null
+}
+(Reason: Requires plugin or semantic analysis)`, validRulesStr)
 
 	userPrompt := fmt.Sprintf("Convert this rule to ESLint configuration:\n\n%s", rule.Say)
 	if rule.Severity != "" {
@@ -228,6 +244,14 @@ Output:
 
 	// If rule_name is empty, this rule cannot be converted
 	if result.RuleName == "" {
+		return "", nil, nil
+	}
+
+	// VALIDATION: Check if the rule actually exists in our registry
+	validation := ValidateESLintRule(result.RuleName, result.Options)
+	if !validation.Valid {
+		// Rule doesn't exist - skip it (will be handled by llm-validator)
+		fmt.Printf("⚠️  Invalid ESLint rule '%s': %s\n", result.RuleName, validation.Message)
 		return "", nil, nil
 	}
 
