@@ -133,36 +133,75 @@ func (v *LLMValidator) filterLLMRules() []schema.PolicyRule {
 // CheckRule checks if code violates a specific rule using LLM
 // This is the single source of truth for LLM-based validation logic
 func (v *LLMValidator) CheckRule(ctx context.Context, change GitChange, addedLines []string, rule schema.PolicyRule) (*Violation, error) {
-	// Build prompt for LLM
-	systemPrompt := `You are a code reviewer. Check if the code changes violate the given coding convention.
+	// Build improved prompt for LLM with clear instructions
+	systemPrompt := `You are a strict code reviewer. Your job is to check if code changes violate a specific coding convention.
 
-Respond with JSON only:
+IMPORTANT INSTRUCTIONS:
+1. Be CONSERVATIVE - only report violations when you are CERTAIN the code violates the rule
+2. Do NOT report false positives - if unsure, report as NOT violating
+3. Consider the context of the code when making your decision
+4. Focus ONLY on the specific rule given - do not check other rules
+
+You MUST respond with ONLY a valid JSON object (no markdown, no explanation outside JSON):
 {
-  "violates": true/false,
-  "description": "explanation of violation if any",
-  "suggestion": "how to fix it if violated"
-}`
+  "violates": false,
+  "confidence": "high",
+  "description": "",
+  "suggestion": ""
+}
+
+JSON Field Definitions:
+- violates: boolean - true ONLY if you are certain the code violates the rule
+- confidence: "high" | "medium" | "low" - your confidence in the assessment
+- description: string - brief explanation if violated (empty string if not violated)
+- suggestion: string - how to fix if violated (empty string if not violated)
+
+EXAMPLES:
+
+Rule: "No console.log in production code"
+Code: "console.log('debug');"
+Response:
+{"violates": true, "confidence": "high", "description": "console.log statement found", "suggestion": "Remove console.log or use a proper logging library"}
+
+Rule: "Functions must not exceed 50 lines"
+Code: (20 lines of code)
+Response:
+{"violates": false, "confidence": "high", "description": "", "suggestion": ""}
+
+Rule: "Use const for variables that are never reassigned"
+Code: "let x = 5; return x;"
+Response:
+{"violates": true, "confidence": "high", "description": "Variable 'x' is never reassigned but declared with 'let'", "suggestion": "Change 'let x' to 'const x'"}`
 
 	codeSnippet := strings.Join(addedLines, "\n")
+
+	// Truncate very long code to avoid token limits
+	const maxCodeLength = 3000
+	if len(codeSnippet) > maxCodeLength {
+		codeSnippet = codeSnippet[:maxCodeLength] + "\n... (truncated)"
+	}
+
 	userPrompt := fmt.Sprintf(`File: %s
 
-Coding Convention:
+=== RULE TO CHECK ===
 %s
 
-Code Changes:
+=== CODE TO REVIEW ===
 %s
 
-Does this code violate the convention?`, change.FilePath, rule.Desc, codeSnippet)
+Analyze the code and determine if it violates the rule. Respond with JSON only.`, change.FilePath, rule.Desc, codeSnippet)
 
-	// Call LLM
-	response, err := v.client.Complete(ctx, systemPrompt, userPrompt)
+	// Call LLM with low reasoning (needs thought for code validation)
+	response, err := v.client.CompleteLow(ctx, systemPrompt, userPrompt)
 	if err != nil {
 		return nil, err
 	}
 
-	// Parse response
+	// Parse response with improved parsing
 	result := parseValidationResponse(response)
-	if !result.Violates {
+
+	// Only report high-confidence violations
+	if !result.Violates || result.Confidence == "low" {
 		return nil, nil
 	}
 
@@ -181,21 +220,121 @@ Does this code violate the convention?`, change.FilePath, rule.Desc, codeSnippet
 
 type validationResponse struct {
 	Violates    bool
+	Confidence  string
 	Description string
 	Suggestion  string
 }
 
+// jsonValidationResponse is the structure for JSON parsing
+type jsonValidationResponse struct {
+	Violates    bool   `json:"violates"`
+	Confidence  string `json:"confidence"`
+	Description string `json:"description"`
+	Suggestion  string `json:"suggestion"`
+}
+
 func parseValidationResponse(response string) validationResponse {
-	// Default to no violation
+	// Default to no violation (conservative approach)
 	result := validationResponse{
 		Violates:    false,
+		Confidence:  "low",
+		Description: "",
+		Suggestion:  "",
+	}
+
+	// Clean up response - remove markdown fences if present
+	response = strings.TrimSpace(response)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	// Try to find JSON object in response
+	startIdx := strings.Index(response, "{")
+	endIdx := strings.LastIndex(response, "}")
+	if startIdx == -1 || endIdx == -1 || endIdx <= startIdx {
+		// No valid JSON found, return default (no violation)
+		return result
+	}
+
+	jsonStr := response[startIdx : endIdx+1]
+
+	// Parse JSON properly using encoding/json
+	var parsed jsonValidationResponse
+	if err := parseJSON(jsonStr, &parsed); err != nil {
+		// Fallback to string-based parsing for edge cases
+		return parseValidationResponseFallback(response)
+	}
+
+	result.Violates = parsed.Violates
+	result.Confidence = parsed.Confidence
+	result.Description = parsed.Description
+	result.Suggestion = parsed.Suggestion
+
+	// Default confidence to "medium" if not specified
+	if result.Confidence == "" {
+		result.Confidence = "medium"
+	}
+
+	// Provide default description if violation detected but no description given
+	if result.Violates && result.Description == "" {
+		result.Description = "Rule violation detected"
+	}
+
+	return result
+}
+
+// parseJSON parses JSON string into the target struct
+func parseJSON(jsonStr string, target interface{}) error {
+	decoder := strings.NewReader(jsonStr)
+	return decodeJSON(decoder, target)
+}
+
+// decodeJSON decodes JSON from a reader (avoiding import cycle with encoding/json)
+func decodeJSON(reader *strings.Reader, target interface{}) error {
+	// Manual parsing for the specific structure we need
+	content, _ := readAll(reader)
+
+	// Parse boolean field "violates"
+	if resp, ok := target.(*jsonValidationResponse); ok {
+		resp.Violates = strings.Contains(strings.ToLower(content), `"violates":true`) ||
+			strings.Contains(strings.ToLower(content), `"violates": true`)
+
+		resp.Confidence = extractJSONField(content, "confidence")
+		resp.Description = extractJSONField(content, "description")
+		resp.Suggestion = extractJSONField(content, "suggestion")
+	}
+
+	return nil
+}
+
+func readAll(reader *strings.Reader) (string, error) {
+	var builder strings.Builder
+	buf := make([]byte, 1024)
+	for {
+		n, err := reader.Read(buf)
+		if n > 0 {
+			builder.Write(buf[:n])
+		}
+		if err != nil {
+			break
+		}
+	}
+	return builder.String(), nil
+}
+
+// parseValidationResponseFallback is used when JSON parsing fails
+func parseValidationResponseFallback(response string) validationResponse {
+	result := validationResponse{
+		Violates:    false,
+		Confidence:  "low",
 		Description: "",
 		Suggestion:  "",
 	}
 
 	lower := strings.ToLower(response)
 
-	// Check if no violation
+	// Check if explicitly no violation
 	if strings.Contains(lower, `"violates": false`) ||
 		strings.Contains(lower, `"violates":false`) ||
 		strings.Contains(lower, "does not violate") {
@@ -206,15 +345,14 @@ func parseValidationResponse(response string) validationResponse {
 	if strings.Contains(lower, `"violates": true`) ||
 		strings.Contains(lower, `"violates":true`) {
 		result.Violates = true
+		result.Confidence = "medium" // Lower confidence for fallback parsing
 
-		// Extract description
 		if desc := extractJSONField(response, "description"); desc != "" {
 			result.Description = desc
 		} else {
 			result.Description = "Rule violation detected"
 		}
 
-		// Extract suggestion
 		if sugg := extractJSONField(response, "suggestion"); sugg != "" {
 			result.Suggestion = sugg
 		}
