@@ -79,7 +79,6 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 // Server is a MCP (Model Context Protocol) server.
 // It communicates via JSON-RPC over stdio.
 type Server struct {
-	port       int
 	configPath string
 	userPolicy *schema.UserPolicy
 	codePolicy *schema.CodePolicy
@@ -87,9 +86,8 @@ type Server struct {
 }
 
 // NewServer creates a new MCP server instance.
-func NewServer(port int, configPath string) *Server {
+func NewServer(configPath string) *Server {
 	return &Server{
-		port:       port,
 		configPath: configPath,
 		loader:     policy.NewLoader(false), // verbose = false for MCP
 	}

@@ -47,9 +47,7 @@ func init() {
 	rootCmd.AddCommand(policyCmd)
 	// Note: mcpCmd is registered in mcp.go's init()
 
-	// sym-cli core commands (in development)
+	// sym-cli core commands
 	rootCmd.AddCommand(convertCmd)
 	rootCmd.AddCommand(validateCmd)
-	// TODO: implement export command
-	// rootCmd.AddCommand(exportCmd)
 }

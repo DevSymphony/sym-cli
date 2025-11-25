@@ -12,10 +12,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	mcpConfig string
-	mcpPort   int
-)
+var mcpConfig string
 
 var mcpCmd = &cobra.Command{
 	Use:   "mcp",
@@ -37,7 +34,6 @@ func init() {
 	rootCmd.AddCommand(mcpCmd)
 
 	mcpCmd.Flags().StringVarP(&mcpConfig, "config", "c", "", "policy file path (code-policy.json)")
-	mcpCmd.Flags().IntVarP(&mcpPort, "port", "p", 0, "server port (unused, kept for compatibility)")
 }
 
 func runMCP(cmd *cobra.Command, args []string) error {
@@ -78,7 +74,7 @@ func runMCP(cmd *cobra.Command, args []string) error {
 	}
 
 	// Start MCP server - it will handle conversion automatically if needed
-	server := mcp.NewServer(mcpPort, configPath)
+	server := mcp.NewServer(configPath)
 	return server.Start()
 }
 
