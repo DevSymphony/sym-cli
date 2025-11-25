@@ -47,10 +47,10 @@ func NewConverter(llmClient *llm.Client, outputDir string) *Converter {
 
 // ConvertResult represents the result of conversion
 type ConvertResult struct {
-	GeneratedFiles []string          // List of generated file paths (including code-policy.json)
+	GeneratedFiles []string           // List of generated file paths (including code-policy.json)
 	CodePolicy     *schema.CodePolicy // Generated code policy
-	Errors         map[string]error  // Errors per linter
-	Warnings       []string          // Conversion warnings
+	Errors         map[string]error   // Errors per linter
+	Warnings       []string           // Conversion warnings
 }
 
 // Convert is the main entry point for converting user policy to linter configs
@@ -328,8 +328,10 @@ Available linters and NATIVE capabilities:
   - CANNOT: Complex business logic, context-aware rules, file naming, advanced async patterns
 - prettier: Code formatting ONLY (quotes, semicolons, indentation, line length, trailing commas)
 - tsc: TypeScript type checking ONLY (strict modes, noImplicitAny, strictNullChecks, type inference)
-- checkstyle: Java style checks (naming, whitespace, imports, line length, complexity)
-- pmd: Java code quality (unused code, empty blocks, naming conventions, design issues)
+- checkstyle: Java naming and style checks ONLY (ClassName, MethodName, VariableName, ConstantName, ParameterName, LocalVariableName, LineLength, MethodLength, 
+ParameterNumber, FileLength, Indentation, WhitespaceAround, NeedBraces, LeftCurly, RightCurly, AvoidStarImport, 
+IllegalImport, UnusedImports, CyclomaticComplexity, NPathComplexity, JavadocMethod, JavadocType, MissingJavadocMethod)
+- pmd: Java code quality (unused code, empty blocks, basic naming, design issues)
 
 STRICT Rules for selection:
 1. ONLY select if the linter has a NATIVE rule that can enforce this
