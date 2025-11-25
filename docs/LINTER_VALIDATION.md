@@ -1,43 +1,43 @@
-# Linter Configuration Validation
+# Linter 설정 검증
 
-## Purpose
+## 목적
 
-The convert feature generates linter-specific configurations from natural language coding conventions. These configurations are used to validate code changes tracked by git.
+convert 기능은 자연어 코딩 컨벤션에서 linter별 설정을 생성합니다. 이 설정은 Git으로 추적되는 코드 변경사항을 검증하는 데 사용됩니다.
 
-## Supported Linters
+## 지원 Linter
 
 ### JavaScript/TypeScript
-- **ESLint**: Validates JS/TS code style, patterns, and best practices
-- Output: `.sym/.eslintrc.json`
+- **ESLint**: JS/TS 코드 스타일, 패턴, 모범 사례 검증
+- 출력: `.sym/.eslintrc.json`
 
 ### Java
-- **Checkstyle**: Validates Java code formatting and style
-- Output: `.sym/checkstyle.xml`
-- **PMD**: Validates Java code quality and detects code smells
-- Output: `.sym/pmd-ruleset.xml`
+- **Checkstyle**: Java 코드 포맷팅 및 스타일 검증
+- 출력: `.sym/checkstyle.xml`
+- **PMD**: Java 코드 품질 검증 및 코드 스멜 감지
+- 출력: `.sym/pmd-ruleset.xml`
 
-### Future Support
-- **SonarQube**: Multi-language static analysis
-- **LLM Validator**: Custom rules that cannot be expressed in traditional linters
+### 향후 지원 예정
+- **SonarQube**: 다중 언어 정적 분석
+- **LLM Validator**: 전통적인 linter로 표현할 수 없는 커스텀 규칙
 
-## Engine Assignment
+## 엔진 할당
 
-Each rule in `code-policy.json` has an `engine` field that specifies which tool validates it:
+`code-policy.json`의 각 규칙에는 검증 도구를 지정하는 `engine` 필드가 있습니다:
 
-- `eslint`: Rule converted to ESLint configuration
-- `checkstyle`: Rule converted to Checkstyle module
-- `pmd`: Rule converted to PMD ruleset
-- `sonarqube`: Future support
-- `llm-validator`: Complex rules requiring LLM analysis
+- `eslint`: ESLint 설정으로 변환된 규칙
+- `checkstyle`: Checkstyle 모듈로 변환된 규칙
+- `pmd`: PMD 규칙셋으로 변환된 규칙
+- `sonarqube`: 향후 지원 예정
+- `llm-validator`: LLM 분석이 필요한 복잡한 규칙
 
-## Example Workflow
+## 예제 워크플로우
 
-1. **Define conventions** in `user-policy.json`
-2. **Convert** to linter configs:
+1. `user-policy.json`에 **컨벤션 정의**
+2. linter 설정으로 **변환**:
    ```bash
    sym convert -i user-policy.json --targets eslint,checkstyle,pmd
    ```
-3. **Run linters** on git changes:
+3. Git 변경사항에 **linter 실행**:
    ```bash
    # JavaScript/TypeScript
    eslint --config .sym/.eslintrc.json src/**/*.{js,ts}
@@ -47,9 +47,9 @@ Each rule in `code-policy.json` has an `engine` field that specifies which tool 
    pmd check -R .sym/pmd-ruleset.xml -d src/
    ```
 
-## Code Policy Schema
+## 코드 정책 스키마
 
-Generated `code-policy.json` contains:
+생성된 `code-policy.json` 내용:
 ```json
 {
   "version": "1.0.0",
@@ -68,46 +68,20 @@ Generated `code-policy.json` contains:
 }
 ```
 
-Rules with `engine: "llm-validator"` cannot be checked by traditional linters and require custom LLM-based validation.
+`engine: "llm-validator"` 규칙은 전통적인 linter로 체크할 수 없으며 커스텀 LLM 기반 검증이 필요합니다.
 
-## Testing
+## 테스트
 
-### Integration Test Data
-
-Validation engines are tested using structured test data in `tests/testdata/`:
-
-```
-tests/testdata/
-├── javascript/      # ESLint-based validation tests
-│   ├── pattern/     # Naming conventions, regex patterns
-│   ├── length/      # Line/function length limits
-│   ├── style/       # Code formatting
-│   └── ast/         # AST structure validation
-├── typescript/      # TSC-based validation tests
-│   └── typechecker/ # Type checking tests
-└── java/            # Checkstyle/PMD-based validation tests
-    ├── pattern/     # Naming conventions (PascalCase, camelCase)
-    ├── length/      # Line/method/parameter length limits
-    ├── style/       # Java formatting conventions
-    └── ast/         # Code structure (exception handling, etc.)
-```
-
-Each directory contains:
-- **Violation files**: Code that violates conventions (e.g., `NamingViolations.java`)
-- **Valid files**: Code that complies with conventions (e.g., `ValidNaming.java`)
-
-### Running Integration Tests
+### 통합 테스트 실행
 
 ```bash
-# All integration tests
+# 모든 통합 테스트
 go test ./tests/integration/... -v
 
-# Specific engine tests
+# 특정 엔진 테스트
 go test ./tests/integration/... -v -run TestPatternEngine
 go test ./tests/integration/... -v -run TestLengthEngine
 go test ./tests/integration/... -v -run TestStyleEngine
 go test ./tests/integration/... -v -run TestASTEngine
 go test ./tests/integration/... -v -run TestTypeChecker
 ```
-
-For detailed test data structure, see [tests/testdata/README.md](../tests/testdata/README.md).

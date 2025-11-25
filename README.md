@@ -1,4 +1,4 @@
-# 🎵 Symphony (sym)
+# Symphony (sym)
 
 GitHub Repository Role & Policy Management Tool with Code Convention Validation
 
@@ -7,18 +7,18 @@ Symphony는 GitHub OAuth 인증을 통한 역할 기반 파일 접근 권한 및
 
 ## 개요
 
-> **✨ 빠른 시작:** `sym login` 한 번이면 끝! OAuth App 설정 불필요.
+> **빠른 시작:** `sym login` 한 번이면 끝! OAuth App 설정 불필요.
 
-## ✨ 주요 기능
+## 주요 기능
 
-### 🔐 역할 및 권한 관리
+### 역할 및 권한 관리
 - **CLI 인터페이스**: 사용자 역할 및 리포지토리 정보 빠른 조회
 - **웹 대시보드**: 권한 관리를 위한 시각적 인터페이스 (포트 8787)
 - **OAuth 인증**: 안전한 GitHub/GHES 인증
 - **동적 역할 시스템**: 커스텀 역할 생성 및 관리
 - **JSON API**: 스크립팅을 위한 기계 판독 가능 출력
 
-### 📝 정책 편집기 (Policy Editor)
+### 정책 편집기 (Policy Editor)
 - **RBAC (Role-Based Access Control)**: 역할별 파일 접근 권한 및 시스템 권한 설정
 - **코딩 규칙 관리**: 프로젝트별 코딩 컨벤션 및 정책 정의
 - **템플릿 시스템**: React, Vue, Node.js, Python, Go, TypeScript 템플릿 제공
@@ -34,21 +34,21 @@ Symphony는 GitHub OAuth 인증을 통한 역할 기반 파일 접근 권한 및
 - JSON 출력을 통한 LLM 도구 연동
 - 컨텍스트 기반 컨벤션 추출
 
-### 🔍 코드 컨벤션 검증 (개발 중)
+### 코드 컨벤션 검증 (개발 중)
 - **자연어 기반 컨벤션 정의**: `.sym/user-policy.json`에 자연어로 규칙 작성
 - **스키마 변환**: A 스키마 (사용자 입력) → B 스키마 (검증 엔진용)
 - **다중 검증 엔진**: Pattern, Length, Style, AST 엔진 지원
 - **LLM 도구 연동**: JSON 출력을 통한 AI 코딩 도구 연동
 - **컨텍스트 기반 추출**: 작업 컨텍스트에 맞는 컨벤션만 추출
 
-### 🛠️ 기술 스택
+### 기술 스택
 - **단일 바이너리**: 런타임 의존성 불필요
 - **임베디드 에셋**: go:embed를 통한 정적 파일 내장 (HTML, CSS, JS, SVG)
 - **프로덕션 CSS**: Tailwind CSS 빌드 시스템
 - **멀티플랫폼**: Windows, macOS (Intel/ARM), Linux (AMD64/ARM64) 지원
 - **UTF-8 지원**: 한글 및 이모티콘 완벽 지원
 
-## 📦 설치
+## 설치
 
 ### MCP 서버로 설치 (권장 - AI 코딩 도구)
 
@@ -137,7 +137,7 @@ go install github.com/DevSymphony/sym-cli/cmd/sym@latest
 [System.Environment]::SetEnvironmentVariable('Path', $env:Path + ';D:\Git\sym-cli\bin', 'User')
 ```
 
-## 🚀 빠른 시작
+## 빠른 시작
 
 ### MCP 서버 모드 (AI 코딩 도구와 함께)
 
@@ -253,7 +253,7 @@ sym policy validate
 sym policy history
 ```
 
-## 📁 프로젝트 구조
+## 프로젝트 구조
 
 ```
 sym-cli/
@@ -269,8 +269,7 @@ sym-cli/
 │   │   ├── whoami.go          # 사용자 정보
 │   │   ├── policy.go          # 정책 관리
 │   │   ├── convert.go         # 스키마 변환 (개발 중)
-│   │   ├── validate.go        # 코드 검증 (개발 중)
-│   │   └── export.go          # 컨벤션 내보내기 (개발 중)
+│   │   └── validate.go        # 코드 검증 (개발 중)
 │   ├── auth/                  # OAuth 인증
 │   ├── config/                # 설정 관리
 │   ├── git/                   # Git 유틸리티
@@ -281,25 +280,16 @@ sym-cli/
 │   │   └── static/            # HTML, CSS, JS (임베디드)
 │   ├── validator/             # 검증 로직 (개발 중)
 │   ├── converter/             # 스키마 변환 (개발 중)
-│   ├── engine/                # 검증 엔진
-│   │   ├── pattern/           # 패턴 검증 엔진
-│   │   ├── length/            # 길이 검증 엔진
-│   │   ├── style/             # 스타일 검증 엔진
-│   │   └── ast/               # AST 검증 엔진
 │   └── adapter/               # ESLint, Prettier 어댑터
 ├── pkg/
 │   └── schema/                # 스키마 타입 정의
 ├── tests/                     # 테스트
-│   └── testdata/             # 통합 테스트 데이터
-│       ├── javascript/       # JavaScript 테스트 파일
-│       ├── typescript/       # TypeScript 테스트 파일
-│       └── java/             # Java 테스트 파일
 ├── .sym/                      # 정책 및 역할 파일 (gitignore)
 ├── Makefile
 └── README.md
 ```
 
-## 🔧 개발
+## 개발
 
 ### 필수 도구
 
@@ -360,19 +350,11 @@ make build-css
 make test
 
 # 특정 패키지 테스트
-go test ./internal/engine/pattern/... -v
+go test ./internal/adapter/... -v
 
-# 통합 테스트 (JavaScript, TypeScript, Java)
+# 통합 테스트
 go test ./tests/integration/... -v
 ```
-
-**통합 테스트 데이터**:
-- `tests/testdata/javascript/`: JavaScript 엔진 테스트 (pattern, length, style, ast)
-- `tests/testdata/typescript/`: TypeScript 타입체커 테스트
-- `tests/testdata/java/`: Java 엔진 테스트 (Checkstyle, PMD 검증)
-
-각 디렉토리는 위반 케이스와 정상 케이스를 포함하여 검증 엔진의 정확성을 보장합니다.
-자세한 내용은 [tests/testdata/README.md](tests/testdata/README.md)를 참고하세요.
 
 테스트 커버리지 리포트는 [여기](https://devsymphony.github.io/sym-cli/coverage.html)에서 확인할 수 있습니다.
 
@@ -409,7 +391,7 @@ npm --version  # npm 설치 확인
 cd ~/.symphony/tools && npm install eslint@^8.0.0 prettier@latest
 ```
 
-## 📋 환경 변수
+## 환경 변수
 
 ```bash
 # 인증 모드 (기본값: server)
@@ -419,7 +401,7 @@ export SYM_AUTH_MODE=server
 export SYM_SERVER_URL=https://symphony-server-98207.web.app
 ```
 
-## 🗂️ 파일 및 디렉토리
+## 파일 및 디렉토리
 
 ### 설정 파일 위치
 
@@ -474,7 +456,7 @@ export SYM_SERVER_URL=https://symphony-server-98207.web.app
 }
 ```
 
-## 🎯 사용 사례
+## 사용 사례
 
 ### 팀 협업 시나리오
 
@@ -494,15 +476,15 @@ export SYM_SERVER_URL=https://symphony-server-98207.web.app
 6. 자동 저장 활성화 (30초마다)
 7. Git 커밋 및 푸시
 
-## 📝 라이선스
+## 라이선스
 
 MIT License
 
-## 🤝 기여
+## 기여
 
 Contributions are welcome! Please feel free to submit a Pull Request.
 
-## 📞 지원
+## 지원
 
 - GitHub Issues: [https://github.com/DevSymphony/sym-cli/issues](https://github.com/DevSymphony/sym-cli/issues)
 
@@ -510,7 +492,7 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 
 **Note:** 코드 검증 기능 (`convert`, `validate`, `export`)은 현재 개발 중입니다.
 
-## 📊 패키지 구조 및 의존성
+## 패키지 구조 및 의존성
 
 ```mermaid
 graph TB
