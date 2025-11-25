@@ -37,10 +37,10 @@ func NewConverter(llmClient *llm.Client, outputDir string) *Converter {
 
 // ConvertResult represents the result of conversion
 type ConvertResult struct {
-	GeneratedFiles []string          // List of generated file paths (including code-policy.json)
+	GeneratedFiles []string           // List of generated file paths (including code-policy.json)
 	CodePolicy     *schema.CodePolicy // Generated code policy
-	Errors         map[string]error  // Errors per linter
-	Warnings       []string          // Conversion warnings
+	Errors         map[string]error   // Errors per linter
+	Warnings       []string           // Conversion warnings
 }
 
 // Convert is the main entry point for converting user policy to linter configs
