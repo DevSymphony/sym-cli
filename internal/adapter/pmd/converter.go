@@ -1,4 +1,4 @@
-package linters
+package pmd
 
 import (
 	"context"
@@ -8,26 +8,34 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DevSymphony/sym-cli/internal/adapter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// PMDLinterConverter converts rules to PMD XML using LLM
-type PMDLinterConverter struct{}
+// Converter converts rules to PMD XML configuration using LLM
+type Converter struct{}
 
-// NewPMDLinterConverter creates a new PMD converter
-func NewPMDLinterConverter() *PMDLinterConverter {
-	return &PMDLinterConverter{}
+// NewConverter creates a new PMD converter
+func NewConverter() *Converter {
+	return &Converter{}
 }
 
 // Name returns the linter name
-func (c *PMDLinterConverter) Name() string {
+func (c *Converter) Name() string {
 	return "pmd"
 }
 
 // SupportedLanguages returns supported languages
-func (c *PMDLinterConverter) SupportedLanguages() []string {
+func (c *Converter) SupportedLanguages() []string {
 	return []string{"java"}
+}
+
+// GetLLMDescription returns a description of PMD's capabilities for LLM routing
+func (c *Converter) GetLLMDescription() string {
+	return `Java code quality (unused code, empty blocks, naming conventions, design issues)
+  - CAN: Unused private methods, empty catch blocks, short variable names, too many methods, hardcoded crypto keys
+  - CANNOT: Code formatting, whitespace, complex business logic validation`
 }
 
 // pmdRuleset represents PMD ruleset
@@ -49,7 +57,7 @@ type pmdRule struct {
 }
 
 // ConvertRules converts user rules to PMD configuration using LLM
-func (c *PMDLinterConverter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error) {
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
 	if llmClient == nil {
 		return nil, fmt.Errorf("LLM client is required")
 	}
@@ -121,7 +129,7 @@ func (c *PMDLinterConverter) ConvertRules(ctx context.Context, rules []schema.Us
 	xmlHeader := `<?xml version="1.0"?>` + "\n"
 	fullContent := []byte(xmlHeader + string(content))
 
-	return &LinterConfig{
+	return &adapter.LinterConfig{
 		Filename: "pmd.xml",
 		Content:  fullContent,
 		Format:   "xml",
@@ -129,7 +137,7 @@ func (c *PMDLinterConverter) ConvertRules(ctx context.Context, rules []schema.Us
 }
 
 // convertSingleRule converts a single rule using LLM
-func (c *PMDLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*pmdRule, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*pmdRule, error) {
 	systemPrompt := `You are a PMD configuration expert. Convert natural language Java coding rules to PMD rule references.
 
 Return ONLY a JSON object (no markdown fences):

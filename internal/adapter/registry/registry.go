@@ -180,3 +180,31 @@ func (r *Registry) GetAllToolNames() []string {
 
 	return names
 }
+
+// GetAllConfigFiles returns all registered config file names.
+func (r *Registry) GetAllConfigFiles() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	files := make([]string, 0, len(r.tools))
+	for _, reg := range r.tools {
+		if reg.ConfigFile != "" {
+			files = append(files, reg.ConfigFile)
+		}
+	}
+	return files
+}
+
+// GetAllConverters returns all registered converters.
+func (r *Registry) GetAllConverters() []adapter.LinterConverter {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
+	converters := make([]adapter.LinterConverter, 0, len(r.tools))
+	for _, reg := range r.tools {
+		if reg.Converter != nil {
+			converters = append(converters, reg.Converter)
+		}
+	}
+	return converters
+}

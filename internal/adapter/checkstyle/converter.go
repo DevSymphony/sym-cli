@@ -1,4 +1,4 @@
-package linters
+package checkstyle
 
 import (
 	"context"
@@ -8,26 +8,34 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DevSymphony/sym-cli/internal/adapter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// CheckstyleLinterConverter converts rules to Checkstyle XML using LLM
-type CheckstyleLinterConverter struct{}
+// Converter converts rules to Checkstyle XML configuration using LLM
+type Converter struct{}
 
-// NewCheckstyleLinterConverter creates a new Checkstyle converter
-func NewCheckstyleLinterConverter() *CheckstyleLinterConverter {
-	return &CheckstyleLinterConverter{}
+// NewConverter creates a new Checkstyle converter
+func NewConverter() *Converter {
+	return &Converter{}
 }
 
 // Name returns the linter name
-func (c *CheckstyleLinterConverter) Name() string {
+func (c *Converter) Name() string {
 	return "checkstyle"
 }
 
 // SupportedLanguages returns supported languages
-func (c *CheckstyleLinterConverter) SupportedLanguages() []string {
+func (c *Converter) SupportedLanguages() []string {
 	return []string{"java"}
+}
+
+// GetLLMDescription returns a description of Checkstyle's capabilities for LLM routing
+func (c *Converter) GetLLMDescription() string {
+	return `Java style checks (naming, whitespace, imports, line length, complexity)
+  - CAN: Class/method/variable naming, line/method length, indentation, import checks, cyclomatic complexity, JavaDoc
+  - CANNOT: Runtime behavior, business logic, security vulnerabilities, advanced design patterns`
 }
 
 // checkstyleModule represents a Checkstyle module
@@ -53,7 +61,7 @@ type checkstyleConfig struct {
 }
 
 // ConvertRules converts user rules to Checkstyle configuration using LLM
-func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error) {
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
 	if llmClient == nil {
 		return nil, fmt.Errorf("LLM client is required")
 	}
@@ -131,7 +139,7 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 `
 	fullContent := []byte(xmlHeader + string(content))
 
-	return &LinterConfig{
+	return &adapter.LinterConfig{
 		Filename: "checkstyle.xml",
 		Content:  fullContent,
 		Format:   "xml",
@@ -139,7 +147,7 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 }
 
 // convertSingleRule converts a single rule using LLM
-func (c *CheckstyleLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*checkstyleModule, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*checkstyleModule, error) {
 	systemPrompt := `You are a Checkstyle configuration expert. Convert natural language Java coding rules to Checkstyle modules.
 
 Return ONLY a JSON object (no markdown fences):

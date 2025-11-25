@@ -1,4 +1,4 @@
-package linters
+package eslint
 
 import (
 	"context"
@@ -7,30 +7,38 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DevSymphony/sym-cli/internal/adapter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// ESLintLinterConverter converts rules to ESLint configuration using LLM
-type ESLintLinterConverter struct{}
+// Converter converts rules to ESLint configuration using LLM
+type Converter struct{}
 
-// NewESLintLinterConverter creates a new ESLint converter
-func NewESLintLinterConverter() *ESLintLinterConverter {
-	return &ESLintLinterConverter{}
+// NewConverter creates a new ESLint converter
+func NewConverter() *Converter {
+	return &Converter{}
 }
 
 // Name returns the linter name
-func (c *ESLintLinterConverter) Name() string {
+func (c *Converter) Name() string {
 	return "eslint"
 }
 
 // SupportedLanguages returns supported languages
-func (c *ESLintLinterConverter) SupportedLanguages() []string {
+func (c *Converter) SupportedLanguages() []string {
 	return []string{"javascript", "js", "typescript", "ts", "jsx", "tsx"}
 }
 
+// GetLLMDescription returns a description of ESLint's capabilities for LLM routing
+func (c *Converter) GetLLMDescription() string {
+	return `ONLY native ESLint rules (no-console, no-unused-vars, eqeqeq, no-var, camelcase, new-cap, max-len, max-lines, no-eval, etc.)
+  - CAN: Simple syntax checks, variable naming, console usage, basic patterns
+  - CANNOT: Complex business logic, context-aware rules, file naming, advanced async patterns`
+}
+
 // ConvertRules converts user rules to ESLint configuration using LLM
-func (c *ESLintLinterConverter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error) {
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
 	if llmClient == nil {
 		return nil, fmt.Errorf("LLM client is required")
 	}
@@ -117,7 +125,7 @@ func (c *ESLintLinterConverter) ConvertRules(ctx context.Context, rules []schema
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	return &LinterConfig{
+	return &adapter.LinterConfig{
 		Filename: ".eslintrc.json",
 		Content:  content,
 		Format:   "json",
@@ -125,7 +133,7 @@ func (c *ESLintLinterConverter) ConvertRules(ctx context.Context, rules []schema
 }
 
 // convertSingleRule converts a single user rule to ESLint rule using LLM
-func (c *ESLintLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (string, interface{}, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (string, interface{}, error) {
 	systemPrompt := `You are an ESLint configuration expert. Convert natural language coding rules to ESLint rule configurations.
 
 Return ONLY a JSON object (no markdown fences) with this structure:

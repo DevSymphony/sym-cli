@@ -105,6 +105,10 @@ type LinterConverter interface {
 	// SupportedLanguages returns the languages this linter supports
 	SupportedLanguages() []string
 
+	// GetLLMDescription returns a description of the linter's capabilities for LLM routing.
+	// This is used in the LLM prompt to help route rules to appropriate linters.
+	GetLLMDescription() string
+
 	// ConvertRules converts user rules to native linter configuration using LLM
 	ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error)
 }

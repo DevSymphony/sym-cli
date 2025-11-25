@@ -9,8 +9,8 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DevSymphony/sym-cli/internal/adapter"
 	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
-	"github.com/DevSymphony/sym-cli/internal/converter/linters"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
@@ -313,16 +313,13 @@ func (c *Converter) getAvailableLinters(languages []string) []string {
 
 // selectLintersForRule uses LLM to determine which linters are appropriate for a rule
 func (c *Converter) selectLintersForRule(ctx context.Context, rule schema.UserRule, availableLinters []string) []string {
+	// Build linter descriptions dynamically from registry
+	linterDescriptions := c.buildLinterDescriptions(availableLinters)
+
 	systemPrompt := fmt.Sprintf(`You are a code quality expert. Analyze the given coding rule and determine which linters can ACTUALLY enforce it using their NATIVE rules (without plugins).
 
 Available linters and NATIVE capabilities:
-- eslint: ONLY native ESLint rules (no-console, no-unused-vars, eqeqeq, no-var, camelcase, new-cap, max-len, max-lines, no-eval, etc.)
-  - CAN: Simple syntax checks, variable naming, console usage, basic patterns
-  - CANNOT: Complex business logic, context-aware rules, file naming, advanced async patterns
-- prettier: Code formatting ONLY (quotes, semicolons, indentation, line length, trailing commas)
-- tsc: TypeScript type checking ONLY (strict modes, noImplicitAny, strictNullChecks, type inference)
-- checkstyle: Java style checks (naming, whitespace, imports, line length, complexity)
-- pmd: Java code quality (unused code, empty blocks, naming conventions, design issues)
+%s
 
 STRICT Rules for selection:
 1. ONLY select if the linter has a NATIVE rule that can enforce this
@@ -376,7 +373,7 @@ Reason: Requires semantic analysis of what constitutes secrets
 
 Input: "Imports from large packages must be specific"
 Output: []
-Reason: Requires knowing which packages are "large"`, availableLinters)
+Reason: Requires knowing which packages are "large"`, linterDescriptions, availableLinters)
 
 	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
 
@@ -404,13 +401,36 @@ Reason: Requires knowing which packages are "large"`, availableLinters)
 }
 
 // getLinterConverter returns the appropriate converter for a linter
-func (c *Converter) getLinterConverter(linterName string) linters.LinterConverter {
+func (c *Converter) getLinterConverter(linterName string) adapter.LinterConverter {
 	// Use registry to get converter (no hardcoding)
 	converter, ok := registry.Global().GetConverter(linterName)
 	if !ok {
 		return nil
 	}
 	return converter
+}
+
+// buildLinterDescriptions builds linter capability descriptions from registry
+func (c *Converter) buildLinterDescriptions(availableLinters []string) string {
+	var descriptions []string
+
+	for _, linterName := range availableLinters {
+		converter, ok := registry.Global().GetConverter(linterName)
+		if !ok || converter == nil {
+			continue
+		}
+
+		desc := converter.GetLLMDescription()
+		if desc != "" {
+			descriptions = append(descriptions, fmt.Sprintf("- %s: %s", linterName, desc))
+		}
+	}
+
+	if len(descriptions) == 0 {
+		return "No linter descriptions available"
+	}
+
+	return strings.Join(descriptions, "\n")
 }
 
 // convertRBAC converts UserRBAC to PolicyRBAC

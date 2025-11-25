@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -29,23 +30,23 @@ var convertCmd = &cobra.Command{
 	Use:   "convert",
 	Short: "Convert user policies into linter configurations",
 	Long: `Convert natural language policies (Schema A) written by users
-into linter-specific configurations (ESLint, Checkstyle, PMD, etc.)
-and internal validation schema (Schema B).
+into linter-specific configurations and internal validation schema (Schema B).
 
+Supported linters are dynamically determined from registered adapters.
 Uses OpenAI API to intelligently analyze natural language rules and
 map them to appropriate linter rules.`,
 	Example: `  # Convert to all supported linters (outputs to <git-root>/.sym)
   sym convert -i user-policy.json --targets all
 
-  # Convert only for JavaScript/TypeScript
+  # Convert for specific linter
   sym convert -i user-policy.json --targets eslint
 
-  # Convert for Java with specific model
+  # Convert for multiple linters with specific model
   sym convert -i user-policy.json --targets checkstyle,pmd --openai-model gpt-4o
 
   # Use custom output directory
   sym convert -i user-policy.json --targets all --output-dir ./custom-dir
-  
+
   # Legacy mode (internal policy only)
   sym convert -i user-policy.json -o code-policy.json`,
 	RunE: runConvert,
@@ -54,11 +55,20 @@ map them to appropriate linter rules.`,
 func init() {
 	convertCmd.Flags().StringVarP(&convertInputFile, "input", "i", "", "input user policy file (default: from .sym/.env POLICY_PATH)")
 	convertCmd.Flags().StringVarP(&convertOutputFile, "output", "o", "", "output code policy file (legacy mode)")
-	convertCmd.Flags().StringSliceVar(&convertTargets, "targets", []string{}, "target linters (eslint,checkstyle,pmd or 'all')")
+	convertCmd.Flags().StringSliceVar(&convertTargets, "targets", []string{}, buildTargetsDescription())
 	convertCmd.Flags().StringVar(&convertOutputDir, "output-dir", "", "output directory for linter configs (default: same as input file directory)")
 	convertCmd.Flags().StringVar(&convertOpenAIModel, "openai-model", "gpt-4o", "OpenAI model to use for inference")
 	convertCmd.Flags().Float64Var(&convertConfidenceThreshold, "confidence-threshold", 0.7, "minimum confidence for LLM inference (0.0-1.0)")
 	convertCmd.Flags().IntVar(&convertTimeout, "timeout", 30, "timeout for API calls in seconds")
+}
+
+// buildTargetsDescription dynamically builds the --targets flag description
+func buildTargetsDescription() string {
+	tools := registry.Global().GetAllToolNames()
+	if len(tools) == 0 {
+		return "target linters (or 'all')"
+	}
+	return fmt.Sprintf("target linters (%s or 'all')", strings.Join(tools, ","))
 }
 
 func runConvert(cmd *cobra.Command, args []string) error {
