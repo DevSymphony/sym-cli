@@ -19,8 +19,18 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	}
 
 	// Add files to tsconfig if specific files are provided
+	// Convert to absolute paths since tsconfig will be in temp directory
 	if len(files) > 0 {
-		tsconfig["files"] = files
+		absFiles := make([]string, len(files))
+		cwd, _ := os.Getwd()
+		for i, f := range files {
+			if filepath.IsAbs(f) {
+				absFiles[i] = f
+			} else {
+				absFiles[i] = filepath.Join(cwd, f)
+			}
+		}
+		tsconfig["files"] = absFiles
 	}
 
 	// Marshal updated config
