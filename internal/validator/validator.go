@@ -412,9 +412,14 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 
 				violations, err := v.executeRule(engineName, rule, []string{change.FilePath})
 				if err != nil {
-					if v.verbose {
-						fmt.Printf("⚠️  Validation failed for rule %s: %v\n", rule.ID, err)
-					}
+					// Always log errors to stderr (not just in verbose mode)
+					fmt.Fprintf(os.Stderr, "⚠️  Validation failed for rule %s (%s): %v\n", rule.ID, engineName, err)
+					// Track error in result for MCP response
+					result.Errors = append(result.Errors, ValidationError{
+						RuleID:  rule.ID,
+						Engine:  engineName,
+						Message: err.Error(),
+					})
 					continue
 				}
 
