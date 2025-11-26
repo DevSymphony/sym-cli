@@ -109,6 +109,11 @@ type LinterConverter interface {
 	// This is used in the LLM prompt to help route rules to appropriate linters.
 	GetLLMDescription() string
 
+	// GetRoutingHints returns routing rules for LLM to decide when to use this linter.
+	// Each hint is a rule like "For Java naming rules → ALWAYS use checkstyle".
+	// These hints are collected and included in the LLM prompt for rule routing.
+	GetRoutingHints() []string
+
 	// ConvertRules converts user rules to native linter configuration using LLM
 	ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error)
 }

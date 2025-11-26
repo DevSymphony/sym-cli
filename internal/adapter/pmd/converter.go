@@ -21,21 +21,28 @@ func NewConverter() *Converter {
 	return &Converter{}
 }
 
-// Name returns the linter name
 func (c *Converter) Name() string {
 	return "pmd"
 }
 
-// SupportedLanguages returns supported languages
 func (c *Converter) SupportedLanguages() []string {
 	return []string{"java"}
 }
 
 // GetLLMDescription returns a description of PMD's capabilities for LLM routing
 func (c *Converter) GetLLMDescription() string {
-	return `Java code quality (unused code, empty blocks, naming conventions, design issues)
-  - CAN: Unused private methods, empty catch blocks, short variable names, too many methods, hardcoded crypto keys
-  - CANNOT: Code formatting, whitespace, complex business logic validation`
+	return `Java code quality analysis (unused code, empty blocks, complexity, design issues)
+  - CAN: Unused private methods, empty catch blocks, too many methods, hardcoded crypto keys, cyclomatic complexity, error handling patterns
+  - CANNOT: Code formatting, whitespace, naming conventions (use Checkstyle instead), complex business logic validation`
+}
+
+// GetRoutingHints returns routing rules for LLM to decide when to use PMD
+func (c *Converter) GetRoutingHints() []string {
+	return []string{
+		"For Java code quality (unused code, complexity, empty catch blocks) → use pmd",
+		"For Java error handling patterns (empty catch, exception handling) → use pmd",
+		"NEVER use pmd for naming conventions - use checkstyle instead",
+	}
 }
 
 // pmdRuleset represents PMD ruleset
@@ -138,20 +145,22 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 
 // convertSingleRule converts a single rule using LLM
 func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*pmdRule, error) {
-	systemPrompt := `You are a PMD configuration expert. Convert natural language Java coding rules to PMD rule references.
+	systemPrompt := `You are a PMD 7.x configuration expert. Convert natural language Java coding rules to PMD rule references.
 
 Return ONLY a JSON object (no markdown fences):
 {
-  "rule_ref": "category/java/ruleset.xml/RuleName",
+  "rule_ref": "category/java/CATEGORY.xml/RuleName",
   "priority": 1-5
 }
 
-Common PMD rules:
-- Best Practices: rulesets/java/bestpractices.xml/UnusedPrivateMethod
-- Code Style: rulesets/java/codestyle.xml/ShortVariable
-- Design: rulesets/java/design.xml/TooManyMethods
-- Error Handling: rulesets/java/errorprone.xml/EmptyCatchBlock
-- Security: rulesets/java/security.xml/HardCodedCryptoKey
+IMPORTANT: PMD 7.x uses "category/java/" prefix, NOT "rulesets/java/".
+
+Common PMD 7.x rules:
+- Best Practices: category/java/bestpractices.xml/UnusedPrivateMethod
+- Code Style: category/java/codestyle.xml/ShortVariable
+- Design: category/java/design.xml/TooManyMethods, category/java/design.xml/CyclomaticComplexity
+- Error Prone: category/java/errorprone.xml/EmptyCatchBlock
+- Security: category/java/security.xml/HardCodedCryptoKey
 
 Priority levels: 1=High, 2=Medium-High, 3=Medium, 4=Low, 5=Info
 
@@ -166,7 +175,14 @@ Example:
 Input: "Avoid unused private methods"
 Output:
 {
-  "rule_ref": "rulesets/java/bestpractices.xml/UnusedPrivateMethod",
+  "rule_ref": "category/java/bestpractices.xml/UnusedPrivateMethod",
+  "priority": 2
+}
+
+Input: "No empty catch blocks"
+Output:
+{
+  "rule_ref": "category/java/errorprone.xml/EmptyCatchBlock",
   "priority": 2
 }`
 
@@ -184,13 +200,17 @@ Output:
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	if response == "" {
+		return nil, fmt.Errorf("LLM returned empty response")
+	}
+
 	var result struct {
 		RuleRef  string `json:"rule_ref"`
 		Priority int    `json:"priority"`
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+		return nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
 	}
 
 	if result.RuleRef == "" {

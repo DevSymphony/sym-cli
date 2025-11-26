@@ -21,12 +21,10 @@ func NewConverter() *Converter {
 	return &Converter{}
 }
 
-// Name returns the linter name
 func (c *Converter) Name() string {
 	return "eslint"
 }
 
-// SupportedLanguages returns supported languages
 func (c *Converter) SupportedLanguages() []string {
 	return []string{"javascript", "js", "typescript", "ts", "jsx", "tsx"}
 }
@@ -36,6 +34,15 @@ func (c *Converter) GetLLMDescription() string {
 	return `ONLY native ESLint rules (no-console, no-unused-vars, eqeqeq, no-var, camelcase, new-cap, max-len, max-lines, no-eval, etc.)
   - CAN: Simple syntax checks, variable naming, console usage, basic patterns
   - CANNOT: Complex business logic, context-aware rules, file naming, advanced async patterns`
+}
+
+// GetRoutingHints returns routing rules for LLM to decide when to use ESLint
+func (c *Converter) GetRoutingHints() []string {
+	return []string{
+		"For JavaScript/TypeScript naming rules (camelCase, PascalCase) → use eslint",
+		"For JS/TS code quality (unused vars, no-console, no-eval) → use eslint",
+		"For JS/TS best practices (eqeqeq, no-var, prefer-const) → use eslint",
+	}
 }
 
 // ConvertRules converts user rules to ESLint configuration using LLM
@@ -205,6 +212,10 @@ Output:
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	if response == "" {
+		return "", nil, fmt.Errorf("LLM returned empty response")
+	}
+
 	var result struct {
 		RuleName string      `json:"rule_name"`
 		Severity string      `json:"severity"`
@@ -212,7 +223,7 @@ Output:
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		return "", nil, fmt.Errorf("failed to parse LLM response: %w", err)
+		return "", nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
 	}
 
 	// If rule_name is empty, this rule cannot be converted
@@ -226,13 +237,8 @@ Output:
 		severity = result.Severity
 	}
 
-	// Build rule configuration
-	var config interface{}
-	if result.Options != nil {
-		config = []interface{}{severity, result.Options}
-	} else {
-		config = severity
-	}
+	// Build rule configuration using format helper for special rules
+	config := formatESLintRuleConfig(result.RuleName, severity, result.Options)
 
 	return result.RuleName, config, nil
 }
@@ -249,4 +255,40 @@ func mapSeverity(severity string) string {
 	default:
 		return "error"
 	}
+}
+
+// formatESLintRuleConfig formats the rule configuration based on rule-specific requirements.
+// Some ESLint rules have non-standard option formats that need special handling.
+func formatESLintRuleConfig(ruleName string, severity string, options interface{}) interface{} {
+	// Rules that need special formatting
+	switch ruleName {
+	case "id-match":
+		// id-match requires: [severity, pattern, options]
+		// where pattern is a string and options is an object
+		if opts, ok := options.(map[string]interface{}); ok {
+			if pattern, hasPattern := opts["pattern"].(string); hasPattern {
+				// Remove pattern from options since it's a separate argument
+				remainingOpts := make(map[string]interface{})
+				for k, v := range opts {
+					if k != "pattern" {
+						remainingOpts[k] = v
+					}
+				}
+				if len(remainingOpts) > 0 {
+					return []interface{}{severity, pattern, remainingOpts}
+				}
+				return []interface{}{severity, pattern}
+			}
+		}
+
+	case "no-restricted-imports":
+		// no-restricted-imports can have complex options
+		// Keep the default format for now
+	}
+
+	// Default format: [severity, options] or just severity
+	if options != nil {
+		return []interface{}{severity, options}
+	}
+	return severity
 }

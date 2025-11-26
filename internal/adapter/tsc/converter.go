@@ -19,12 +19,10 @@ func NewConverter() *Converter {
 	return &Converter{}
 }
 
-// Name returns the linter name
 func (c *Converter) Name() string {
 	return "tsc"
 }
 
-// SupportedLanguages returns supported languages
 func (c *Converter) SupportedLanguages() []string {
 	return []string{"typescript", "ts", "tsx"}
 }
@@ -34,6 +32,15 @@ func (c *Converter) GetLLMDescription() string {
 	return `TypeScript type checking ONLY (strict modes, noImplicitAny, strictNullChecks, type inference)
   - CAN: Type strictness, null checks, unused variable/parameter errors, implicit return checks
   - CANNOT: Code formatting, naming conventions, runtime behavior, business logic`
+}
+
+// GetRoutingHints returns routing rules for LLM to decide when to use TSC
+func (c *Converter) GetRoutingHints() []string {
+	return []string{
+		"For TypeScript type checking (noImplicitAny, strictNullChecks) → use tsc",
+		"For TypeScript strict mode rules (strict, noUnusedLocals) → use tsc",
+		"NEVER use tsc for naming conventions or formatting - use eslint/prettier instead",
+	}
 }
 
 // ConvertRules converts type-checking rules to tsconfig.json using LLM
@@ -153,9 +160,13 @@ Output:
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	if response == "" {
+		return nil, fmt.Errorf("LLM returned empty response")
+	}
+
 	var config map[string]interface{}
 	if err := json.Unmarshal([]byte(response), &config); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+		return nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
 	}
 
 	return config, nil

@@ -19,12 +19,10 @@ func NewConverter() *Converter {
 	return &Converter{}
 }
 
-// Name returns the linter name
 func (c *Converter) Name() string {
 	return "prettier"
 }
 
-// SupportedLanguages returns supported languages
 func (c *Converter) SupportedLanguages() []string {
 	return []string{"javascript", "js", "typescript", "ts", "jsx", "tsx"}
 }
@@ -34,6 +32,15 @@ func (c *Converter) GetLLMDescription() string {
 	return `Code formatting ONLY (quotes, semicolons, indentation, line length, trailing commas)
   - CAN: String quotes, semicolons, tab width, trailing commas, print width, arrow function parens
   - CANNOT: Code logic, naming conventions, unused variables, type checking`
+}
+
+// GetRoutingHints returns routing rules for LLM to decide when to use Prettier
+func (c *Converter) GetRoutingHints() []string {
+	return []string{
+		"For JavaScript/TypeScript formatting (quotes, semicolons, line length) → use prettier",
+		"For code style (indentation, trailing commas, bracket spacing) → use prettier",
+		"NEVER use prettier for naming conventions or code quality - use eslint instead",
+	}
 }
 
 // ConvertRules converts formatting rules to Prettier config using LLM
@@ -139,9 +146,13 @@ Output:
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	if response == "" {
+		return nil, fmt.Errorf("LLM returned empty response")
+	}
+
 	var config map[string]interface{}
 	if err := json.Unmarshal([]byte(response), &config); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+		return nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
 	}
 
 	return config, nil

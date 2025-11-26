@@ -316,6 +316,9 @@ func (c *Converter) selectLintersForRule(ctx context.Context, rule schema.UserRu
 	// Build linter descriptions dynamically from registry
 	linterDescriptions := c.buildLinterDescriptions(availableLinters)
 
+	// Build routing hints dynamically from converters
+	routingHints := c.buildRoutingHints(availableLinters)
+
 	systemPrompt := fmt.Sprintf(`You are a code quality expert. Analyze the given coding rule and determine which linters can ACTUALLY enforce it using their NATIVE rules (without plugins).
 
 Available linters and NATIVE capabilities:
@@ -328,6 +331,7 @@ STRICT Rules for selection:
 4. If the rule is about file naming → return []
 5. If the rule requires deep semantic analysis → return []
 6. When in doubt, return [] (better to use llm-validator than fail)
+%s
 
 Available linters for this rule: %s
 
@@ -373,7 +377,7 @@ Reason: Requires semantic analysis of what constitutes secrets
 
 Input: "Imports from large packages must be specific"
 Output: []
-Reason: Requires knowing which packages are "large"`, linterDescriptions, availableLinters)
+Reason: Requires knowing which packages are "large"`, linterDescriptions, routingHints, availableLinters)
 
 	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
 
@@ -431,6 +435,31 @@ func (c *Converter) buildLinterDescriptions(availableLinters []string) string {
 	}
 
 	return strings.Join(descriptions, "\n")
+}
+
+// buildRoutingHints builds routing hints from all available converters
+func (c *Converter) buildRoutingHints(availableLinters []string) string {
+	var hints []string
+	hintNumber := 7 // Start after the base rules (1-6)
+
+	for _, linterName := range availableLinters {
+		converter, ok := registry.Global().GetConverter(linterName)
+		if !ok || converter == nil {
+			continue
+		}
+
+		routingHints := converter.GetRoutingHints()
+		for _, hint := range routingHints {
+			hints = append(hints, fmt.Sprintf("%d. %s", hintNumber, hint))
+			hintNumber++
+		}
+	}
+
+	if len(hints) == 0 {
+		return ""
+	}
+
+	return strings.Join(hints, "\n")
 }
 
 // convertRBAC converts UserRBAC to PolicyRBAC

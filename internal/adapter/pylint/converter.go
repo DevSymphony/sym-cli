@@ -21,12 +21,10 @@ func NewConverter() *Converter {
 	return &Converter{}
 }
 
-// Name returns the linter name
 func (c *Converter) Name() string {
 	return "pylint"
 }
 
-// SupportedLanguages returns supported languages
 func (c *Converter) SupportedLanguages() []string {
 	return []string{"python", "py"}
 }
@@ -39,6 +37,16 @@ func (c *Converter) GetLLMDescription() string {
          bare except blocks, unused variables/imports, dangerous default values, eval/exec usage
   - CANNOT: Business logic validation, runtime behavior checks, type correctness beyond basic inference,
          async/await pattern validation, complex decorator analysis`
+}
+
+// GetRoutingHints returns routing rules for LLM to decide when to use Pylint
+func (c *Converter) GetRoutingHints() []string {
+	return []string{
+		"For Python naming rules (snake_case, PascalCase) → use pylint",
+		"For Python code quality (docstrings, complexity, unused vars) → use pylint",
+		"For Python style (line length, import order) → use pylint",
+		"For Python error handling (bare except, broad except) → use pylint",
+	}
 }
 
 // ConvertRules converts user rules to Pylint configuration using LLM
@@ -214,6 +222,10 @@ Output:
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	if response == "" {
+		return "", nil, fmt.Errorf("LLM returned empty response")
+	}
+
 	var result struct {
 		Symbol    string                 `json:"symbol"`
 		MessageID string                 `json:"message_id"`
@@ -221,7 +233,7 @@ Output:
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		return "", nil, fmt.Errorf("failed to parse LLM response: %w", err)
+		return "", nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
 	}
 
 	// If symbol is empty, this rule cannot be converted
