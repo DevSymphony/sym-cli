@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
@@ -84,21 +85,21 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 	for result := range results {
 		if result.err != nil {
 			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
-			fmt.Printf("⚠️  ESLint rule %d conversion error: %v\n", result.index+1, result.err)
+			fmt.Fprintf(os.Stderr, "⚠️  ESLint rule %d conversion error: %v\n", result.index+1, result.err)
 			continue
 		}
 
 		if result.ruleName != "" {
 			eslintRules[result.ruleName] = result.config
-			fmt.Printf("✓ ESLint rule %d → %s\n", result.index+1, result.ruleName)
+			fmt.Fprintf(os.Stderr, "✓ ESLint rule %d → %s\n", result.index+1, result.ruleName)
 		} else {
 			skippedCount++
-			fmt.Printf("⊘ ESLint rule %d skipped (cannot be enforced by ESLint)\n", result.index+1)
+			fmt.Fprintf(os.Stderr, "⊘ ESLint rule %d skipped (cannot be enforced by ESLint)\n", result.index+1)
 		}
 	}
 
 	if skippedCount > 0 {
-		fmt.Printf("ℹ️  %d rule(s) skipped for ESLint (will use llm-validator)\n", skippedCount)
+		fmt.Fprintf(os.Stderr, "ℹ️  %d rule(s) skipped for ESLint (will use llm-validator)\n", skippedCount)
 	}
 
 	if len(eslintRules) == 0 {

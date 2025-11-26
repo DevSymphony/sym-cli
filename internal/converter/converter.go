@@ -144,7 +144,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 			result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
 			mu.Unlock()
 
-			fmt.Printf("✓ Generated %s configuration: %s\n", linter, outputPath)
+			fmt.Fprintf(os.Stderr, "✓ Generated %s configuration: %s\n", linter, outputPath)
 		}(linterName, rules)
 	}
 
@@ -244,7 +244,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 	}
 
 	result.GeneratedFiles = append(result.GeneratedFiles, codePolicyPath)
-	fmt.Printf("✓ Generated code policy: %s\n", codePolicyPath)
+	fmt.Fprintf(os.Stderr, "✓ Generated code policy: %s\n", codePolicyPath)
 
 	return result, nil
 }
@@ -380,7 +380,7 @@ Reason: Requires knowing which packages are "large"`, linterDescriptions, availa
 	// Call LLM
 	response, err := c.llmClient.Complete(ctx, systemPrompt, userPrompt)
 	if err != nil {
-		fmt.Printf("Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
+		fmt.Fprintf(os.Stderr, "Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
 		return []string{} // Will fall back to llm-validator
 	}
 
@@ -393,7 +393,7 @@ Reason: Requires knowing which packages are "large"`, linterDescriptions, availa
 
 	var selectedLinters []string
 	if err := json.Unmarshal([]byte(response), &selectedLinters); err != nil {
-		fmt.Printf("Warning: Failed to parse LLM response for rule %s: %v\n", rule.ID, err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to parse LLM response for rule %s: %v\n", rule.ID, err)
 		return []string{} // Will fall back to llm-validator
 	}
 
