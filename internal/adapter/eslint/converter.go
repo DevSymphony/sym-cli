@@ -215,8 +215,8 @@ Output:
 		userPrompt += fmt.Sprintf("\nSeverity: %s", rule.Severity)
 	}
 
-	// Call LLM with minimal reasoning
-	response, err := llmClient.CompleteMinimal(ctx, systemPrompt, userPrompt)
+	// Call LLM with power model + low reasoning
+	response, err := llmClient.Request(systemPrompt, userPrompt).WithPower(llm.ReasoningMinimal).Execute(ctx)
 	if err != nil {
 		return "", nil, fmt.Errorf("LLM call failed: %w", err)
 	}

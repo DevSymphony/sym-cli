@@ -21,7 +21,6 @@ var (
 	convertOutputFile          string
 	convertTargets             []string
 	convertOutputDir           string
-	convertOpenAIModel         string
 	convertConfidenceThreshold float64
 	convertTimeout             int
 )
@@ -57,7 +56,6 @@ func init() {
 	convertCmd.Flags().StringVarP(&convertOutputFile, "output", "o", "", "output code policy file (legacy mode)")
 	convertCmd.Flags().StringSliceVar(&convertTargets, "targets", []string{}, buildTargetsDescription())
 	convertCmd.Flags().StringVar(&convertOutputDir, "output-dir", "", "output directory for linter configs (default: same as input file directory)")
-	convertCmd.Flags().StringVar(&convertOpenAIModel, "openai-model", "gpt-5-mini", "OpenAI model to use for inference")
 	convertCmd.Flags().Float64Var(&convertConfidenceThreshold, "confidence-threshold", 0.7, "minimum confidence for LLM inference (0.0-1.0)")
 	convertCmd.Flags().IntVar(&convertTimeout, "timeout", 30, "timeout for API calls in seconds")
 }
@@ -142,7 +140,6 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 	timeout := time.Duration(convertTimeout) * time.Second
 	llmClient := llm.NewClient(
 		apiKey,
-		llm.WithModel(convertOpenAIModel),
 		llm.WithTimeout(timeout),
 	)
 
@@ -154,7 +151,6 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 	defer cancel()
 
 	fmt.Printf("\n🚀 Converting with language-based routing and parallel LLM inference\n")
-	fmt.Printf("📝 Model: %s\n", convertOpenAIModel)
 	fmt.Printf("📂 Output: %s\n\n", convertOutputDir)
 
 	// Convert

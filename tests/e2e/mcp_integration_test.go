@@ -143,7 +143,6 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 	// Create LLM client
 	client := llm.NewClient(
 		apiKey,
-		llm.WithModel("gpt-4o"),
 		llm.WithTimeout(30*time.Second),
 	)
 
@@ -380,7 +379,7 @@ func TestMCP_EndToEndWorkflow(t *testing.T) {
 
 	// Step 4: Validate generated code
 	t.Log("STEP 4: Validating AI-generated code")
-	client := llm.NewClient(apiKey, llm.WithModel("gpt-4o"))
+	client := llm.NewClient(apiKey)
 	v := validator.NewLLMValidator(client, policy)
 
 	result, err := v.Validate(context.Background(), []validator.GitChange{

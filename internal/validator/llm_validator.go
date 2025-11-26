@@ -192,7 +192,7 @@ Response:
 Analyze the code and determine if it violates the rule. Respond with JSON only.`, change.FilePath, rule.Desc, codeSnippet)
 
 	// Call LLM with low reasoning (needs thought for code validation)
-	response, err := v.client.CompleteLow(ctx, systemPrompt, userPrompt)
+	response, err := v.client.Request(systemPrompt, userPrompt).Execute(ctx)
 	if err != nil {
 		return nil, err
 	}

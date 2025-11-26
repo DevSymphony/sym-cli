@@ -250,9 +250,17 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 }
 
 // routeRulesWithLLM uses LLM to determine which linters are appropriate for each rule
+// Rules are processed in parallel for better performance
 func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.UserPolicy) map[string][]schema.UserRule {
-	linterRules := make(map[string][]schema.UserRule)
+	type routeResult struct {
+		rule    schema.UserRule
+		linters []string
+	}
 
+	results := make(chan routeResult, len(userPolicy.Rules))
+	var wg sync.WaitGroup
+
+	// Process rules in parallel
 	for _, rule := range userPolicy.Rules {
 		// Get languages for this rule
 		languages := rule.Languages
@@ -264,21 +272,37 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 		availableLinters := c.getAvailableLinters(languages)
 		if len(availableLinters) == 0 {
 			// No language-specific linters, use llm-validator
-			linterRules[llmValidatorEngine] = append(linterRules[llmValidatorEngine], rule)
+			results <- routeResult{rule: rule, linters: []string{llmValidatorEngine}}
 			continue
 		}
 
-		// Ask LLM which linters are appropriate for this rule
-		selectedLinters := c.selectLintersForRule(ctx, rule, availableLinters)
+		wg.Add(1)
+		go func(r schema.UserRule, linters []string) {
+			defer wg.Done()
 
-		if len(selectedLinters) == 0 {
-			// LLM couldn't map to any linter, use llm-validator
-			linterRules[llmValidatorEngine] = append(linterRules[llmValidatorEngine], rule)
-		} else {
-			// Add rule to selected linters
-			for _, linter := range selectedLinters {
-				linterRules[linter] = append(linterRules[linter], rule)
+			// Ask LLM which linters are appropriate for this rule
+			selectedLinters := c.selectLintersForRule(ctx, r, linters)
+
+			if len(selectedLinters) == 0 {
+				// LLM couldn't map to any linter, use llm-validator
+				results <- routeResult{rule: r, linters: []string{llmValidatorEngine}}
+			} else {
+				results <- routeResult{rule: r, linters: selectedLinters}
 			}
+		}(rule, availableLinters)
+	}
+
+	// Close results channel after all goroutines complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	linterRules := make(map[string][]schema.UserRule)
+	for result := range results {
+		for _, linter := range result.linters {
+			linterRules[linter] = append(linterRules[linter], result.rule)
 		}
 	}
 
@@ -381,8 +405,8 @@ Reason: Requires knowing which packages are "large"`, linterDescriptions, routin
 
 	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
 
-	// Call LLM with low reasoning (needs some thought for linter selection)
-	response, err := c.llmClient.CompleteLow(ctx, systemPrompt, userPrompt)
+	// Call LLM with power model + low reasoning (needs some thought for linter selection)
+	response, err := c.llmClient.Request(systemPrompt, userPrompt).WithPower(llm.ReasoningMedium).Execute(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
 		return []string{} // Will fall back to llm-validator

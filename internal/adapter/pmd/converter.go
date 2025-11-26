@@ -188,8 +188,8 @@ IMPORTANT: Return ONLY the JSON object. Do NOT include description, message, or 
 
 	userPrompt := fmt.Sprintf("Convert this Java rule to PMD rule reference:\n\n%s", rule.Say)
 
-	// Call LLM with minimal reasoning
-	response, err := llmClient.CompleteMinimal(ctx, systemPrompt, userPrompt)
+	// Call LLM with power model + low reasoning
+	response, err := llmClient.Request(systemPrompt, userPrompt).WithPower(llm.ReasoningMinimal).Execute(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}

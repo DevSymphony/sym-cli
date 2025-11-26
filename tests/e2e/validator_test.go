@@ -31,7 +31,7 @@ func TestE2E_ValidatorWithPolicy(t *testing.T) {
 	require.NotEmpty(t, policy.Rules, "Policy should have rules")
 
 	// Create LLM client
-	client := llm.NewClient(apiKey, llm.WithModel("gpt-4o"))
+	client := llm.NewClient(apiKey)
 
 	// Create validator
 	v := validator.NewLLMValidator(client, policy)
@@ -83,7 +83,7 @@ func TestE2E_ValidatorWithGoodCode(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create LLM client
-	client := llm.NewClient(apiKey, llm.WithModel("gpt-4o"))
+	client := llm.NewClient(apiKey)
 
 	// Create validator
 	v := validator.NewLLMValidator(client, policy)
@@ -182,7 +182,7 @@ func TestE2E_ValidatorFilter(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create LLM client
-	client := llm.NewClient(apiKey, llm.WithModel("gpt-4o"))
+	client := llm.NewClient(apiKey)
 
 	// Create validator
 	v := validator.NewLLMValidator(client, policy)
