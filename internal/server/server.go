@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
 	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/envutil"
@@ -29,9 +30,9 @@ import (
 var staticFiles embed.FS
 
 type Server struct {
-	port        int
-	cfg         *config.Config
-	token       *config.Token
+	port         int
+	cfg          *config.Config
+	token        *config.Token
 	githubClient *github.Client
 }
 
@@ -50,9 +51,9 @@ func NewServer(port int) (*Server, error) {
 	githubClient := github.NewClient(cfg.GetGitHubHost(), token.AccessToken)
 
 	return &Server{
-		port:        port,
-		cfg:         cfg,
-		token:       token,
+		port:         port,
+		cfg:          cfg,
+		token:        token,
 		githubClient: githubClient,
 	}, nil
 }
@@ -114,7 +115,6 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-// hasPermission checks if a user has a specific permission based on RBAC
 func (s *Server) hasPermission(username, permission string) (bool, error) {
 	// Load policy to check RBAC permissions
 	policyData, err := policy.LoadPolicy(s.cfg.PolicyPath)
@@ -125,7 +125,6 @@ func (s *Server) hasPermission(username, permission string) (bool, error) {
 	return s.hasPermissionWithPolicy(username, permission, policyData)
 }
 
-// hasPermissionWithPolicy checks if a user has a specific permission based on a given policy
 func (s *Server) hasPermissionWithPolicy(username, permission string, policyData *schema.UserPolicy) (bool, error) {
 	// Load user's role from roles.json
 	userRole, err := roles.GetUserRole(username)
@@ -136,7 +135,6 @@ func (s *Server) hasPermissionWithPolicy(username, permission string, policyData
 	return s.checkPermissionForRole(userRole, permission, policyData)
 }
 
-// hasPermissionWithRoles checks if a user has a specific permission based on given roles and policy
 func (s *Server) hasPermissionWithRoles(username, permission string, rolesData roles.Roles) (bool, error) {
 	// Find user's role from the given roles
 	userRole := "none"
@@ -190,7 +188,6 @@ func (s *Server) checkPermissionForRole(userRole, permission string, policyData 
 	}
 }
 
-// handleGetMe returns the current authenticated user
 func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -304,12 +301,11 @@ func (s *Server) handleUpdateRoles(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
-		"status": "success",
+		"status":  "success",
 		"message": "Roles updated successfully",
 	})
 }
 
-// handleRepoInfo returns the current repository information
 func (s *Server) handleRepoInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
