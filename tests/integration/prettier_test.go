@@ -16,6 +16,10 @@ import (
 )
 
 func TestPrettier_ValidateChanges(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	// 1. Get testdata path
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "prettier"))
 	require.NoError(t, err, "Failed to get testdata path")
@@ -89,6 +93,10 @@ func TestPrettier_ValidateChanges(t *testing.T) {
 }
 
 func TestPrettier_FormattingCheck(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "prettier"))
 	require.NoError(t, err)
 
@@ -145,6 +153,10 @@ func TestPrettier_FormattingCheck(t *testing.T) {
 }
 
 func TestPrettier_QuotesAndIndent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "prettier"))
 	require.NoError(t, err)
 
@@ -194,6 +206,10 @@ func TestPrettier_QuotesAndIndent(t *testing.T) {
 }
 
 func TestPrettier_ToolNameAndRuleID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "prettier"))
 	require.NoError(t, err)
 

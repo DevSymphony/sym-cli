@@ -16,6 +16,10 @@ import (
 )
 
 func TestTSC_ValidateChanges(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	// 1. Get testdata path
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "tsc"))
 	require.NoError(t, err, "Failed to get testdata path")
@@ -84,6 +88,10 @@ func TestTSC_ValidateChanges(t *testing.T) {
 }
 
 func TestTSC_StrictNullChecks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "tsc"))
 	require.NoError(t, err)
 
@@ -138,6 +146,10 @@ func TestTSC_StrictNullChecks(t *testing.T) {
 }
 
 func TestTSC_TypeErrors(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "tsc"))
 	require.NoError(t, err)
 
@@ -187,6 +199,10 @@ func TestTSC_TypeErrors(t *testing.T) {
 }
 
 func TestTSC_ToolNameAndRuleID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "tsc"))
 	require.NoError(t, err)
 

@@ -16,6 +16,10 @@ import (
 )
 
 func TestPylint_ValidateChanges(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	// 1. Get testdata path
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "pylint"))
 	require.NoError(t, err, "Failed to get testdata path")
@@ -90,6 +94,10 @@ func TestPylint_ValidateChanges(t *testing.T) {
 }
 
 func TestPylint_NamingConventions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "pylint"))
 	require.NoError(t, err)
 
@@ -172,6 +180,10 @@ func TestPylint_NamingConventions(t *testing.T) {
 }
 
 func TestPylint_ToolNameAndRuleID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "pylint"))
 	require.NoError(t, err)
 

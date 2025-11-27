@@ -16,6 +16,10 @@ import (
 )
 
 func TestESLint_ValidateChanges(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	// 1. Get testdata path
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "eslint"))
 	require.NoError(t, err, "Failed to get testdata path")
@@ -88,6 +92,10 @@ func TestESLint_ValidateChanges(t *testing.T) {
 }
 
 func TestESLint_NamingConventions(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "eslint"))
 	require.NoError(t, err)
 
@@ -141,6 +149,10 @@ func TestESLint_NamingConventions(t *testing.T) {
 }
 
 func TestESLint_MaxLineLength(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "eslint"))
 	require.NoError(t, err)
 
@@ -192,6 +204,10 @@ func TestESLint_MaxLineLength(t *testing.T) {
 }
 
 func TestESLint_ToolNameAndRuleID(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	testdataDir, err := filepath.Abs(filepath.Join("..", "..", "tests", "testdata", "eslint"))
 	require.NoError(t, err)
 
