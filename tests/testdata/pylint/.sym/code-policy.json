@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "pylint-naming-func",
+      "enabled": true,
+      "category": "naming",
+      "severity": "error",
+      "desc": "함수와 변수 이름은 snake_case를 사용합니다",
+      "when": { "languages": ["python"] },
+      "check": { "engine": "pylint" }
+    },
+    {
+      "id": "pylint-naming-class",
+      "enabled": true,
+      "category": "naming",
+      "severity": "error",
+      "desc": "클래스 이름은 PascalCase를 사용합니다",
+      "when": { "languages": ["python"] },
+      "check": { "engine": "pylint" }
+    },
+    {
+      "id": "pylint-naming-const",
+      "enabled": true,
+      "category": "naming",
+      "severity": "error",
+      "desc": "상수는 UPPER_CASE를 사용합니다",
+      "when": { "languages": ["python"] },
+      "check": { "engine": "pylint" }
+    }
+  ],
+  "enforce": { "stages": ["pre-commit"], "fail_on": ["error"] }
+}

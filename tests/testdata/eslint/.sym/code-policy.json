@@ -1,0 +1,24 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "eslint-naming",
+      "enabled": true,
+      "category": "naming",
+      "severity": "error",
+      "desc": "클래스는 PascalCase, 함수/변수는 camelCase를 사용합니다",
+      "when": { "languages": ["typescript", "javascript"] },
+      "check": { "engine": "eslint" }
+    },
+    {
+      "id": "eslint-maxlen",
+      "enabled": true,
+      "category": "style",
+      "severity": "warning",
+      "desc": "한 줄은 최대 100자로 제한합니다",
+      "when": { "languages": ["typescript", "javascript"] },
+      "check": { "engine": "eslint" }
+    }
+  ],
+  "enforce": { "stages": ["pre-commit"], "fail_on": ["error"] }
+}

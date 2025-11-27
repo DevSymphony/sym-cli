@@ -1,0 +1,13 @@
+<?xml version="1.0"?>
+<ruleset name="Symphony Rules" xmlns="http://pmd.sourceforge.net/ruleset/2.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://pmd.sourceforge.net/ruleset/2.0.0 https://pmd.sourceforge.io/ruleset_2_0_0.xsd">
+  <description>Generated from Symphony user policy</description>
+  <rule ref="category/java/errorprone.xml/EmptyCatchBlock">
+    <priority>2</priority>
+  </rule>
+  <rule ref="category/java/bestpractices.xml/UnusedPrivateMethod">
+    <priority>2</priority>
+  </rule>
+  <rule ref="category/java/design.xml/CyclomaticComplexity">
+    <priority>2</priority>
+  </rule>
+</ruleset>
