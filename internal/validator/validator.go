@@ -70,6 +70,25 @@ func NewValidator(policy *schema.CodePolicy, verbose bool) *Validator {
 	}
 }
 
+// NewValidatorWithWorkDir creates a validator with a custom working directory
+// symDir is automatically set to workDir/.sym
+func NewValidatorWithWorkDir(policy *schema.CodePolicy, verbose bool, workDir string) *Validator {
+	symDir := filepath.Join(workDir, ".sym")
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+
+	return &Validator{
+		policy:          policy,
+		verbose:         verbose,
+		adapterRegistry: adapterRegistry.Global(),
+		workDir:         workDir,
+		symDir:          symDir,
+		selector:        NewFileSelector(workDir),
+		ctx:             ctx,
+		ctxCancel:       cancel,
+		llmClient:       nil,
+	}
+}
+
 // SetLLMClient sets the LLM client for this validator
 func (v *Validator) SetLLMClient(client *llm.Client) {
 	v.llmClient = client
