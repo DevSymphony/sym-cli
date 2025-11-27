@@ -40,8 +40,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string, mo
 
 	args = append(args, files...)
 
-	// Execute
-	a.executor.WorkDir = a.WorkDir
+	// Execute (uses CWD by default)
 	output, err := a.executor.Execute(ctx, prettierCmd, args...)
 
 	// Prettier returns non-zero exit code if files need formatting (in --check mode)

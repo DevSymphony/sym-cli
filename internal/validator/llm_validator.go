@@ -10,9 +10,17 @@ import (
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
+// ValidationError represents an error that occurred during validation
+type ValidationError struct {
+	RuleID  string
+	Engine  string
+	Message string
+}
+
 // ValidationResult represents the result of validating changes
 type ValidationResult struct {
 	Violations []Violation
+	Errors     []ValidationError // Adapter/engine execution errors
 	Checked    int
 	Passed     int
 	Failed     int

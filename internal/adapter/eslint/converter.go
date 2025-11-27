@@ -1,36 +1,52 @@
-package linters
+package eslint
 
 import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"strings"
 	"sync"
 
+	"github.com/DevSymphony/sym-cli/internal/adapter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// ESLintLinterConverter converts rules to ESLint configuration using LLM
-type ESLintLinterConverter struct{}
+// Converter converts rules to ESLint configuration using LLM
+type Converter struct{}
 
-// NewESLintLinterConverter creates a new ESLint converter
-func NewESLintLinterConverter() *ESLintLinterConverter {
-	return &ESLintLinterConverter{}
+// NewConverter creates a new ESLint converter
+func NewConverter() *Converter {
+	return &Converter{}
 }
 
-// Name returns the linter name
-func (c *ESLintLinterConverter) Name() string {
+func (c *Converter) Name() string {
 	return "eslint"
 }
 
-// SupportedLanguages returns supported languages
-func (c *ESLintLinterConverter) SupportedLanguages() []string {
+func (c *Converter) SupportedLanguages() []string {
 	return []string{"javascript", "js", "typescript", "ts", "jsx", "tsx"}
 }
 
+// GetLLMDescription returns a description of ESLint's capabilities for LLM routing
+func (c *Converter) GetLLMDescription() string {
+	return `ONLY native ESLint rules (no-console, no-unused-vars, eqeqeq, no-var, camelcase, new-cap, max-len, max-lines, no-eval, etc.)
+  - CAN: Simple syntax checks, variable naming, console usage, basic patterns
+  - CANNOT: Complex business logic, context-aware rules, file naming, advanced async patterns`
+}
+
+// GetRoutingHints returns routing rules for LLM to decide when to use ESLint
+func (c *Converter) GetRoutingHints() []string {
+	return []string{
+		"For JavaScript/TypeScript naming rules (camelCase, PascalCase) → use eslint",
+		"For JS/TS code quality (unused vars, no-console, no-eval) → use eslint",
+		"For JS/TS best practices (eqeqeq, no-var, prefer-const) → use eslint",
+	}
+}
+
 // ConvertRules converts user rules to ESLint configuration using LLM
-func (c *ESLintLinterConverter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error) {
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
 	if llmClient == nil {
 		return nil, fmt.Errorf("LLM client is required")
 	}
@@ -76,21 +92,21 @@ func (c *ESLintLinterConverter) ConvertRules(ctx context.Context, rules []schema
 	for result := range results {
 		if result.err != nil {
 			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
-			fmt.Printf("⚠️  ESLint rule %d conversion error: %v\n", result.index+1, result.err)
+			fmt.Fprintf(os.Stderr, "⚠️  ESLint rule %d conversion error: %v\n", result.index+1, result.err)
 			continue
 		}
 
 		if result.ruleName != "" {
 			eslintRules[result.ruleName] = result.config
-			fmt.Printf("✓ ESLint rule %d → %s\n", result.index+1, result.ruleName)
+			fmt.Fprintf(os.Stderr, "✓ ESLint rule %d → %s\n", result.index+1, result.ruleName)
 		} else {
 			skippedCount++
-			fmt.Printf("⊘ ESLint rule %d skipped (cannot be enforced by ESLint)\n", result.index+1)
+			fmt.Fprintf(os.Stderr, "⊘ ESLint rule %d skipped (cannot be enforced by ESLint)\n", result.index+1)
 		}
 	}
 
 	if skippedCount > 0 {
-		fmt.Printf("ℹ️  %d rule(s) skipped for ESLint (will use llm-validator)\n", skippedCount)
+		fmt.Fprintf(os.Stderr, "ℹ️  %d rule(s) skipped for ESLint (will use llm-validator)\n", skippedCount)
 	}
 
 	if len(eslintRules) == 0 {
@@ -117,7 +133,7 @@ func (c *ESLintLinterConverter) ConvertRules(ctx context.Context, rules []schema
 		return nil, fmt.Errorf("failed to marshal config: %w", err)
 	}
 
-	return &LinterConfig{
+	return &adapter.LinterConfig{
 		Filename: ".eslintrc.json",
 		Content:  content,
 		Format:   "json",
@@ -125,7 +141,7 @@ func (c *ESLintLinterConverter) ConvertRules(ctx context.Context, rules []schema
 }
 
 // convertSingleRule converts a single user rule to ESLint rule using LLM
-func (c *ESLintLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (string, interface{}, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (string, interface{}, error) {
 	systemPrompt := `You are an ESLint configuration expert. Convert natural language coding rules to ESLint rule configurations.
 
 Return ONLY a JSON object (no markdown fences) with this structure:
@@ -196,6 +212,10 @@ Output:
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	if response == "" {
+		return "", nil, fmt.Errorf("LLM returned empty response")
+	}
+
 	var result struct {
 		RuleName string      `json:"rule_name"`
 		Severity string      `json:"severity"`
@@ -203,7 +223,7 @@ Output:
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		return "", nil, fmt.Errorf("failed to parse LLM response: %w", err)
+		return "", nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
 	}
 
 	// If rule_name is empty, this rule cannot be converted
@@ -217,13 +237,8 @@ Output:
 		severity = result.Severity
 	}
 
-	// Build rule configuration
-	var config interface{}
-	if result.Options != nil {
-		config = []interface{}{severity, result.Options}
-	} else {
-		config = severity
-	}
+	// Build rule configuration using format helper for special rules
+	config := formatESLintRuleConfig(result.RuleName, severity, result.Options)
 
 	return result.RuleName, config, nil
 }
@@ -240,4 +255,40 @@ func mapSeverity(severity string) string {
 	default:
 		return "error"
 	}
+}
+
+// formatESLintRuleConfig formats the rule configuration based on rule-specific requirements.
+// Some ESLint rules have non-standard option formats that need special handling.
+func formatESLintRuleConfig(ruleName string, severity string, options interface{}) interface{} {
+	// Rules that need special formatting
+	switch ruleName {
+	case "id-match":
+		// id-match requires: [severity, pattern, options]
+		// where pattern is a string and options is an object
+		if opts, ok := options.(map[string]interface{}); ok {
+			if pattern, hasPattern := opts["pattern"].(string); hasPattern {
+				// Remove pattern from options since it's a separate argument
+				remainingOpts := make(map[string]interface{})
+				for k, v := range opts {
+					if k != "pattern" {
+						remainingOpts[k] = v
+					}
+				}
+				if len(remainingOpts) > 0 {
+					return []interface{}{severity, pattern, remainingOpts}
+				}
+				return []interface{}{severity, pattern}
+			}
+		}
+
+	case "no-restricted-imports":
+		// no-restricted-imports can have complex options
+		// Keep the default format for now
+	}
+
+	// Default format: [severity, options] or just severity
+	if options != nil {
+		return []interface{}{severity, options}
+	}
+	return severity
 }

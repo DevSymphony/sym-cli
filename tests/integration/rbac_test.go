@@ -8,6 +8,10 @@ import (
 
 // Test complex RBAC scenarios with admin, developer, viewer roles
 func TestComplexRBACPatterns(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	tests := []struct {
 		name         string
 		username     string
@@ -91,6 +95,10 @@ func TestComplexRBACPatterns(t *testing.T) {
 
 // Test RBAC validation result structure
 func TestValidationResultStructure(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping integration test in short mode")
+	}
+
 	tests := []struct {
 		name         string
 		result       *roles.ValidationResult

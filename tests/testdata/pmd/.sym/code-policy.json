@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "pmd-emptycatch",
+      "enabled": true,
+      "category": "error_handling",
+      "severity": "error",
+      "desc": "빈 catch 블록을 사용하지 않습니다",
+      "when": { "languages": ["java"] },
+      "check": { "engine": "pmd" }
+    },
+    {
+      "id": "pmd-unusedmethod",
+      "enabled": true,
+      "category": "style",
+      "severity": "warning",
+      "desc": "사용하지 않는 private 메서드를 제거합니다",
+      "when": { "languages": ["java"] },
+      "check": { "engine": "pmd" }
+    },
+    {
+      "id": "pmd-complexity",
+      "enabled": true,
+      "category": "complexity",
+      "severity": "warning",
+      "desc": "순환 복잡도는 10 이하로 유지합니다",
+      "when": { "languages": ["java"] },
+      "check": { "engine": "pmd" }
+    }
+  ],
+  "enforce": { "stages": ["pre-commit"], "fail_on": ["error"] }
+}

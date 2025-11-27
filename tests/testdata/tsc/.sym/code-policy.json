@@ -1,0 +1,15 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "tsc-strictnull",
+      "enabled": true,
+      "category": "typechecker",
+      "severity": "error",
+      "desc": "null과 undefined는 명시적으로 처리해야 합니다",
+      "when": { "languages": ["typescript"] },
+      "check": { "engine": "tsc" }
+    }
+  ],
+  "enforce": { "stages": ["pre-commit"], "fail_on": ["error"] }
+}

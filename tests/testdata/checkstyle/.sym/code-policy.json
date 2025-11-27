@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "checkstyle-typename",
+      "enabled": true,
+      "category": "naming",
+      "severity": "error",
+      "desc": "클래스 이름은 PascalCase를 사용합니다",
+      "when": { "languages": ["java"] },
+      "check": { "engine": "checkstyle" }
+    },
+    {
+      "id": "checkstyle-methodname",
+      "enabled": true,
+      "category": "naming",
+      "severity": "error",
+      "desc": "메서드 이름은 camelCase를 사용합니다",
+      "when": { "languages": ["java"] },
+      "check": { "engine": "checkstyle" }
+    },
+    {
+      "id": "checkstyle-membername",
+      "enabled": true,
+      "category": "naming",
+      "severity": "error",
+      "desc": "멤버 변수 이름 규칙을 준수합니다",
+      "when": { "languages": ["java"] },
+      "check": { "engine": "checkstyle" }
+    }
+  ],
+  "enforce": { "stages": ["pre-commit"], "fail_on": ["error"] }
+}

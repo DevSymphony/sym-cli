@@ -9,21 +9,11 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DevSymphony/sym-cli/internal/converter/linters"
+	"github.com/DevSymphony/sym-cli/internal/adapter"
+	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
-
-// languageLinterMapping defines which linters are available for each language
-var languageLinterMapping = map[string][]string{
-	"javascript": {"eslint", "prettier"},
-	"js":         {"eslint", "prettier"},
-	"typescript": {"tsc", "eslint", "prettier"},
-	"ts":         {"tsc", "eslint", "prettier"},
-	"tsx":        {"tsc", "eslint", "prettier"},
-	"jsx":        {"eslint", "prettier"},
-	"java":       {"checkstyle", "pmd"},
-}
 
 // llmValidatorEngine is the special linter for rules that don't fit any specific external linter
 const llmValidatorEngine = "llm-validator"
@@ -154,7 +144,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 			result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
 			mu.Unlock()
 
-			fmt.Printf("✓ Generated %s configuration: %s\n", linter, outputPath)
+			fmt.Fprintf(os.Stderr, "✓ Generated %s configuration: %s\n", linter, outputPath)
 		}(linterName, rules)
 	}
 
@@ -254,7 +244,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 	}
 
 	result.GeneratedFiles = append(result.GeneratedFiles, codePolicyPath)
-	fmt.Printf("✓ Generated code policy: %s\n", codePolicyPath)
+	fmt.Fprintf(os.Stderr, "✓ Generated code policy: %s\n", codePolicyPath)
 
 	return result, nil
 }
@@ -297,9 +287,12 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 
 // getAvailableLinters returns available linters for given languages
 func (c *Converter) getAvailableLinters(languages []string) []string {
+	// Build language mapping dynamically from registry
+	languageLinterMapping := registry.Global().BuildLanguageMapping()
+
 	if len(languages) == 0 {
-		// If no languages specified, include all linters
-		languages = []string{"javascript", "typescript", "java"}
+		// If no languages specified, return all registered tools
+		return registry.Global().GetAllToolNames()
 	}
 
 	linterSet := make(map[string]bool)
@@ -320,16 +313,16 @@ func (c *Converter) getAvailableLinters(languages []string) []string {
 
 // selectLintersForRule uses LLM to determine which linters are appropriate for a rule
 func (c *Converter) selectLintersForRule(ctx context.Context, rule schema.UserRule, availableLinters []string) []string {
+	// Build linter descriptions dynamically from registry
+	linterDescriptions := c.buildLinterDescriptions(availableLinters)
+
+	// Build routing hints dynamically from converters
+	routingHints := c.buildRoutingHints(availableLinters)
+
 	systemPrompt := fmt.Sprintf(`You are a code quality expert. Analyze the given coding rule and determine which linters can ACTUALLY enforce it using their NATIVE rules (without plugins).
 
 Available linters and NATIVE capabilities:
-- eslint: ONLY native ESLint rules (no-console, no-unused-vars, eqeqeq, no-var, camelcase, new-cap, max-len, max-lines, no-eval, etc.)
-  - CAN: Simple syntax checks, variable naming, console usage, basic patterns
-  - CANNOT: Complex business logic, context-aware rules, file naming, advanced async patterns
-- prettier: Code formatting ONLY (quotes, semicolons, indentation, line length, trailing commas)
-- tsc: TypeScript type checking ONLY (strict modes, noImplicitAny, strictNullChecks, type inference)
-- checkstyle: Java style checks (naming, whitespace, imports, line length, complexity)
-- pmd: Java code quality (unused code, empty blocks, naming conventions, design issues)
+%s
 
 STRICT Rules for selection:
 1. ONLY select if the linter has a NATIVE rule that can enforce this
@@ -338,6 +331,7 @@ STRICT Rules for selection:
 4. If the rule is about file naming → return []
 5. If the rule requires deep semantic analysis → return []
 6. When in doubt, return [] (better to use llm-validator than fail)
+%s
 
 Available linters for this rule: %s
 
@@ -383,14 +377,14 @@ Reason: Requires semantic analysis of what constitutes secrets
 
 Input: "Imports from large packages must be specific"
 Output: []
-Reason: Requires knowing which packages are "large"`, availableLinters)
+Reason: Requires knowing which packages are "large"`, linterDescriptions, routingHints, availableLinters)
 
 	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
 
 	// Call LLM
 	response, err := c.llmClient.Complete(ctx, systemPrompt, userPrompt)
 	if err != nil {
-		fmt.Printf("Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
+		fmt.Fprintf(os.Stderr, "Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
 		return []string{} // Will fall back to llm-validator
 	}
 
@@ -403,7 +397,7 @@ Reason: Requires knowing which packages are "large"`, availableLinters)
 
 	var selectedLinters []string
 	if err := json.Unmarshal([]byte(response), &selectedLinters); err != nil {
-		fmt.Printf("Warning: Failed to parse LLM response for rule %s: %v\n", rule.ID, err)
+		fmt.Fprintf(os.Stderr, "Warning: Failed to parse LLM response for rule %s: %v\n", rule.ID, err)
 		return []string{} // Will fall back to llm-validator
 	}
 
@@ -411,21 +405,61 @@ Reason: Requires knowing which packages are "large"`, availableLinters)
 }
 
 // getLinterConverter returns the appropriate converter for a linter
-func (c *Converter) getLinterConverter(linterName string) linters.LinterConverter {
-	switch linterName {
-	case "eslint":
-		return linters.NewESLintLinterConverter()
-	case "prettier":
-		return linters.NewPrettierLinterConverter()
-	case "tsc":
-		return linters.NewTSCLinterConverter()
-	case "checkstyle":
-		return linters.NewCheckstyleLinterConverter()
-	case "pmd":
-		return linters.NewPMDLinterConverter()
-	default:
+func (c *Converter) getLinterConverter(linterName string) adapter.LinterConverter {
+	// Use registry to get converter (no hardcoding)
+	converter, ok := registry.Global().GetConverter(linterName)
+	if !ok {
 		return nil
 	}
+	return converter
+}
+
+// buildLinterDescriptions builds linter capability descriptions from registry
+func (c *Converter) buildLinterDescriptions(availableLinters []string) string {
+	var descriptions []string
+
+	for _, linterName := range availableLinters {
+		converter, ok := registry.Global().GetConverter(linterName)
+		if !ok || converter == nil {
+			continue
+		}
+
+		desc := converter.GetLLMDescription()
+		if desc != "" {
+			descriptions = append(descriptions, fmt.Sprintf("- %s: %s", linterName, desc))
+		}
+	}
+
+	if len(descriptions) == 0 {
+		return "No linter descriptions available"
+	}
+
+	return strings.Join(descriptions, "\n")
+}
+
+// buildRoutingHints builds routing hints from all available converters
+func (c *Converter) buildRoutingHints(availableLinters []string) string {
+	var hints []string
+	hintNumber := 7 // Start after the base rules (1-6)
+
+	for _, linterName := range availableLinters {
+		converter, ok := registry.Global().GetConverter(linterName)
+		if !ok || converter == nil {
+			continue
+		}
+
+		routingHints := converter.GetRoutingHints()
+		for _, hint := range routingHints {
+			hints = append(hints, fmt.Sprintf("%d. %s", hintNumber, hint))
+			hintNumber++
+		}
+	}
+
+	if len(hints) == 0 {
+		return ""
+	}
+
+	return strings.Join(hints, "\n")
 }
 
 // convertRBAC converts UserRBAC to PolicyRBAC

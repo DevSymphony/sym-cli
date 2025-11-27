@@ -30,7 +30,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 	eslintCmd, args := a.getExecutionArgs(configPath, files)
 
 	// Execute with environment variable to support both ESLint 8 and 9
-	a.executor.WorkDir = a.WorkDir
+	// Uses CWD by default
 	a.executor.Env = map[string]string{
 		"ESLINT_USE_FLAT_CONFIG": "false",
 	}

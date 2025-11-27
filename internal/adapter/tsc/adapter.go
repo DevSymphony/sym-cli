@@ -17,28 +17,27 @@ import (
 // - Type checking for TypeScript and JavaScript files
 // - Compilation errors and warnings
 // - Interface and type validation
+//
+// Note: Adapter is goroutine-safe and stateless. WorkDir is determined
+// by CWD at execution time, not stored in the adapter.
 type Adapter struct {
 	// ToolsDir is where TypeScript is installed
-	// Default: ~/.symphony/tools/node_modules
+	// Default: ~/.sym/tools
 	ToolsDir string
-
-	// WorkDir is the project root
-	WorkDir string
 
 	// executor runs tsc subprocess
 	executor *adapter.SubprocessExecutor
 }
 
 // NewAdapter creates a new TSC adapter.
-func NewAdapter(toolsDir, workDir string) *Adapter {
+func NewAdapter(toolsDir string) *Adapter {
 	if toolsDir == "" {
 		home, _ := os.UserHomeDir()
-		toolsDir = filepath.Join(home, ".symphony", "tools")
+		toolsDir = filepath.Join(home, ".sym", "tools")
 	}
 
 	return &Adapter{
 		ToolsDir: toolsDir,
-		WorkDir:  workDir,
 		executor: adapter.NewSubprocessExecutor(),
 	}
 }

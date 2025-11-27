@@ -27,13 +27,13 @@ const (
 // - Length rules: line length, file length
 // - Style rules: indentation, whitespace
 // - Naming rules: class names, method names, variable names
+//
+// Note: Adapter is goroutine-safe and stateless. WorkDir is determined
+// by CWD at execution time, not stored in the adapter.
 type Adapter struct {
 	// ToolsDir is where Checkstyle JAR is stored.
 	// Default: ~/.sym/tools
 	ToolsDir string
-
-	// WorkDir is the project root.
-	WorkDir string
 
 	// JavaPath is the path to java executable.
 	// Empty = use system java
@@ -44,7 +44,7 @@ type Adapter struct {
 }
 
 // NewAdapter creates a new Checkstyle adapter.
-func NewAdapter(toolsDir, workDir string) *Adapter {
+func NewAdapter(toolsDir string) *Adapter {
 	if toolsDir == "" {
 		home, _ := os.UserHomeDir()
 		toolsDir = filepath.Join(home, ".sym", "tools")
@@ -54,7 +54,6 @@ func NewAdapter(toolsDir, workDir string) *Adapter {
 
 	return &Adapter{
 		ToolsDir: toolsDir,
-		WorkDir:  workDir,
 		JavaPath: javaPath,
 		executor: adapter.NewSubprocessExecutor(),
 	}

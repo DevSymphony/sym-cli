@@ -2,6 +2,9 @@ package adapter
 
 import (
 	"context"
+
+	"github.com/DevSymphony/sym-cli/internal/llm"
+	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
 // Adapter wraps external tools (ESLint, Prettier, etc.) for use by engines.
@@ -91,4 +94,33 @@ type Violation struct {
 	Message  string
 	Severity string // "error", "warning", "info"
 	RuleID   string
+}
+
+// LinterConverter converts user rules to native linter configuration using LLM.
+// This interface is implemented by each linter's converter (e.g., ESLintConverter).
+type LinterConverter interface {
+	// Name returns the linter name (e.g., "eslint", "checkstyle", "pmd")
+	Name() string
+
+	// SupportedLanguages returns the languages this linter supports
+	SupportedLanguages() []string
+
+	// GetLLMDescription returns a description of the linter's capabilities for LLM routing.
+	// This is used in the LLM prompt to help route rules to appropriate linters.
+	GetLLMDescription() string
+
+	// GetRoutingHints returns routing rules for LLM to decide when to use this linter.
+	// Each hint is a rule like "For Java naming rules → ALWAYS use checkstyle".
+	// These hints are collected and included in the LLM prompt for rule routing.
+	GetRoutingHints() []string
+
+	// ConvertRules converts user rules to native linter configuration using LLM
+	ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error)
+}
+
+// LinterConfig represents a generated configuration file.
+type LinterConfig struct {
+	Filename string // e.g., ".eslintrc.json", "checkstyle.xml"
+	Content  []byte // File content
+	Format   string // "json", "xml", "yaml"
 }

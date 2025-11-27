@@ -10,7 +10,7 @@ import (
 )
 
 func TestNewAdapter(t *testing.T) {
-	a := NewAdapter("", "")
+	a := NewAdapter("")
 	if a == nil {
 		t.Fatal("NewAdapter() returned nil")
 	}
@@ -20,30 +20,25 @@ func TestNewAdapter(t *testing.T) {
 	}
 }
 
-func TestNewAdapter_CustomDirs(t *testing.T) {
+func TestNewAdapter_CustomToolsDir(t *testing.T) {
 	toolsDir := "/custom/tools"
-	workDir := "/custom/work"
 
-	a := NewAdapter(toolsDir, workDir)
+	a := NewAdapter(toolsDir)
 
 	if a.ToolsDir != toolsDir {
 		t.Errorf("ToolsDir = %q, want %q", a.ToolsDir, toolsDir)
 	}
-
-	if a.WorkDir != workDir {
-		t.Errorf("WorkDir = %q, want %q", a.WorkDir, workDir)
-	}
 }
 
 func TestName(t *testing.T) {
-	a := NewAdapter("", "")
+	a := NewAdapter("")
 	if a.Name() != "prettier" {
 		t.Errorf("Name() = %q, want %q", a.Name(), "prettier")
 	}
 }
 
 func TestGetPrettierPath(t *testing.T) {
-	a := NewAdapter("/test/tools", "")
+	a := NewAdapter("/test/tools")
 	expected := filepath.Join("/test/tools", "node_modules", ".bin", "prettier")
 
 	got := a.getPrettierPath()
@@ -59,7 +54,7 @@ func TestInitPackageJSON(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	a := NewAdapter(tmpDir, "")
+	a := NewAdapter(tmpDir)
 
 	if err := a.initPackageJSON(); err != nil {
 		t.Fatalf("initPackageJSON() error = %v", err)
@@ -72,7 +67,7 @@ func TestInitPackageJSON(t *testing.T) {
 }
 
 func TestCheckAvailability_NotFound(t *testing.T) {
-	a := NewAdapter("/nonexistent/path", "")
+	a := NewAdapter("/nonexistent/path")
 
 	ctx := context.Background()
 	err := a.CheckAvailability(ctx)
@@ -89,7 +84,7 @@ func TestInstall(t *testing.T) {
 	}
 	defer func() { _ = os.RemoveAll(tmpDir) }()
 
-	a := NewAdapter(tmpDir, "")
+	a := NewAdapter(tmpDir)
 
 	ctx := context.Background()
 	config := adapter.InstallConfig{
@@ -103,7 +98,7 @@ func TestInstall(t *testing.T) {
 }
 
 func TestExecute(t *testing.T) {
-	a := NewAdapter("", t.TempDir())
+	a := NewAdapter(t.TempDir())
 
 	ctx := context.Background()
 	config := []byte(`{"semi": true}`)
@@ -116,7 +111,7 @@ func TestExecute(t *testing.T) {
 }
 
 func TestExecuteWithMode(t *testing.T) {
-	a := NewAdapter("", t.TempDir())
+	a := NewAdapter(t.TempDir())
 
 	ctx := context.Background()
 	config := []byte(`{"semi": true}`)
@@ -133,7 +128,7 @@ func TestExecuteWithMode(t *testing.T) {
 }
 
 func TestParseOutput(t *testing.T) {
-	a := NewAdapter("", "")
+	a := NewAdapter("")
 
 	tests := []struct {
 		name    string

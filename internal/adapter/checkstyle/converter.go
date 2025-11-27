@@ -1,4 +1,4 @@
-package linters
+package checkstyle
 
 import (
 	"context"
@@ -8,29 +8,43 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DevSymphony/sym-cli/internal/adapter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// CheckstyleLinterConverter converts rules to Checkstyle XML using LLM
-type CheckstyleLinterConverter struct{}
+// Converter converts rules to Checkstyle XML configuration using LLM
+type Converter struct{}
 
-// NewCheckstyleLinterConverter creates a new Checkstyle converter
-func NewCheckstyleLinterConverter() *CheckstyleLinterConverter {
-	return &CheckstyleLinterConverter{}
+// NewConverter creates a new Checkstyle converter
+func NewConverter() *Converter {
+	return &Converter{}
 }
 
-// Name returns the linter name
-func (c *CheckstyleLinterConverter) Name() string {
+func (c *Converter) Name() string {
 	return "checkstyle"
 }
 
-// SupportedLanguages returns supported languages
-func (c *CheckstyleLinterConverter) SupportedLanguages() []string {
+func (c *Converter) SupportedLanguages() []string {
 	return []string{"java"}
 }
 
-// checkstyleModule represents a Checkstyle module
+// GetLLMDescription returns a description of Checkstyle's capabilities for LLM routing
+func (c *Converter) GetLLMDescription() string {
+	return `Java style checks (naming, whitespace, imports, line length, complexity)
+  - CAN: Class/method/variable naming, line/method length, indentation, import checks, cyclomatic complexity, JavaDoc
+  - CANNOT: Runtime behavior, business logic, security vulnerabilities, advanced design patterns`
+}
+
+// GetRoutingHints returns routing rules for LLM to decide when to use Checkstyle
+func (c *Converter) GetRoutingHints() []string {
+	return []string{
+		"For Java naming rules (class names, variable names, method names) → ALWAYS use checkstyle",
+		"For Java formatting rules (line length, indentation, whitespace) → use checkstyle",
+		"For Java import rules (star imports, unused imports) → use checkstyle",
+	}
+}
+
 type checkstyleModule struct {
 	XMLName    xml.Name             `xml:"module"`
 	Name       string               `xml:"name,attr"`
@@ -38,14 +52,12 @@ type checkstyleModule struct {
 	Modules    []checkstyleModule   `xml:"module,omitempty"`
 }
 
-// checkstyleProperty represents a property
 type checkstyleProperty struct {
 	XMLName xml.Name `xml:"property"`
 	Name    string   `xml:"name,attr"`
 	Value   string   `xml:"value,attr"`
 }
 
-// checkstyleConfig represents root configuration
 type checkstyleConfig struct {
 	XMLName xml.Name           `xml:"module"`
 	Name    string             `xml:"name,attr"`
@@ -53,7 +65,7 @@ type checkstyleConfig struct {
 }
 
 // ConvertRules converts user rules to Checkstyle configuration using LLM
-func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error) {
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
 	if llmClient == nil {
 		return nil, fmt.Errorf("LLM client is required")
 	}
@@ -106,15 +118,45 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 		return nil, fmt.Errorf("no rules converted: %v", errors)
 	}
 
-	// Build Checkstyle configuration
-	treeWalker := checkstyleModule{
-		Name:    "TreeWalker",
-		Modules: modules,
+	// Separate modules into Checker-level and TreeWalker-level
+	// Checker-level modules (NOT under TreeWalker)
+	checkerLevelModules := map[string]bool{
+		"LineLength":                        true,
+		"FileLength":                        true,
+		"FileTabCharacter":                  true,
+		"NewlineAtEndOfFile":                true,
+		"UniqueProperties":                  true,
+		"OrderedProperties":                 true,
+		"Translation":                       true,
+		"SuppressWarningsFilter":            true,
+		"BeforeExecutionExclusionFileFilter": true,
+		"SuppressionFilter":                 true,
+		"SuppressionCommentFilter":          true,
 	}
 
+	var checkerModules []checkstyleModule
+	var treeWalkerModules []checkstyleModule
+
+	for _, module := range modules {
+		if checkerLevelModules[module.Name] {
+			checkerModules = append(checkerModules, module)
+		} else {
+			treeWalkerModules = append(treeWalkerModules, module)
+		}
+	}
+
+	// Build Checkstyle configuration
+	// TreeWalker contains TreeWalker-level modules
+	treeWalker := checkstyleModule{
+		Name:    "TreeWalker",
+		Modules: treeWalkerModules,
+	}
+
+	// Checker contains Checker-level modules + TreeWalker
+	allModules := append(checkerModules, treeWalker)
 	config := checkstyleConfig{
 		Name:    "Checker",
-		Modules: []checkstyleModule{treeWalker},
+		Modules: allModules,
 	}
 
 	// Marshal to XML
@@ -131,7 +173,7 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 `
 	fullContent := []byte(xmlHeader + string(content))
 
-	return &LinterConfig{
+	return &adapter.LinterConfig{
 		Filename: "checkstyle.xml",
 		Content:  fullContent,
 		Format:   "xml",
@@ -139,7 +181,7 @@ func (c *CheckstyleLinterConverter) ConvertRules(ctx context.Context, rules []sc
 }
 
 // convertSingleRule converts a single rule using LLM
-func (c *CheckstyleLinterConverter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*checkstyleModule, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*checkstyleModule, error) {
 	systemPrompt := `You are a Checkstyle configuration expert. Convert natural language Java coding rules to Checkstyle modules.
 
 Return ONLY a JSON object (no markdown fences):
@@ -150,12 +192,17 @@ Return ONLY a JSON object (no markdown fences):
 }
 
 Common Checkstyle modules:
-- Naming: TypeName, MethodName, ParameterName, LocalVariableName, ConstantName
+- Naming: TypeName, MethodName, MemberName, ParameterName, LocalVariableName, StaticVariableName, ConstantName
 - Length: LineLength, MethodLength, ParameterNumber, FileLength
 - Style: Indentation, WhitespaceAround, NeedBraces, LeftCurly, RightCurly
 - Imports: AvoidStarImport, IllegalImport, UnusedImports
 - Complexity: CyclomaticComplexity, NPathComplexity
 - JavaDoc: JavadocMethod, JavadocType, MissingJavadocMethod
+
+IMPORTANT - Use MemberName for class fields (instance variables), NOT LocalVariableName:
+- MemberName: private/protected/public instance variables (class fields)
+- LocalVariableName: variables declared inside methods (local scope only)
+- StaticVariableName: static non-final variables
 
 If cannot convert, return:
 {
@@ -180,6 +227,30 @@ Output:
   "module_name": "LocalVariableName",
   "severity": "error",
   "properties": {"format": "^[a-z][a-zA-Z0-9]*$"}
+}
+
+Input: "Private member variables must start with m_"
+Output:
+{
+  "module_name": "MemberName",
+  "severity": "error",
+  "properties": {"format": "^m_[a-z][a-zA-Z0-9]*$"}
+}
+
+Input: "Class names must be PascalCase"
+Output:
+{
+  "module_name": "TypeName",
+  "severity": "error",
+  "properties": {"format": "^[A-Z][a-zA-Z0-9]*$"}
+}
+
+Input: "Method names must be camelCase"
+Output:
+{
+  "module_name": "MethodName",
+  "severity": "error",
+  "properties": {"format": "^[a-z][a-zA-Z0-9]*$"}
 }`
 
 	userPrompt := fmt.Sprintf("Convert this Java rule to Checkstyle module:\n\n%s", rule.Say)
@@ -196,6 +267,10 @@ Output:
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
+	if response == "" {
+		return nil, fmt.Errorf("LLM returned empty response")
+	}
+
 	var result struct {
 		ModuleName string            `json:"module_name"`
 		Severity   string            `json:"severity"`
@@ -203,7 +278,7 @@ Output:
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		return nil, fmt.Errorf("failed to parse LLM response: %w", err)
+		return nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
 	}
 
 	if result.ModuleName == "" {

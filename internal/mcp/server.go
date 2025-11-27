@@ -260,10 +260,7 @@ type ConventionItem struct {
 // handleQueryConventions handles convention query requests.
 // It finds and returns relevant conventions by category.
 func (s *Server) handleQueryConventions(params map[string]interface{}) (interface{}, *RPCError) {
-	fmt.Fprintf(os.Stderr, "[DEBUG] handleQueryConventions called with params: %+v\n", params)
-
 	if s.userPolicy == nil && s.codePolicy == nil {
-		fmt.Fprintf(os.Stderr, "[DEBUG] No policy loaded\n")
 		return map[string]interface{}{
 			"conventions": []ConventionItem{},
 			"message":     "policy not loaded",
@@ -273,7 +270,6 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 	var req QueryConventionsRequest
 	paramBytes, _ := json.Marshal(params)
 	if err := json.Unmarshal(paramBytes, &req); err != nil {
-		fmt.Fprintf(os.Stderr, "[ERROR] Failed to parse parameters: %v\n", err)
 		return nil, &RPCError{
 			Code:    -32602,
 			Message: fmt.Sprintf("failed to parse parameters: %v", err),
@@ -289,11 +285,7 @@ func (s *Server) handleQueryConventions(params map[string]interface{}) (interfac
 	// If languages is empty, return all languages
 	// This is more user-friendly than requiring the parameter
 
-	fmt.Fprintf(os.Stderr, "[DEBUG] Parsed request: category=%s, languages=%v\n",
-		req.Category, req.Languages)
-
 	conventions := s.filterConventions(req)
-	fmt.Fprintf(os.Stderr, "[DEBUG] Found %d conventions\n", len(conventions))
 
 	// Format conventions as readable text for MCP response
 	var textContent string
@@ -561,6 +553,15 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 			}
 			textContent += fmt.Sprintf("   Message: %s\n\n", violation.Message)
 		}
+	}
+
+	// Add engine errors if any (adapter execution failures)
+	if len(result.Errors) > 0 {
+		textContent += fmt.Sprintf("\n⚠️  Engine errors (%d):\n", len(result.Errors))
+		for _, e := range result.Errors {
+			textContent += fmt.Sprintf("   [%s] %s: %s\n", e.Engine, e.RuleID, e.Message)
+		}
+		textContent += "\n"
 	}
 
 	// Add note about saved results

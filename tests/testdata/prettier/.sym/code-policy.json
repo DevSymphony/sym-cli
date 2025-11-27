@@ -1,0 +1,33 @@
+{
+  "version": "1.0",
+  "rules": [
+    {
+      "id": "prettier-quotes",
+      "enabled": true,
+      "category": "style",
+      "severity": "warning",
+      "desc": "작은따옴표(single quote)를 사용합니다",
+      "when": { "languages": ["typescript", "javascript"] },
+      "check": { "engine": "prettier" }
+    },
+    {
+      "id": "prettier-indent",
+      "enabled": true,
+      "category": "style",
+      "severity": "warning",
+      "desc": "들여쓰기는 2칸 스페이스를 사용합니다",
+      "when": { "languages": ["typescript", "javascript"] },
+      "check": { "engine": "prettier" }
+    },
+    {
+      "id": "prettier-printwidth",
+      "enabled": true,
+      "category": "style",
+      "severity": "warning",
+      "desc": "한 줄은 최대 100자로 제한합니다",
+      "when": { "languages": ["typescript", "javascript"] },
+      "check": { "engine": "prettier" }
+    }
+  ],
+  "enforce": { "stages": ["pre-commit"], "fail_on": ["error"] }
+}

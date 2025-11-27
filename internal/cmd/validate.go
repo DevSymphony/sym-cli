@@ -88,7 +88,6 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		llm.WithTimeout(time.Duration(validateTimeout)*time.Second),
 	)
 
-	// Get git changes
 	var changes []validator.GitChange
 	if validateStaged {
 		changes, err = validator.GetStagedChanges()
@@ -127,7 +126,6 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("validation failed: %w", err)
 	}
 
-	// Print results
 	printValidationResult(result)
 
 	// Exit with error if violations found

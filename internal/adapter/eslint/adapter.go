@@ -18,29 +18,27 @@ import (
 // - Length rules: max-len, max-lines, max-params, max-lines-per-function
 // - Style rules: indent, quotes, semi, comma-dangle
 // - AST rules: Custom rule generation
+//
+// Note: Adapter is goroutine-safe and stateless. WorkDir is determined
+// by CWD at execution time, not stored in the adapter.
 type Adapter struct {
 	// ToolsDir is where ESLint is installed
-	// Default: ~/.sym/tools/node_modules
+	// Default: ~/.sym/tools
 	ToolsDir string
-
-	// WorkDir is the project root
-	WorkDir string
 
 	// executor runs ESLint subprocess
 	executor *adapter.SubprocessExecutor
 }
 
 // NewAdapter creates a new ESLint adapter.
-func NewAdapter(toolsDir, workDir string) *Adapter {
+func NewAdapter(toolsDir string) *Adapter {
 	if toolsDir == "" {
 		home, _ := os.UserHomeDir()
-		// symphonyclient integration: .symphony → .sym directory
 		toolsDir = filepath.Join(home, ".sym", "tools")
 	}
 
 	return &Adapter{
 		ToolsDir: toolsDir,
-		WorkDir:  workDir,
 		executor: adapter.NewSubprocessExecutor(),
 	}
 }
