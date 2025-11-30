@@ -175,6 +175,144 @@ function getCategoryColorClass(category) {
     return CATEGORY_COLORS[category] || CATEGORY_COLORS['default'];
 }
 
+// ==================== Language Management ====================
+function getAvailableLanguages() {
+    return appState.policy.defaults?.languages || [];
+}
+
+function renderLanguageTags() {
+    const container = document.getElementById('defaults-languages-tags');
+    const languages = getAvailableLanguages();
+    const defaultLanguage = appState.policy.defaults?.defaultLanguage || '';
+
+    if (languages.length === 0) {
+        container.innerHTML = '<span class="text-sm text-slate-400">등록된 언어가 없습니다</span>';
+    } else {
+        container.innerHTML = languages.map(lang => `
+            <span class="inline-flex items-center gap-1 px-3 py-1 rounded-full text-sm ${
+                lang === defaultLanguage
+                    ? 'bg-blue-100 text-blue-800 border-2 border-blue-500'
+                    : 'bg-gray-100 text-gray-700 border border-gray-300'
+            }">
+                ${lang}
+                ${lang === defaultLanguage ? '<span class="text-xs text-blue-600">(기본)</span>' : ''}
+                <button type="button" class="remove-language-btn ml-1 text-gray-500 hover:text-red-500" data-language="${lang}">&times;</button>
+            </span>
+        `).join('');
+
+        // Attach remove event listeners
+        document.querySelectorAll('.remove-language-btn').forEach(btn => {
+            btn.addEventListener('click', handleRemoveLanguage);
+        });
+    }
+
+    // Update default language dropdown
+    updateDefaultLanguageDropdown();
+}
+
+function updateDefaultLanguageDropdown() {
+    const select = document.getElementById('defaults-default-language');
+    const languages = getAvailableLanguages();
+    const currentDefault = appState.policy.defaults?.defaultLanguage || '';
+
+    select.innerHTML = '<option value="">선택 안함</option>' +
+        languages.map(lang => `<option value="${lang}" ${lang === currentDefault ? 'selected' : ''}>${lang}</option>`).join('');
+}
+
+function handleAddLanguage() {
+    const input = document.getElementById('defaults-language-input');
+    const language = input.value.trim().toLowerCase();
+
+    if (!language) {
+        showToast('언어를 입력해주세요', 'warning');
+        return;
+    }
+
+    if (!appState.policy.defaults) {
+        appState.policy.defaults = {};
+    }
+    if (!appState.policy.defaults.languages) {
+        appState.policy.defaults.languages = [];
+    }
+
+    if (appState.policy.defaults.languages.includes(language)) {
+        showToast('이미 등록된 언어입니다', 'warning');
+        return;
+    }
+
+    appState.policy.defaults.languages.push(language);
+    input.value = '';
+
+    renderLanguageTags();
+    renderRules(); // Update rule language dropdowns
+    showToast(`${language} 언어가 추가되었습니다`);
+    markDirty();
+}
+
+function handleRemoveLanguage(e) {
+    const language = e.target.dataset.language;
+
+    if (!appState.policy.defaults?.languages) return;
+
+    // Check if any rules use this language
+    const rulesUsingLanguage = appState.policy.rules.filter(r =>
+        r.languages && r.languages.includes(language)
+    );
+
+    if (rulesUsingLanguage.length > 0) {
+        if (!confirm(`${rulesUsingLanguage.length}개의 규칙이 이 언어를 사용 중입니다.\n삭제하면 해당 규칙에서도 이 언어가 제거됩니다.\n계속하시겠습니까?`)) {
+            return;
+        }
+
+        // Remove language from rules
+        rulesUsingLanguage.forEach(rule => {
+            rule.languages = rule.languages.filter(l => l !== language);
+        });
+    }
+
+    // Remove from defaults
+    appState.policy.defaults.languages = appState.policy.defaults.languages.filter(l => l !== language);
+
+    // Clear default language if it was removed
+    if (appState.policy.defaults.defaultLanguage === language) {
+        appState.policy.defaults.defaultLanguage = '';
+    }
+
+    renderLanguageTags();
+    renderRules(); // Update rule language dropdowns
+    showToast(`${language} 언어가 삭제되었습니다`);
+    markDirty();
+}
+
+function handleDefaultLanguageChange(e) {
+    if (!appState.policy.defaults) {
+        appState.policy.defaults = {};
+    }
+    appState.policy.defaults.defaultLanguage = e.target.value;
+    renderLanguageTags(); // Update tag highlighting
+    markDirty();
+}
+
+function addLanguagesToDefaults(languages) {
+    if (!appState.policy.defaults) {
+        appState.policy.defaults = {};
+    }
+    if (!appState.policy.defaults.languages) {
+        appState.policy.defaults.languages = [];
+    }
+
+    let addedCount = 0;
+    languages.forEach(lang => {
+        const normalizedLang = lang.trim().toLowerCase();
+        if (normalizedLang && !appState.policy.defaults.languages.includes(normalizedLang)) {
+            appState.policy.defaults.languages.push(normalizedLang);
+            addedCount++;
+        }
+    });
+
+    return addedCount;
+}
+
 // ==================== User Management ====================
 function renderUsers() {
     const container = document.getElementById('users-container');
@@ -376,8 +514,8 @@ function renderRules() {
         select.addEventListener('change', handleRuleUpdate);
     });
 
-    document.querySelectorAll('.languages-input').forEach(input => {
-        input.addEventListener('input', handleRuleUpdate);
+    document.querySelectorAll('.language-select').forEach(select => {
+        select.addEventListener('change', handleRuleUpdate);
     });
 
     document.querySelectorAll('.example-input').forEach(textarea => {
@@ -391,12 +529,16 @@ function renderRules() {
 }
 
 function createRuleElement(rule, index) {
+    const availableLanguages = getAvailableLanguages();
+    const ruleLanguage = rule.languages && rule.languages.length > 0 ? rule.languages[0] : '';
+
     return `
         <details class="rule-details bg-white rounded-lg border border-l-4 ${getCategoryColorClass(rule.category)} transition-shadow hover:shadow-md" data-rule-id="${rule.id}">
             <summary class="p-4 cursor-pointer font-semibold flex justify-between items-center text-slate-800">
                 <div class="flex items-center overflow-hidden min-w-0">
                     <span class="font-mono text-slate-400 mr-3">${rule.id}.</span>
                     <span class="rule-summary-text truncate">${rule.say || '새 규칙 (내용을 입력하세요)'}</span>
+                    ${ruleLanguage ? `<span class="ml-2 px-2 py-0.5 text-xs rounded bg-gray-200 text-gray-600">${ruleLanguage}</span>` : ''}
                 </div>
                 <button type="button" class="delete-rule-btn ml-4 text-gray-500 hover:text-red-500 text-xl font-bold flex-shrink-0" data-rule-id="${rule.id}">&times;</button>
             </summary>
@@ -418,7 +560,13 @@ function createRuleElement(rule, index) {
                         </div>
                         <div class="form-group">
                             <label class="block text-sm font-medium text-slate-600 mb-1">대상 언어</label>
-                            <input type="text" value="${(rule.languages || []).join(', ')}" placeholder="javascript, python" class="languages-input w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-id="${rule.id}">
+                            <select class="language-select w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-id="${rule.id}">
+                                <option value="">선택 안함</option>
+                                ${availableLanguages.map(lang => `
+                                    <option value="${lang}" ${ruleLanguage === lang ? 'selected' : ''}>${lang}</option>
+                                `).join('')}
+                            </select>
+                            ${availableLanguages.length === 0 ? '<p class="text-xs text-amber-600 mt-1">전역 설정에서 언어를 먼저 추가해주세요.</p>' : ''}
                         </div>
                     </div>
                     <div class="form-group">
@@ -444,9 +592,19 @@ function handleRuleUpdate(e) {
     } else if (e.target.classList.contains('category-select')) {
         rule.category = e.target.value;
         ruleElement.className = `rule-details bg-white rounded-lg border border-l-4 ${getCategoryColorClass(rule.category)} transition-shadow hover:shadow-md`;
-    } else if (e.target.classList.contains('languages-input')) {
-        const languagesStr = e.target.value.trim();
-        rule.languages = languagesStr ? languagesStr.split(',').map(s => s.trim()).filter(Boolean) : [];
+    } else if (e.target.classList.contains('language-select')) {
+        const selectedLanguage = e.target.value;
+        rule.languages = selectedLanguage ? [selectedLanguage] : [];
+        // Update the language badge in summary
+        const summaryDiv = ruleElement.querySelector('summary .flex.items-center');
+        const existingBadge = summaryDiv.querySelector('.bg-gray-200');
+        if (existingBadge) existingBadge.remove();
+        if (selectedLanguage) {
+            const badge = document.createElement('span');
+            badge.className = 'ml-2 px-2 py-0.5 text-xs rounded bg-gray-200 text-gray-600';
+            badge.textContent = selectedLanguage;
+            summaryDiv.appendChild(badge);
+        }
     } else if (e.target.classList.contains('example-input')) {
         rule.example = e.target.value.trim() || undefined; // Store undefined if empty
     }
@@ -476,9 +634,15 @@ function handleAddRule() {
         return isNaN(ruleId) ? max : Math.max(max, ruleId);
     }, 0);
     const newId = String(maxId + 1);
-    // Use default languages from global settings if available
-    const defaultLanguages = (appState.policy.defaults?.languages || []).slice();
-    const newRule = { id: newId, say: '', category: '', languages: defaultLanguages, example: '' };
+    // Use default language from global settings if available
+    const defaultLanguage = appState.policy.defaults?.defaultLanguage || '';
+    const newRule = {
+        id: newId,
+        say: '',
+        category: '',
+        languages: defaultLanguage ? [defaultLanguage] : [],
+        example: ''
+    };
     appState.policy.rules.push(newRule);
 
     console.log('Rule added. Current rules count:', appState.policy.rules.length);
@@ -747,19 +911,63 @@ async function handleApplyTemplate(e) {
             throw new Error('Invalid template format received');
         }
 
-        // Apply template to policy (preserve existing RBAC)
-        const currentRBAC = appState.policy.rbac; // Preserve existing RBAC
+        // Preserve existing RBAC
+        const currentRBAC = appState.policy.rbac;
+
+        // Collect all languages from template (defaults and rules)
+        const templateLanguages = new Set();
+
+        // Add languages from template defaults
+        if (template.defaults?.languages) {
+            template.defaults.languages.forEach(lang => templateLanguages.add(lang.toLowerCase()));
+        }
+
+        // Add languages from template rules
+        if (template.rules) {
+            template.rules.forEach(rule => {
+                if (rule.languages) {
+                    rule.languages.forEach(lang => templateLanguages.add(lang.toLowerCase()));
+                }
+            });
+        }
+
+        // Determine default language for rules without explicit languages
+        const languageArray = Array.from(templateLanguages);
+        const templateDefaultLang = template.defaults?.defaultLanguage?.toLowerCase() ||
+            (languageArray.length > 0 ? languageArray[0] : '');
+
+        // Apply template to policy
         appState.policy = {
             version: template.version || '1.0.0',
-            rbac: currentRBAC || { roles: {} }, // Keep current RBAC, don't use template's RBAC
-            defaults: template.defaults || {},
-            rules: template.rules || []
+            rbac: currentRBAC || { roles: {} }, // Keep current RBAC
+            defaults: {
+                ...template.defaults,
+                languages: languageArray, // Normalized languages
+                defaultLanguage: templateDefaultLang
+            },
+            rules: (template.rules || []).map(rule => {
+                // If rule has languages, use first one; otherwise use template default
+                let ruleLanguage = '';
+                if (rule.languages && rule.languages.length > 0) {
+                    ruleLanguage = rule.languages[0].toLowerCase();
+                } else if (templateDefaultLang) {
+                    ruleLanguage = templateDefaultLang;
+                }
+                return {
+                    ...rule,
+                    languages: ruleLanguage ? [ruleLanguage] : []
+                };
+            })
         };
 
         console.log('Template applied to appState (RBAC preserved):', appState.policy);
+        console.log('Languages added from template:', Array.from(templateLanguages));
+
         renderAll();
         hideModal('template-modal');
-        showToast('템플릿이 적용되었습니다 (RBAC 유지됨)');
+
+        const langCount = templateLanguages.size;
+        showToast(`템플릿이 적용되었습니다 (${langCount}개 언어 추가됨, RBAC 유지됨)`);
         markDirty();
     } catch (error) {
         console.error('Failed to apply template:', error);
@@ -847,13 +1055,12 @@ async function savePolicy() {
             }
         }
 
-        // Update from UI
-        const defaultsLanguages = document.getElementById('defaults-languages').value.trim();
-        if (defaultsLanguages) {
-            appState.policy.defaults.languages = defaultsLanguages.split(',').map(s => s.trim()).filter(Boolean);
+        // Update defaults from UI
+        if (!appState.policy.defaults) {
+            appState.policy.defaults = {};
         }
-
         appState.policy.defaults.severity = document.getElementById('defaults-severity').value || undefined;
+        appState.policy.defaults.defaultLanguage = document.getElementById('defaults-default-language').value || undefined;
 
         // Collect roles from users
         const roles = {};
@@ -1064,8 +1271,10 @@ function updateUserInfo() {
 function renderAll() {
     // Defaults
     const defaults = appState.policy.defaults || {};
-    document.getElementById('defaults-languages').value = (defaults.languages || []).join(', ');
     document.getElementById('defaults-severity').value = defaults.severity || '';
+
+    // Language tags
+    renderLanguageTags();
 
     // RBAC
     renderRBAC();
@@ -1107,10 +1316,15 @@ function applyPermissions() {
         document.getElementById('add-role-btn')?.classList.add('hidden');
 
         // Disable defaults inputs
-        document.getElementById('defaults-languages').disabled = true;
-        document.getElementById('defaults-languages').classList.add('bg-gray-200', 'cursor-not-allowed');
+        document.getElementById('defaults-language-input').disabled = true;
+        document.getElementById('defaults-language-input').classList.add('bg-gray-200', 'cursor-not-allowed');
+        document.getElementById('add-language-btn')?.classList.add('hidden');
+        document.getElementById('defaults-default-language').disabled = true;
+        document.getElementById('defaults-default-language').classList.add('bg-gray-200', 'cursor-not-allowed');
         document.getElementById('defaults-severity').disabled = true;
         document.getElementById('defaults-severity').classList.add('bg-gray-200', 'cursor-not-allowed');
+        // Hide remove buttons on language tags
+        document.querySelectorAll('.remove-language-btn').forEach(el => el.classList.add('hidden'));
 
         // Hide rule add/edit/delete buttons
         document.getElementById('add-rule-btn')?.classList.add('hidden');
@@ -1118,7 +1332,7 @@ function applyPermissions() {
         document.querySelectorAll('.delete-rule-btn').forEach(el => el.classList.add('hidden'));
 
         // Disable rule inputs
-        document.querySelectorAll('.say-input, .category-select, .languages-input, .example-input').forEach(el => {
+        document.querySelectorAll('.say-input, .category-select, .language-select, .example-input').forEach(el => {
             el.disabled = true;
             el.classList.add('bg-gray-200', 'cursor-not-allowed');
         });
@@ -1232,6 +1446,16 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // RBAC management
     document.getElementById('add-role-btn').addEventListener('click', handleAddRBACRole);
+
+    // Language management
+    document.getElementById('add-language-btn').addEventListener('click', handleAddLanguage);
+    document.getElementById('defaults-language-input').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddLanguage();
+        }
+    });
+    document.getElementById('defaults-default-language').addEventListener('change', handleDefaultLanguageChange);
 
     // Settings checkboxes - save to localStorage on change
     const confirmSaveCheckbox = document.getElementById('confirm-save-checkbox');

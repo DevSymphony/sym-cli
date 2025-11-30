@@ -86,20 +86,40 @@
 
                 <details class="bg-white rounded-lg border border-gray-300">
                     <summary class="p-4 cursor-pointer font-semibold text-lg text-slate-800 hover:bg-gray-50 rounded-t-lg">전역 기본값 (Defaults)</summary>
-                    <div class="p-6 border-t border-gray-300 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div class="p-6 border-t border-gray-300 space-y-4">
+                        <!-- Language Tags -->
                         <div class="form-group">
-                            <label for="defaults-languages" class="block text-sm font-medium text-slate-600 mb-1">대상 언어 (쉼표로 구분)</label>
-                            <input type="text" id="defaults-languages" placeholder="javascript, typescript" class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            <label class="block text-sm font-medium text-slate-600 mb-2">대상 언어</label>
+                            <div class="flex flex-wrap gap-2 min-h-[32px]" id="defaults-languages-tags">
+                                <!-- Language tags will be rendered here -->
+                            </div>
                         </div>
-                        <div class="form-group">
-                            <label for="defaults-severity" class="block text-sm font-medium text-slate-600 mb-1">기본 심각도</label>
-                            <select id="defaults-severity" class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
-                                <option value="">기본값</option>
-                                <option value="error">Error</option>
-                                <option value="warning">Warning</option>
-                                <option value="info">Info</option>
-                            </select>
+                        <!-- 3 column grid: 언어 입력 | 기본 언어 | 심각도 -->
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                            <div class="form-group">
+                                <label class="block text-sm font-medium text-slate-600 mb-1">언어 추가</label>
+                                <div class="flex gap-2">
+                                    <input type="text" id="defaults-language-input" placeholder="예: javascript" class="flex-1 min-w-0 bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                    <button type="button" id="add-language-btn" class="w-9 h-9 flex items-center justify-center bg-green-600 hover:bg-green-500 text-white rounded-md text-lg font-bold leading-none">+</button>
+                                </div>
+                            </div>
+                            <div class="form-group">
+                                <label for="defaults-default-language" class="block text-sm font-medium text-slate-600 mb-1">규칙 기본 언어</label>
+                                <select id="defaults-default-language" class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                    <option value="">선택 안함</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label for="defaults-severity" class="block text-sm font-medium text-slate-600 mb-1">기본 심각도</label>
+                                <select id="defaults-severity" class="w-full bg-gray-50 border border-gray-300 rounded-md px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                                    <option value="">기본값</option>
+                                    <option value="error">Error</option>
+                                    <option value="warning">Warning</option>
+                                    <option value="info">Info</option>
+                                </select>
+                            </div>
                         </div>
+                        <p class="text-xs text-slate-500">Enter 키로 언어 추가 • 규칙 기본 언어는 새 규칙 추가 시 자동 선택됨</p>
                     </div>
                 </details>
 

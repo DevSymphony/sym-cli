@@ -2,6 +2,35 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Pretendard font */
+@font-face {
+    font-family: 'Pretendard';
+    font-weight: 400;
+    font-style: normal;
+    src: url('/fonts/Pretendard-Regular.woff2') format('woff2');
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Pretendard';
+    font-weight: 500;
+    font-style: normal;
+    src: url('/fonts/Pretendard-Medium.woff2') format('woff2');
+    font-display: swap;
+}
+
+@font-face {
+    font-family: 'Pretendard';
+    font-weight: 700;
+    font-style: normal;
+    src: url('/fonts/Pretendard-Bold.woff2') format('woff2');
+    font-display: swap;
+}
+
+html, body {
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, Roboto, "Helvetica Neue", "Segoe UI", "Apple SD Gothic Neo", "Noto Sans KR", "Malgun Gothic", sans-serif;
+}
+
 /* Custom scrollbar styles */
 ::-webkit-scrollbar {
     width: 8px;
