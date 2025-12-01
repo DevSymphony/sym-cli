@@ -19,10 +19,9 @@ func main() {
 	toolsDir := filepath.Join(homeDir, ".sym", "tools")
 	workDir, _ := os.Getwd()
 
-	adp := eslint.NewAdapter(toolsDir, workDir)
+	adp := eslint.NewAdapter(toolsDir)
 	fmt.Printf("✓ Created ESLint adapter\n")
 	fmt.Printf("  Tools directory: %s\n", adp.ToolsDir)
-	fmt.Printf("  Work directory: %s\n\n", adp.WorkDir)
 
 	// 2. Check availability
 	ctx := context.Background()
