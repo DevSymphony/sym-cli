@@ -33,19 +33,23 @@ This command:
 }
 
 var (
-	initForce        bool
-	skipMCPRegister  bool
-	registerMCPOnly  bool
-	skipAPIKey       bool
-	setupAPIKeyOnly  bool
+	initForce       bool
+	skipMCPRegister bool
+	registerMCPOnly bool
+	skipAPIKey      bool
+	setupAPIKeyOnly bool
+	skipLLMSetup    bool
+	setupLLMOnly    bool
 )
 
 func init() {
 	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing roles.json")
 	initCmd.Flags().BoolVar(&skipMCPRegister, "skip-mcp", false, "Skip MCP server registration prompt")
 	initCmd.Flags().BoolVar(&registerMCPOnly, "register-mcp", false, "Register MCP server only (skip roles/policy init)")
-	initCmd.Flags().BoolVar(&skipAPIKey, "skip-api-key", false, "Skip OpenAI API key configuration prompt")
-	initCmd.Flags().BoolVar(&setupAPIKeyOnly, "setup-api-key", false, "Setup OpenAI API key only (skip roles/policy init)")
+	initCmd.Flags().BoolVar(&skipAPIKey, "skip-api-key", false, "Skip OpenAI API key configuration prompt (deprecated, use --skip-llm)")
+	initCmd.Flags().BoolVar(&setupAPIKeyOnly, "setup-api-key", false, "Setup OpenAI API key only (deprecated, use --setup-llm)")
+	initCmd.Flags().BoolVar(&skipLLMSetup, "skip-llm", false, "Skip LLM backend configuration prompt")
+	initCmd.Flags().BoolVar(&setupLLMOnly, "setup-llm", false, "Setup LLM backend only (skip roles/policy init)")
 }
 
 func runInit(cmd *cobra.Command, args []string) {
@@ -56,10 +60,17 @@ func runInit(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// API key setup only mode
+	// API key setup only mode (deprecated)
 	if setupAPIKeyOnly {
 		fmt.Println("🔑 Setting up OpenAI API key...")
 		promptAPIKeySetup()
+		return
+	}
+
+	// LLM setup only mode
+	if setupLLMOnly {
+		fmt.Println("🤖 Setting up LLM backend...")
+		promptLLMBackendSetup()
 		return
 	}
 
@@ -156,9 +167,9 @@ func runInit(cmd *cobra.Command, args []string) {
 		promptMCPRegistration()
 	}
 
-	// API key configuration prompt
-	if !skipAPIKey {
-		promptAPIKeyIfNeeded()
+	// LLM backend configuration prompt
+	if !skipLLMSetup && !skipAPIKey {
+		promptLLMBackendSetup()
 	}
 
 	// Show dashboard guide after all initialization is complete
