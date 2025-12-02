@@ -667,17 +667,9 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 	// Determine output directory (same as input file)
 	outputDir := filepath.Dir(policyPath)
 
-	// Get API key
-	apiKey, err := s.getAPIKey()
-	if err != nil {
-		fmt.Printf("Warning: %v, conversion may be limited\n", err)
-		apiKey = ""
-	}
-
-	// Setup LLM client
+	// Setup LLM client (backend auto-selection via @llm)
 	timeout := 30 * time.Second
 	llmClient := llm.NewClient(
-		apiKey,
 		llm.WithTimeout(timeout),
 	)
 
@@ -718,13 +710,4 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
-}
-
-// getAPIKey retrieves the OpenAI API key from environment or .sym/.env
-func (s *Server) getAPIKey() (string, error) {
-	key := envutil.GetAPIKey("OPENAI_API_KEY")
-	if key == "" {
-		return "", fmt.Errorf("OPENAI_API_KEY not found in environment or .sym/.env")
-	}
-	return key, nil
 }

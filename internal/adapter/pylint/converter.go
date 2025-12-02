@@ -210,7 +210,7 @@ Output:
 	}
 
 	// Call LLM
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithPower(llm.ReasoningMinimal).Execute(ctx)
+	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
 	if err != nil {
 		return "", nil, fmt.Errorf("LLM call failed: %w", err)
 	}

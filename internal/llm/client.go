@@ -89,7 +89,7 @@ func WithMode(mode engine.Mode) ClientOption {
 }
 
 // NewClient creates a new LLM client.
-func NewClient(_ string, opts ...ClientOption) *Client {
+func NewClient(opts ...ClientOption) *Client {
 	// Load default config
 	config := LoadLLMConfig()
 

@@ -73,17 +73,18 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to parse policy: %w", err)
 	}
 
-	// Get OpenAI API key
-	apiKey, err := getAPIKey()
-	if err != nil {
-		return fmt.Errorf("OpenAI API key not configured: %w\nTip: Run 'sym init' or set OPENAI_API_KEY in .sym/.env", err)
-	}
-
 	// Create LLM client
 	llmClient := llm.NewClient(
-		apiKey,
-		llm.WithTimeout(time.Duration(validateTimeout)*time.Second),
+		llm.WithTimeout(time.Duration(validateTimeout) * time.Second),
 	)
+
+	// Ensure at least one backend is available (MCP/CLI/API)
+	availabilityCtx, cancel := context.WithTimeout(context.Background(), time.Duration(validateTimeout)*time.Second)
+	defer cancel()
+
+	if err := llmClient.CheckAvailability(availabilityCtx); err != nil {
+		return fmt.Errorf("no available LLM backend for validate: %w\nTip: run 'sym init --setup-llm' or configure LLM_BACKEND / LLM_CLI / OPENAI_API_KEY in .sym/.env", err)
+	}
 
 	var changes []validator.GitChange
 	if validateStaged {

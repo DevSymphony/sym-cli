@@ -131,17 +131,18 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 		convertOutputDir = ".sym"
 	}
 
-	// Setup OpenAI client
-	apiKey, err := getAPIKey()
-	if err != nil {
-		return fmt.Errorf("OpenAI API key required: %w", err)
-	}
-
 	timeout := time.Duration(convertTimeout) * time.Second
 	llmClient := llm.NewClient(
-		apiKey,
 		llm.WithTimeout(timeout),
 	)
+
+	// Ensure at least one backend is available (MCP/CLI/API)
+	availabilityCtx, cancelAvailability := context.WithTimeout(context.Background(), timeout)
+	defer cancelAvailability()
+
+	if err := llmClient.CheckAvailability(availabilityCtx); err != nil {
+		return fmt.Errorf("no available LLM backend for convert: %w\nTip: run 'sym init --setup-llm' or configure LLM_BACKEND / LLM_CLI / OPENAI_API_KEY in .sym/.env", err)
+	}
 
 	// Create new converter
 	conv := converter.NewConverter(llmClient, convertOutputDir)

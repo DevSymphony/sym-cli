@@ -405,8 +405,8 @@ Reason: Requires knowing which packages are "large"`, linterDescriptions, routin
 
 	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
 
-	// Call LLM with power model + low reasoning (needs some thought for linter selection)
-	response, err := c.llmClient.Request(systemPrompt, userPrompt).WithPower(llm.ReasoningMedium).Execute(ctx)
+	// Call LLM with medium complexity (needs some thought for linter selection)
+	response, err := c.llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityLow).Execute(ctx)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
 		return []string{} // Will fall back to llm-validator
