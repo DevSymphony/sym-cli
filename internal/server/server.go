@@ -678,7 +678,6 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 	timeout := 30 * time.Second
 	llmClient := llm.NewClient(
 		apiKey,
-		llm.WithModel("gpt-4o-mini"),
 		llm.WithTimeout(timeout),
 	)
 

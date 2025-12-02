@@ -17,7 +17,6 @@ import (
 var (
 	validatePolicyFile string
 	validateStaged     bool
-	validateModel      string
 	validateTimeout    int
 )
 
@@ -50,7 +49,6 @@ Examples:
 func init() {
 	validateCmd.Flags().StringVarP(&validatePolicyFile, "policy", "p", "", "Path to code-policy.json (default: .sym/code-policy.json)")
 	validateCmd.Flags().BoolVar(&validateStaged, "staged", false, "Validate only staged changes (default: all uncommitted changes)")
-	validateCmd.Flags().StringVar(&validateModel, "model", "gpt-4o", "OpenAI model to use")
 	validateCmd.Flags().IntVar(&validateTimeout, "timeout", 30, "Timeout per rule check in seconds")
 }
 
@@ -84,7 +82,6 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	// Create LLM client
 	llmClient := llm.NewClient(
 		apiKey,
-		llm.WithModel(validateModel),
 		llm.WithTimeout(time.Duration(validateTimeout)*time.Second),
 	)
 

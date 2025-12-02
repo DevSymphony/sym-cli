@@ -75,7 +75,6 @@ func TestE2E_FullWorkflow(t *testing.T) {
 
 	client := llm.NewClient(
 		apiKey,
-		llm.WithModel("gpt-4o"),
 		llm.WithTimeout(30*time.Second),
 	)
 
@@ -334,7 +333,7 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 		},
 	}
 
-	client := llm.NewClient(apiKey, llm.WithModel("gpt-4o"))
+	client := llm.NewClient(apiKey)
 	v := validator.NewLLMValidator(client, policy)
 	ctx := context.Background()
 

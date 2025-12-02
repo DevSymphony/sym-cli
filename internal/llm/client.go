@@ -10,21 +10,44 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/envutil"
+	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const (
 	openAIAPIURL       = "https://api.openai.com/v1/chat/completions"
-	defaultModel       = "gpt-4o"
+	defaultFastModel   = "gpt-4o-mini"
+	defaultPowerModel  = "gpt-5-mini"
 	defaultMaxTokens   = 1000
-	defaultTemperature = 0.3
-	defaultTimeout     = 30 * time.Second
+	defaultTemperature = 1.0
+	defaultTimeout     = 60 * time.Second
 )
 
-// Client represents an OpenAI API client
+// Mode defines the LLM client mode
+type Mode string
+
+const (
+	ModeAPI Mode = "api"
+	ModeMCP Mode = "mcp"
+)
+
+// ReasoningEffort defines the reasoning effort level for o3-mini
+type ReasoningEffort string
+
+const (
+	ReasoningMinimal ReasoningEffort = "minimal"
+	ReasoningLow     ReasoningEffort = "low"
+	ReasoningMedium  ReasoningEffort = "medium"
+	ReasoningHigh    ReasoningEffort = "high"
+)
+
+// Client represents an LLM client
 type Client struct {
+	mode        Mode
 	apiKey      string
-	model       string
+	fastModel   string
+	powerModel  string
 	httpClient  *http.Client
+	mcpSession  *mcpsdk.ServerSession
 	maxTokens   int
 	temperature float64
 	verbose     bool
@@ -33,32 +56,46 @@ type Client struct {
 // ClientOption is a functional option for configuring the client
 type ClientOption func(*Client)
 
-// WithModel sets the OpenAI model to use
-func WithModel(model string) ClientOption {
-	return func(c *Client) {
-		c.model = model
-	}
+// WithMaxTokens sets the default max tokens
+func WithMaxTokens(maxTokens int) ClientOption {
+	return func(c *Client) { c.maxTokens = maxTokens }
+}
+
+// WithTemperature sets the default temperature
+func WithTemperature(temperature float64) ClientOption {
+	return func(c *Client) { c.temperature = temperature }
 }
 
 // WithTimeout sets the HTTP client timeout
 func WithTimeout(timeout time.Duration) ClientOption {
+	return func(c *Client) { c.httpClient.Timeout = timeout }
+}
+
+// WithVerbose enables verbose logging
+func WithVerbose(verbose bool) ClientOption {
+	return func(c *Client) { c.verbose = verbose }
+}
+
+// WithMCPSession sets the MCP session for MCP mode
+func WithMCPSession(session *mcpsdk.ServerSession) ClientOption {
 	return func(c *Client) {
-		c.httpClient.Timeout = timeout
+		c.mcpSession = session
+		c.mode = ModeMCP
 	}
 }
 
-// NewClient creates a new OpenAI API client
+// NewClient creates a new LLM client
 func NewClient(apiKey string, opts ...ClientOption) *Client {
 	if apiKey == "" {
 		apiKey = envutil.GetAPIKey("OPENAI_API_KEY")
 	}
 
 	client := &Client{
-		apiKey: apiKey,
-		model:  defaultModel,
-		httpClient: &http.Client{
-			Timeout: defaultTimeout,
-		},
+		mode:        ModeAPI,
+		apiKey:      apiKey,
+		fastModel:   defaultFastModel,
+		powerModel:  defaultPowerModel,
+		httpClient:  &http.Client{Timeout: defaultTimeout},
 		maxTokens:   defaultMaxTokens,
 		temperature: defaultTemperature,
 		verbose:     false,
@@ -71,21 +108,76 @@ func NewClient(apiKey string, opts ...ClientOption) *Client {
 	return client
 }
 
-// openAIRequest represents the OpenAI API request structure
-type openAIRequest struct {
-	Model       string          `json:"model"`
-	Messages    []openAIMessage `json:"messages"`
-	MaxTokens   int             `json:"max_tokens,omitempty"`
-	Temperature float64         `json:"temperature,omitempty"`
+// Request creates a new request builder
+//
+// Usage:
+//
+//	client.Request(system, user).Execute(ctx)                                    // fast model (gpt-4o-mini)
+//	client.Request(system, user).WithPower(llm.ReasoningMedium).Execute(ctx)     // power model (o3-mini)
+//	client.Request(system, user).WithMaxTokens(2000).Execute(ctx)                // custom tokens
+func (c *Client) Request(systemPrompt, userPrompt string) *RequestBuilder {
+	return &RequestBuilder{
+		client:      c,
+		system:      systemPrompt,
+		user:        userPrompt,
+		maxTokens:   c.maxTokens,
+		temperature: c.temperature,
+		usePower:    false,
+	}
 }
 
-// openAIMessage represents a message in the conversation
+// RequestBuilder builds and executes LLM requests with chain methods
+type RequestBuilder struct {
+	client      *Client
+	system      string
+	user        string
+	maxTokens   int
+	temperature float64
+	usePower    bool
+	effort      ReasoningEffort
+}
+
+// WithPower enables power model (o3-mini) with specified reasoning effort
+func (r *RequestBuilder) WithPower(effort ReasoningEffort) *RequestBuilder {
+	r.usePower = true
+	r.effort = effort
+	return r
+}
+
+// WithMaxTokens sets max tokens for this request
+func (r *RequestBuilder) WithMaxTokens(tokens int) *RequestBuilder {
+	r.maxTokens = tokens
+	return r
+}
+
+// WithTemperature sets temperature for this request
+func (r *RequestBuilder) WithTemperature(temp float64) *RequestBuilder {
+	r.temperature = temp
+	return r
+}
+
+// Execute sends the request and returns the response
+func (r *RequestBuilder) Execute(ctx context.Context) (string, error) {
+	if r.client.mode == ModeMCP {
+		return r.client.executeViaMCP(ctx, r)
+	}
+	return r.client.executeViaAPI(ctx, r)
+}
+
+// openAIRequest represents the OpenAI API request structure
+type openAIRequest struct {
+	Model           string          `json:"model"`
+	Messages        []openAIMessage `json:"messages"`
+	MaxTokens       int             `json:"max_completion_tokens,omitempty"`
+	Temperature     float64         `json:"temperature,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+}
+
 type openAIMessage struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }
 
-// openAIResponse represents the OpenAI API response structure
 type openAIResponse struct {
 	ID      string `json:"id"`
 	Object  string `json:"object"`
@@ -111,20 +203,28 @@ type openAIResponse struct {
 	} `json:"error,omitempty"`
 }
 
-// Complete sends a chat completion request to OpenAI API
-func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string) (string, error) {
+// executeViaAPI sends request via OpenAI API
+func (c *Client) executeViaAPI(ctx context.Context, r *RequestBuilder) (string, error) {
 	if c.apiKey == "" {
 		return "", fmt.Errorf("OpenAI API key not configured")
 	}
 
+	model := c.fastModel
+	if r.usePower {
+		model = c.powerModel
+	}
+
 	reqBody := openAIRequest{
-		Model: c.model,
+		Model: model,
 		Messages: []openAIMessage{
-			{Role: "system", Content: systemPrompt},
-			{Role: "user", Content: userPrompt},
+			{Role: "user", Content: r.system + "\n\n" + r.user},
 		},
-		MaxTokens:   c.maxTokens,
-		Temperature: c.temperature,
+		MaxTokens:   r.maxTokens,
+		Temperature: r.temperature,
+	}
+
+	if r.usePower {
+		reqBody.ReasoningEffort = string(r.effort)
 	}
 
 	jsonData, err := json.Marshal(reqBody)
@@ -141,7 +241,13 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string) 
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 
 	if c.verbose {
-		fmt.Printf("OpenAI API request:\n  Model: %s\n  Prompt length: %d chars\n", c.model, len(userPrompt))
+		if r.usePower {
+			fmt.Printf("OpenAI API request:\n  Model: %s\n  Reasoning: %s\n  Prompt length: %d chars\n",
+				model, r.effort, len(r.user))
+		} else {
+			fmt.Printf("OpenAI API request:\n  Model: %s\n  Prompt length: %d chars\n",
+				model, len(r.user))
+		}
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -181,4 +287,66 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string) 
 	}
 
 	return content, nil
+}
+
+// executeViaMCP sends request via MCP sampling
+func (c *Client) executeViaMCP(ctx context.Context, r *RequestBuilder) (string, error) {
+	if c.mcpSession == nil {
+		return "", fmt.Errorf("MCP session not available")
+	}
+
+	if c.verbose {
+		fmt.Printf("MCP Sampling request:\n  MaxTokens: %d\n  Prompt length: %d chars\n",
+			r.maxTokens, len(r.user))
+	}
+
+	combinedPrompt := r.system + "\n\n" + r.user
+
+	result, err := c.mcpSession.CreateMessage(ctx, &mcpsdk.CreateMessageParams{
+		Messages: []*mcpsdk.SamplingMessage{
+			{
+				Role:    "user",
+				Content: &mcpsdk.TextContent{Text: combinedPrompt},
+			},
+		},
+		MaxTokens: int64(r.maxTokens),
+	})
+	if err != nil {
+		return "", fmt.Errorf("MCP sampling failed: %w", err)
+	}
+
+	var response string
+	if textContent, ok := result.Content.(*mcpsdk.TextContent); ok {
+		response = textContent.Text
+	} else {
+		return "", fmt.Errorf("unexpected content type from MCP sampling")
+	}
+
+	if c.verbose {
+		fmt.Printf("MCP Sampling response:\n  Model: %s\n  Content length: %d chars\n",
+			result.Model, len(response))
+	}
+
+	return response, nil
+}
+
+// CheckAvailability checks if the LLM is available
+func (c *Client) CheckAvailability(ctx context.Context) error {
+	if c.mode == ModeMCP {
+		if c.mcpSession == nil {
+			return fmt.Errorf("MCP session not available")
+		}
+		return nil
+	}
+
+	if c.apiKey == "" {
+		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
+	}
+
+	_, err := c.Request("You are a test assistant.", "Say 'OK'").Execute(ctx)
+	if err != nil {
+		return fmt.Errorf("OpenAI API not available: %w", err)
+	}
+
+	return nil
 }
