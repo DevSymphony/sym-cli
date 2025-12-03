@@ -39,7 +39,7 @@ func TestClient_GetActiveEngine(t *testing.T) {
 		client := NewClient(WithConfig(cfg))
 		eng := client.GetActiveEngine()
 		assert.NotNil(t, eng)
-		assert.Equal(t, "openai-api", eng.Name())
+		assert.Equal(t, "openai", eng.Name())
 	})
 
 	t.Run("no engine available", func(t *testing.T) {

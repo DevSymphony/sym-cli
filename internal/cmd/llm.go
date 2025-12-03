@@ -129,11 +129,11 @@ func configureCLI(cfg *llm.LLMConfig) {
 	fmt.Println()
 
 	// Detect available CLIs
-	clis := engine.DetectAvailableCLIs()
+	clis := llm.DetectAvailableCLIs()
 
 	// Build selection items
 	var items []string
-	var availableCLIs []engine.CLIInfo
+	var availableCLIs []llm.CLIInfo
 
 	for _, cli := range clis {
 		status := "✗ not found"
@@ -178,13 +178,13 @@ func configureCLI(cfg *llm.LLMConfig) {
 	}
 
 	// Update config
-	cfg.CLI = string(selectedCLI.Provider)
+	cfg.CLI = selectedCLI.Provider
 
 	// Get provider for default model
-	provider, _ := engine.GetProvider(selectedCLI.Provider)
-	if provider != nil {
-		cfg.Model = provider.DefaultModel
-		cfg.LargeModel = provider.LargeModel
+	providerInfo := llm.GetCLIProviderInfo(selectedCLI.Provider)
+	if providerInfo != nil {
+		cfg.Model = providerInfo.DefaultModel
+		cfg.LargeModel = providerInfo.LargeModel
 	}
 
 	// Save config
@@ -380,7 +380,7 @@ func promptLLMBackendSetup() {
 	fmt.Println()
 
 	// Detect available CLIs
-	clis := engine.DetectAvailableCLIs()
+	clis := llm.DetectAvailableCLIs()
 
 	// Check API key
 	cfg := llm.LoadLLMConfig()
@@ -471,11 +471,11 @@ func promptLLMBackendSetup() {
 		for _, cli := range clis {
 			if cli.Available {
 				if cliCount == cliIndex {
-					cfg.CLI = string(cli.Provider)
-					provider, _ := engine.GetProvider(cli.Provider)
-					if provider != nil {
-						cfg.Model = provider.DefaultModel
-						cfg.LargeModel = provider.LargeModel
+					cfg.CLI = cli.Provider
+					providerInfo := llm.GetCLIProviderInfo(cli.Provider)
+					if providerInfo != nil {
+						cfg.Model = providerInfo.DefaultModel
+						cfg.LargeModel = providerInfo.LargeModel
 					}
 					break
 				}

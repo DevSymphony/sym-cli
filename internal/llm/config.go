@@ -327,8 +327,11 @@ func (c *LLMConfig) Validate() error {
 		return fmt.Errorf("invalid engine mode: %s", c.Backend)
 	}
 
-	if c.CLI != "" && !engine.CLIProviderType(c.CLI).IsValid() {
-		return fmt.Errorf("unsupported CLI provider: %s", c.CLI)
+	if c.CLI != "" {
+		validCLIs := map[string]bool{"claude": true, "gemini": true}
+		if !validCLIs[c.CLI] {
+			return fmt.Errorf("unsupported CLI provider: %s", c.CLI)
+		}
 	}
 
 	return nil
