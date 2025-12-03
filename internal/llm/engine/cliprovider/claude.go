@@ -7,8 +7,8 @@ func newClaudeProvider() *Provider {
 		Type:         TypeClaude,
 		DisplayName:  "Claude CLI",
 		Command:      "claude",
-		DefaultModel: "claude-sonnet-4-20250514",
-		LargeModel:   "claude-sonnet-4-20250514",
+		DefaultModel: "claude-haiku-4-5-20251001",
+		LargeModel:   "claude-sonnet-4-5-20250929",
 		BuildArgs: func(model string, prompt string) []string {
 			args := []string{
 				"-p", prompt,
@@ -22,8 +22,8 @@ func newClaudeProvider() *Provider {
 		ParseResponse: func(output []byte) (string, error) {
 			return strings.TrimSpace(string(output)), nil
 		},
-		SupportsMaxTokens:   true,
-		MaxTokensFlag:       "--max-tokens",
+		SupportsMaxTokens:   false,
+		MaxTokensFlag:       "",
 		SupportsTemperature: false,
 		TemperatureFlag:     "",
 	}
