@@ -158,7 +158,22 @@ Available native ESLint rules:
 - Code Quality: eqeqeq, no-eval, no-implied-eval, no-new-func
 - Complexity: complexity, max-depth, max-nested-callbacks
 - Length/Size: max-len, max-lines, max-lines-per-function, max-params, max-statements
+Available native ESLint rules:
+- Console/Debug: no-console, no-debugger, no-alert
+- Variables: no-unused-vars, no-undef, no-var, prefer-const
+- Naming: camelcase, new-cap, id-length, id-match
+- Code Quality: eqeqeq, no-eval, no-implied-eval, no-new-func
+- Complexity: complexity, max-depth, max-nested-callbacks
+- Length/Size: max-len, max-lines, max-lines-per-function, max-params, max-statements
 - Style: indent, quotes, semi, comma-dangle, brace-style
+- Imports: no-restricted-imports, no-duplicate-imports
+- Best Practices: curly, dot-notation, no-else-return, no-empty, no-empty-function, no-magic-numbers, no-throw-literal, no-useless-return, require-await
+
+CRITICAL RULES:
+1. ONLY use native ESLint rules - do NOT invent or guess rule names
+2. If no rule can enforce this requirement, return rule_name as empty string ""
+3. Do NOT suggest plugin rules (e.g., @typescript-eslint/*, eslint-plugin-*)
+4. When in doubt, return empty rule_name - it's better to skip than use wrong rule
 - Imports: no-restricted-imports, no-duplicate-imports
 - Best Practices: curly, dot-notation, no-else-return, no-empty, no-empty-function, no-magic-numbers, no-throw-literal, no-useless-return, require-await
 
@@ -192,6 +207,25 @@ Output:
   "rule_name": "camelcase",
   "severity": "error",
   "options": {"properties": "always"}
+}
+
+Input: "File names must be kebab-case"
+Output:
+{
+  "rule_name": "",
+  "severity": "off",
+  "options": null
+}
+(Reason: No native ESLint rule for file naming)
+
+Input: "No hardcoded API keys"
+Output:
+{
+  "rule_name": "",
+  "severity": "off",
+  "options": null
+}
+(Reason: Requires plugin or semantic analysis)`
 }
 
 Input: "File names must be kebab-case"

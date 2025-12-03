@@ -15,6 +15,8 @@ const (
 	defaultMaxTokens   = 1000
 	defaultTemperature = 1.0
 	defaultTimeout     = 60 * time.Second
+	defaultTemperature = 1.0
+	defaultTimeout     = 60 * time.Second
 )
 
 const (
@@ -119,6 +121,62 @@ func NewClient(opts ...ClientOption) *Client {
 	client.initEngines()
 
 	return client
+}
+
+// Request creates a new request builder
+//
+// Usage:
+//
+//	client.Request(system, user).Execute(ctx)                                    // fast model (gpt-4o-mini)
+//	client.Request(system, user).WithPower(llm.ReasoningMedium).Execute(ctx)     // power model (o3-mini)
+//	client.Request(system, user).WithMaxTokens(2000).Execute(ctx)                // custom tokens
+func (c *Client) Request(systemPrompt, userPrompt string) *RequestBuilder {
+	return &RequestBuilder{
+		client:      c,
+		system:      systemPrompt,
+		user:        userPrompt,
+		maxTokens:   c.maxTokens,
+		temperature: c.temperature,
+		usePower:    false,
+	}
+}
+
+// RequestBuilder builds and executes LLM requests with chain methods
+type RequestBuilder struct {
+	client      *Client
+	system      string
+	user        string
+	maxTokens   int
+	temperature float64
+	usePower    bool
+	effort      ReasoningEffort
+}
+
+// WithPower enables power model (o3-mini) with specified reasoning effort
+func (r *RequestBuilder) WithPower(effort ReasoningEffort) *RequestBuilder {
+	r.usePower = true
+	r.effort = effort
+	return r
+}
+
+// WithMaxTokens sets max tokens for this request
+func (r *RequestBuilder) WithMaxTokens(tokens int) *RequestBuilder {
+	r.maxTokens = tokens
+	return r
+}
+
+// WithTemperature sets temperature for this request
+func (r *RequestBuilder) WithTemperature(temp float64) *RequestBuilder {
+	r.temperature = temp
+	return r
+}
+
+// Execute sends the request and returns the response
+func (r *RequestBuilder) Execute(ctx context.Context) (string, error) {
+	if r.client.mode == ModeMCP {
+		return r.client.executeViaMCP(ctx, r)
+	}
+	return r.client.executeViaAPI(ctx, r)
 }
 
 // initEngines initializes the engine fallback chain based on configuration.

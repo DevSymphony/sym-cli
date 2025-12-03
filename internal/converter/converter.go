@@ -38,7 +38,10 @@ func NewConverter(llmClient *llm.Client, outputDir string) *Converter {
 // ConvertResult represents the result of conversion
 type ConvertResult struct {
 	GeneratedFiles []string           // List of generated file paths (including code-policy.json)
+	GeneratedFiles []string           // List of generated file paths (including code-policy.json)
 	CodePolicy     *schema.CodePolicy // Generated code policy
+	Errors         map[string]error   // Errors per linter
+	Warnings       []string           // Conversion warnings
 	Errors         map[string]error   // Errors per linter
 	Warnings       []string           // Conversion warnings
 }
@@ -251,7 +254,17 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 
 // routeRulesWithLLM uses LLM to determine which linters are appropriate for each rule
 // Rules are processed in parallel for better performance
+// Rules are processed in parallel for better performance
 func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.UserPolicy) map[string][]schema.UserRule {
+	type routeResult struct {
+		rule    schema.UserRule
+		linters []string
+	}
+
+	results := make(chan routeResult, len(userPolicy.Rules))
+	var wg sync.WaitGroup
+
+	// Process rules in parallel
 	type routeResult struct {
 		rule    schema.UserRule
 		linters []string
@@ -273,6 +286,7 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 		if len(availableLinters) == 0 {
 			// No language-specific linters, use llm-validator
 			results <- routeResult{rule: rule, linters: []string{llmValidatorEngine}}
+			results <- routeResult{rule: rule, linters: []string{llmValidatorEngine}}
 			continue
 		}
 
@@ -280,9 +294,35 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 		go func(r schema.UserRule, linters []string) {
 			defer wg.Done()
 
+		wg.Add(1)
+		go func(r schema.UserRule, linters []string) {
+			defer wg.Done()
+
+			// Ask LLM which linters are appropriate for this rule
+			selectedLinters := c.selectLintersForRule(ctx, r, linters)
 			// Ask LLM which linters are appropriate for this rule
 			selectedLinters := c.selectLintersForRule(ctx, r, linters)
 
+			if len(selectedLinters) == 0 {
+				// LLM couldn't map to any linter, use llm-validator
+				results <- routeResult{rule: r, linters: []string{llmValidatorEngine}}
+			} else {
+				results <- routeResult{rule: r, linters: selectedLinters}
+			}
+		}(rule, availableLinters)
+	}
+
+	// Close results channel after all goroutines complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect results
+	linterRules := make(map[string][]schema.UserRule)
+	for result := range results {
+		for _, linter := range result.linters {
+			linterRules[linter] = append(linterRules[linter], result.rule)
 			if len(selectedLinters) == 0 {
 				// LLM couldn't map to any linter, use llm-validator
 				results <- routeResult{rule: r, linters: []string{llmValidatorEngine}}

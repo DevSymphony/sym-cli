@@ -42,6 +42,8 @@ map them to appropriate linter rules.`,
 
   # Convert for Java with specific model
   sym convert -i user-policy.json --targets checkstyle,pmd --openai-model gpt-5-mini
+  # Convert for Java with specific model
+  sym convert -i user-policy.json --targets checkstyle,pmd --openai-model gpt-5-mini
 
   # Use custom output directory
   sym convert -i user-policy.json --targets all --output-dir ./custom-dir

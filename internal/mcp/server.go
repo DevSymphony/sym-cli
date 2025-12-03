@@ -226,6 +226,7 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 			"role": input.Role,
 		}
 		result, rpcErr := s.handleValidateCode(ctx, req.Session, params)
+		result, rpcErr := s.handleValidateCode(ctx, req.Session, params)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
@@ -421,6 +422,7 @@ type ViolationItem struct {
 
 // handleValidateCode handles code validation requests.
 // It validates git changes (diff) instead of entire files for efficiency.
+func (s *Server) handleValidateCode(ctx context.Context, session *sdkmcp.ServerSession, params map[string]interface{}) (interface{}, *RPCError) {
 func (s *Server) handleValidateCode(ctx context.Context, session *sdkmcp.ServerSession, params map[string]interface{}) (interface{}, *RPCError) {
 	// Get policy for validation (convert UserPolicy if needed)
 	validationPolicy, err := s.getValidationPolicy()

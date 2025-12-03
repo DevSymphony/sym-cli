@@ -24,11 +24,12 @@ type UserRole struct {
 
 // UserDefaults represents default values for rules
 type UserDefaults struct {
-	Languages []string `json:"languages,omitempty"`
-	Include   []string `json:"include,omitempty"`
-	Exclude   []string `json:"exclude,omitempty"`
-	Severity  string   `json:"severity,omitempty"`
-	Autofix   bool     `json:"autofix,omitempty"`
+	Languages       []string `json:"languages,omitempty"`
+	DefaultLanguage string   `json:"defaultLanguage,omitempty"` // Default language for new rules
+	Include         []string `json:"include,omitempty"`
+	Exclude         []string `json:"exclude,omitempty"`
+	Severity        string   `json:"severity,omitempty"`
+	Autofix         bool     `json:"autofix,omitempty"`
 }
 
 // UserRule represents a single rule in user schema
