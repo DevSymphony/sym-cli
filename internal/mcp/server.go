@@ -34,14 +34,9 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 		return fmt.Errorf("failed to parse user policy: %w", err)
 	}
 
-	// Setup LLM client
-	apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
-	if apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY not found in environment or .sym/.env")
-	}
-
-	llmClient := llm.NewClient(apiKey,
-		llm.WithTimeout(30*time.Second),
+	// Setup LLM client (backend auto-selection via @llm)
+	llmClient := llm.NewClient(
+		llm.WithTimeout(30 * time.Second),
 	)
 
 	// Create converter with output directory
@@ -479,19 +474,12 @@ func (s *Server) handleValidateCode(ctx context.Context, session *sdkmcp.ServerS
 	var llmClient *llm.Client
 	if session != nil {
 		// MCP mode: use host LLM via sampling
-		llmClient = llm.NewClient("", llm.WithMCPSession(session))
+		llmClient = llm.NewClient(llm.WithMCPSession(session))
 		fmt.Fprintf(os.Stderr, "✓ Using host LLM via MCP sampling\n")
 	} else {
-		// API mode: use OpenAI API directly
-		apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
-		if apiKey == "" {
-			return nil, &RPCError{
-				Code:    -32000,
-				Message: "OPENAI_API_KEY not found in environment or .sym/.env",
-			}
-		}
-		llmClient = llm.NewClient(apiKey)
-		fmt.Fprintf(os.Stderr, "✓ Using OpenAI API directly\n")
+		// Auto mode: use configured LLM backend (CLI/API)
+		llmClient = llm.NewClient()
+		fmt.Fprintf(os.Stderr, "✓ Using configured LLM backend\n")
 	}
 
 	// Create unified validator that handles all engines + RBAC

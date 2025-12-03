@@ -121,17 +121,17 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 	// Separate modules into Checker-level and TreeWalker-level
 	// Checker-level modules (NOT under TreeWalker)
 	checkerLevelModules := map[string]bool{
-		"LineLength":                        true,
-		"FileLength":                        true,
-		"FileTabCharacter":                  true,
-		"NewlineAtEndOfFile":                true,
-		"UniqueProperties":                  true,
-		"OrderedProperties":                 true,
-		"Translation":                       true,
-		"SuppressWarningsFilter":            true,
+		"LineLength":                         true,
+		"FileLength":                         true,
+		"FileTabCharacter":                   true,
+		"NewlineAtEndOfFile":                 true,
+		"UniqueProperties":                   true,
+		"OrderedProperties":                  true,
+		"Translation":                        true,
+		"SuppressWarningsFilter":             true,
 		"BeforeExecutionExclusionFileFilter": true,
-		"SuppressionFilter":                 true,
-		"SuppressionCommentFilter":          true,
+		"SuppressionFilter":                  true,
+		"SuppressionCommentFilter":           true,
 	}
 
 	var checkerModules []checkstyleModule
@@ -255,8 +255,8 @@ Output:
 
 	userPrompt := fmt.Sprintf("Convert this Java rule to Checkstyle module:\n\n%s", rule.Say)
 
-	// Call LLM with power model + low reasoning
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithPower(llm.ReasoningMinimal).Execute(ctx)
+	// Call LLM with minimal complexity
+	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}

@@ -74,8 +74,7 @@ func TestE2E_FullWorkflow(t *testing.T) {
 	t.Log("STEP 2: Converting user policy using LLM")
 
 	client := llm.NewClient(
-		apiKey,
-		llm.WithTimeout(30*time.Second),
+		llm.WithTimeout(30 * time.Second),
 	)
 
 	outputDir := filepath.Join(testDir, ".sym")
@@ -333,7 +332,7 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 		},
 	}
 
-	client := llm.NewClient(apiKey)
+	client := llm.NewClient()
 	v := validator.NewLLMValidator(client, policy)
 	ctx := context.Background()
 

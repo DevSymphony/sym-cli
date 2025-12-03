@@ -1,119 +1,205 @@
 package llm
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
-	"io"
-	"net/http"
+	"os"
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/envutil"
+	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const (
-	openAIAPIURL       = "https://api.openai.com/v1/chat/completions"
-	defaultFastModel   = "gpt-4o-mini"
-	defaultPowerModel  = "gpt-5-mini"
 	defaultMaxTokens   = 1000
 	defaultTemperature = 1.0
 	defaultTimeout     = 60 * time.Second
 )
 
-// Mode defines the LLM client mode
-type Mode string
-
 const (
-	ModeAPI Mode = "api"
-	ModeMCP Mode = "mcp"
+	// ModeAPI uses OpenAI API.
+	ModeAPI = engine.ModeAPI
+	// ModeMCP uses MCP sampling.
+	ModeMCP = engine.ModeMCP
+	// ModeCLI uses CLI engine.
+	ModeCLI = engine.ModeCLI
+	// ModeAuto automatically selects the best available engine.
+	ModeAuto = engine.ModeAuto
 )
 
-// ReasoningEffort defines the reasoning effort level for o3-mini
-type ReasoningEffort string
-
-const (
-	ReasoningMinimal ReasoningEffort = "minimal"
-	ReasoningLow     ReasoningEffort = "low"
-	ReasoningMedium  ReasoningEffort = "medium"
-	ReasoningHigh    ReasoningEffort = "high"
-)
-
-// Client represents an LLM client
+// Client represents an LLM client with fallback chain support.
 type Client struct {
-	mode        Mode
-	apiKey      string
-	fastModel   string
-	powerModel  string
-	httpClient  *http.Client
-	mcpSession  *mcpsdk.ServerSession
+	// Engine configuration
+	config     *LLMConfig
+	mode       engine.Mode
+	engines    []engine.LLMEngine
+	mcpSession *mcpsdk.ServerSession
+
+	// Default request parameters
 	maxTokens   int
 	temperature float64
 	verbose     bool
 }
 
-// ClientOption is a functional option for configuring the client
+// ClientOption is a functional option for configuring the client.
 type ClientOption func(*Client)
 
-// WithMaxTokens sets the default max tokens
+// WithMaxTokens sets the default max tokens.
 func WithMaxTokens(maxTokens int) ClientOption {
 	return func(c *Client) { c.maxTokens = maxTokens }
 }
 
-// WithTemperature sets the default temperature
+// WithTemperature sets the default temperature.
 func WithTemperature(temperature float64) ClientOption {
 	return func(c *Client) { c.temperature = temperature }
 }
 
-// WithTimeout sets the HTTP client timeout
-func WithTimeout(timeout time.Duration) ClientOption {
-	return func(c *Client) { c.httpClient.Timeout = timeout }
+// WithTimeout sets the HTTP client timeout (for API engine).
+func WithTimeout(_ time.Duration) ClientOption {
+	// Note: This is handled by individual engines now
+	return func(_ *Client) {}
 }
 
-// WithVerbose enables verbose logging
+// WithVerbose enables verbose logging.
 func WithVerbose(verbose bool) ClientOption {
 	return func(c *Client) { c.verbose = verbose }
 }
 
-// WithMCPSession sets the MCP session for MCP mode
+// WithMCPSession sets the MCP session for MCP mode.
 func WithMCPSession(session *mcpsdk.ServerSession) ClientOption {
 	return func(c *Client) {
 		c.mcpSession = session
-		c.mode = ModeMCP
+		c.mode = engine.ModeMCP
 	}
 }
 
-// NewClient creates a new LLM client
-func NewClient(apiKey string, opts ...ClientOption) *Client {
-	if apiKey == "" {
-		apiKey = envutil.GetAPIKey("OPENAI_API_KEY")
+// WithConfig sets a custom LLM configuration.
+func WithConfig(cfg *LLMConfig) ClientOption {
+	return func(c *Client) {
+		if cfg == nil {
+			return
+		}
+		c.config = cfg
+		if mode := cfg.GetEffectiveBackend(); mode != "" {
+			c.mode = mode
+		}
 	}
+}
+
+// WithMode sets the preferred engine mode.
+func WithMode(mode engine.Mode) ClientOption {
+	return func(c *Client) {
+		c.mode = mode
+	}
+}
+
+// NewClient creates a new LLM client.
+func NewClient(opts ...ClientOption) *Client {
+	// Load default config
+	config := LoadLLMConfig()
+
+	apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
+	config.APIKey = apiKey
 
 	client := &Client{
-		mode:        ModeAPI,
-		apiKey:      apiKey,
-		fastModel:   defaultFastModel,
-		powerModel:  defaultPowerModel,
-		httpClient:  &http.Client{Timeout: defaultTimeout},
+		config:      config,
+		mode:        config.GetEffectiveBackend(),
 		maxTokens:   defaultMaxTokens,
 		temperature: defaultTemperature,
 		verbose:     false,
 	}
 
+	// Apply options
 	for _, opt := range opts {
 		opt(client)
 	}
 
+	// Initialize engine chain
+	client.initEngines()
+
 	return client
 }
 
-// Request creates a new request builder
+// initEngines initializes the engine fallback chain based on configuration.
+func (c *Client) initEngines() {
+	c.engines = []engine.LLMEngine{}
+
+	// Determine which engines to include based on mode
+	switch c.mode {
+	case engine.ModeMCP:
+		c.addMCPEngine()
+	case engine.ModeCLI:
+		c.addCLIEngine()
+	case engine.ModeAPI:
+		c.addAPIEngine()
+	case engine.ModeAuto:
+		fallthrough
+	default:
+		// add all available engines
+		c.addMCPEngine()
+		c.addCLIEngine()
+		c.addAPIEngine()
+	}
+}
+
+// addMCPEngine adds MCP engine if session is available.
+func (c *Client) addMCPEngine() {
+	if c.mcpSession != nil {
+		eng := engine.NewMCPEngine(c.mcpSession, engine.WithMCPVerbose(c.verbose))
+		c.engines = append(c.engines, eng)
+	}
+}
+
+// addCLIEngine adds CLI engine if configured.
+func (c *Client) addCLIEngine() {
+	if c.config.CLI != "" {
+		providerType := engine.CLIProviderType(c.config.CLI)
+		if !providerType.IsValid() {
+			return
+		}
+
+		opts := []engine.CLIEngineOption{}
+
+		if c.config.CLIPath != "" {
+			opts = append(opts, engine.WithCLIPath(c.config.CLIPath))
+		}
+
+		if c.config.Model != "" {
+			opts = append(opts, engine.WithCLIModel(c.config.Model))
+		}
+
+		if c.config.LargeModel != "" {
+			opts = append(opts, engine.WithCLILargeModel(c.config.LargeModel))
+		}
+
+		if c.verbose {
+			opts = append(opts, engine.WithCLIVerbose(true))
+		}
+
+		eng, err := engine.NewCLIEngine(providerType, opts...)
+		if err == nil && eng.IsAvailable() {
+			c.engines = append(c.engines, eng)
+		}
+	}
+}
+
+// addAPIEngine adds API engine if key is available.
+func (c *Client) addAPIEngine() {
+	apiKey := c.config.GetAPIKey()
+	if apiKey != "" {
+		eng := engine.NewAPIEngine(apiKey, engine.WithAPIVerbose(c.verbose))
+		c.engines = append(c.engines, eng)
+	}
+}
+
+// Request creates a new request builder.
 //
 // Usage:
 //
-//	client.Request(system, user).Execute(ctx)                                    // fast model (gpt-4o-mini)
-//	client.Request(system, user).WithPower(llm.ReasoningMedium).Execute(ctx)     // power model (o3-mini)
+//	client.Request(system, user).Execute(ctx)                                    // default complexity
+//	client.Request(system, user).WithComplexity(llm.ComplexityMedium).Execute(ctx) // higher complexity
+//	client.Request(system, user).WithComplexity(engine.ComplexityHigh).Execute(ctx) // explicit complexity
 //	client.Request(system, user).WithMaxTokens(2000).Execute(ctx)                // custom tokens
 func (c *Client) Request(systemPrompt, userPrompt string) *RequestBuilder {
 	return &RequestBuilder{
@@ -122,231 +208,120 @@ func (c *Client) Request(systemPrompt, userPrompt string) *RequestBuilder {
 		user:        userPrompt,
 		maxTokens:   c.maxTokens,
 		temperature: c.temperature,
-		usePower:    false,
+		complexity:  engine.ComplexityLow,
 	}
 }
 
-// RequestBuilder builds and executes LLM requests with chain methods
+// GetActiveEngine returns the first available engine.
+func (c *Client) GetActiveEngine() engine.LLMEngine {
+	for _, e := range c.engines {
+		if e.IsAvailable() {
+			return e
+		}
+	}
+	return nil
+}
+
+// GetEngines returns all configured engines.
+func (c *Client) GetEngines() []engine.LLMEngine {
+	return c.engines
+}
+
+// GetConfig returns the LLM configuration.
+func (c *Client) GetConfig() *LLMConfig {
+	return c.config
+}
+
+// CheckAvailability checks if any LLM engine is available.
+func (c *Client) CheckAvailability(ctx context.Context) error {
+	eng := c.GetActiveEngine()
+	if eng == nil {
+		return fmt.Errorf("no available LLM engine")
+	}
+
+	// For API engine, do a simple test request
+	if eng.Name() == "openai-api" {
+		_, err := c.Request("You are a test assistant.", "Say 'OK'").Execute(ctx)
+		if err != nil {
+			return fmt.Errorf("OpenAI API not available: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// RequestBuilder builds and executes LLM requests with chain methods.
 type RequestBuilder struct {
 	client      *Client
 	system      string
 	user        string
 	maxTokens   int
 	temperature float64
-	usePower    bool
-	effort      ReasoningEffort
+	complexity  engine.Complexity
 }
 
-// WithPower enables power model (o3-mini) with specified reasoning effort
-func (r *RequestBuilder) WithPower(effort ReasoningEffort) *RequestBuilder {
-	r.usePower = true
-	r.effort = effort
+// WithComplexity sets the task complexity hint (engine-agnostic).
+func (r *RequestBuilder) WithComplexity(c engine.Complexity) *RequestBuilder {
+	r.complexity = c
 	return r
 }
 
-// WithMaxTokens sets max tokens for this request
+// WithMaxTokens sets max tokens for this request.
 func (r *RequestBuilder) WithMaxTokens(tokens int) *RequestBuilder {
 	r.maxTokens = tokens
 	return r
 }
 
-// WithTemperature sets temperature for this request
+// WithTemperature sets temperature for this request.
 func (r *RequestBuilder) WithTemperature(temp float64) *RequestBuilder {
 	r.temperature = temp
 	return r
 }
 
-// Execute sends the request and returns the response
+// Execute sends the request and returns the response.
 func (r *RequestBuilder) Execute(ctx context.Context) (string, error) {
-	if r.client.mode == ModeMCP {
-		return r.client.executeViaMCP(ctx, r)
+	req := &engine.Request{
+		SystemPrompt: r.system,
+		UserPrompt:   r.user,
+		MaxTokens:    r.maxTokens,
+		Temperature:  r.temperature,
+		Complexity:   r.complexity,
 	}
-	return r.client.executeViaAPI(ctx, r)
+
+	return r.client.executeWithFallback(ctx, req)
 }
 
-// openAIRequest represents the OpenAI API request structure
-type openAIRequest struct {
-	Model           string          `json:"model"`
-	Messages        []openAIMessage `json:"messages"`
-	MaxTokens       int             `json:"max_completion_tokens,omitempty"`
-	Temperature     float64         `json:"temperature,omitempty"`
-	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
-}
+// executeWithFallback tries engines in priority order.
+func (c *Client) executeWithFallback(ctx context.Context, req *engine.Request) (string, error) {
+	var lastErr error
 
-type openAIMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
+	for _, eng := range c.engines {
+		if !eng.IsAvailable() {
+			continue
+		}
 
-type openAIResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-	Usage struct {
-		PromptTokens     int `json:"prompt_tokens"`
-		CompletionTokens int `json:"completion_tokens"`
-		TotalTokens      int `json:"total_tokens"`
-	} `json:"usage"`
-	Error *struct {
-		Message string `json:"message"`
-		Type    string `json:"type"`
-		Code    string `json:"code"`
-	} `json:"error,omitempty"`
-}
+		result, err := eng.Execute(ctx, req)
+		if err == nil {
+			return result, nil
+		}
 
-// executeViaAPI sends request via OpenAI API
-func (c *Client) executeViaAPI(ctx context.Context, r *RequestBuilder) (string, error) {
-	if c.apiKey == "" {
-		return "", fmt.Errorf("OpenAI API key not configured")
-	}
-
-	model := c.fastModel
-	if r.usePower {
-		model = c.powerModel
-	}
-
-	reqBody := openAIRequest{
-		Model: model,
-		Messages: []openAIMessage{
-			{Role: "user", Content: r.system + "\n\n" + r.user},
-		},
-		MaxTokens:   r.maxTokens,
-		Temperature: r.temperature,
-	}
-
-	if r.usePower {
-		reqBody.ReasoningEffort = string(r.effort)
-	}
-
-	jsonData, err := json.Marshal(reqBody)
-	if err != nil {
-		return "", fmt.Errorf("failed to marshal request: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, "POST", openAIAPIURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return "", fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+c.apiKey)
-
-	if c.verbose {
-		if r.usePower {
-			fmt.Printf("OpenAI API request:\n  Model: %s\n  Reasoning: %s\n  Prompt length: %d chars\n",
-				model, r.effort, len(r.user))
-		} else {
-			fmt.Printf("OpenAI API request:\n  Model: %s\n  Prompt length: %d chars\n",
-				model, len(r.user))
+		lastErr = err
+		if c.verbose {
+			fmt.Fprintf(os.Stderr, "⚠️  %s failed: %v, trying next engine...\n", eng.Name(), err)
 		}
 	}
 
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return "", fmt.Errorf("failed to send request: %w", err)
-	}
-	defer func() { _ = resp.Body.Close() }()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return "", fmt.Errorf("failed to read response body: %w", err)
+	if lastErr != nil {
+		return "", fmt.Errorf("all engines failed, last error: %w", lastErr)
 	}
 
-	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("OpenAI API error (status %d): %s", resp.StatusCode, string(body))
-	}
-
-	var apiResp openAIResponse
-	if err := json.Unmarshal(body, &apiResp); err != nil {
-		return "", fmt.Errorf("failed to unmarshal response: %w", err)
-	}
-
-	if apiResp.Error != nil {
-		return "", fmt.Errorf("OpenAI API error: %s (type: %s, code: %s)",
-			apiResp.Error.Message, apiResp.Error.Type, apiResp.Error.Code)
-	}
-
-	if len(apiResp.Choices) == 0 {
-		return "", fmt.Errorf("no choices in response")
-	}
-
-	content := apiResp.Choices[0].Message.Content
-
-	if c.verbose {
-		fmt.Printf("OpenAI API response:\n  Tokens: %d\n  Content length: %d chars\n",
-			apiResp.Usage.TotalTokens, len(content))
-	}
-
-	return content, nil
+	return "", fmt.Errorf("no available LLM engine configured")
 }
 
-// executeViaMCP sends request via MCP sampling
-func (c *Client) executeViaMCP(ctx context.Context, r *RequestBuilder) (string, error) {
-	if c.mcpSession == nil {
-		return "", fmt.Errorf("MCP session not available")
+// ExecuteDirect executes request on a specific engine without fallback.
+func (c *Client) ExecuteDirect(ctx context.Context, eng engine.LLMEngine, req *engine.Request) (string, error) {
+	if !eng.IsAvailable() {
+		return "", fmt.Errorf("engine %s is not available", eng.Name())
 	}
-
-	if c.verbose {
-		fmt.Printf("MCP Sampling request:\n  MaxTokens: %d\n  Prompt length: %d chars\n",
-			r.maxTokens, len(r.user))
-	}
-
-	combinedPrompt := r.system + "\n\n" + r.user
-
-	result, err := c.mcpSession.CreateMessage(ctx, &mcpsdk.CreateMessageParams{
-		Messages: []*mcpsdk.SamplingMessage{
-			{
-				Role:    "user",
-				Content: &mcpsdk.TextContent{Text: combinedPrompt},
-			},
-		},
-		MaxTokens: int64(r.maxTokens),
-	})
-	if err != nil {
-		return "", fmt.Errorf("MCP sampling failed: %w", err)
-	}
-
-	var response string
-	if textContent, ok := result.Content.(*mcpsdk.TextContent); ok {
-		response = textContent.Text
-	} else {
-		return "", fmt.Errorf("unexpected content type from MCP sampling")
-	}
-
-	if c.verbose {
-		fmt.Printf("MCP Sampling response:\n  Model: %s\n  Content length: %d chars\n",
-			result.Model, len(response))
-	}
-
-	return response, nil
-}
-
-// CheckAvailability checks if the LLM is available
-func (c *Client) CheckAvailability(ctx context.Context) error {
-	if c.mode == ModeMCP {
-		if c.mcpSession == nil {
-			return fmt.Errorf("MCP session not available")
-		}
-		return nil
-	}
-
-	if c.apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY environment variable not set")
-	}
-
-	_, err := c.Request("You are a test assistant.", "Say 'OK'").Execute(ctx)
-	if err != nil {
-		return fmt.Errorf("OpenAI API not available: %w", err)
-	}
-
-	return nil
+	return eng.Execute(ctx, req)
 }
