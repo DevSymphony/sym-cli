@@ -9,12 +9,6 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
-
-	// Import providers for side-effect registration
-	_ "github.com/DevSymphony/sym-cli/internal/llm/claudecode"
-	_ "github.com/DevSymphony/sym-cli/internal/llm/geminicli"
-	_ "github.com/DevSymphony/sym-cli/internal/llm/mcp"
-	_ "github.com/DevSymphony/sym-cli/internal/llm/openai"
 )
 
 const (
