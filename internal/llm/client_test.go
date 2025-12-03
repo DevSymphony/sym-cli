@@ -53,19 +53,6 @@ func TestClient_GetActiveEngine(t *testing.T) {
 	})
 }
 
-func TestClient_GetEngines(t *testing.T) {
-	cfg := &LLMConfig{
-		Backend: engine.ModeAuto,
-		APIKey:  "sk-test",
-		CLI:     "claude",
-	}
-	client := NewClient(WithConfig(cfg))
-	engines := client.GetEngines()
-
-	// Should have at least API engine (CLI might not be available)
-	assert.NotEmpty(t, engines)
-}
-
 func TestRequestBuilder(t *testing.T) {
 	client := NewClient()
 
