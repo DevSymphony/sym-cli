@@ -5,20 +5,20 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
+	"github.com/DevSymphony/sym-cli/internal/llm"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const defaultMaxTokens = 1000
 
-// Engine implements engine.LLMEngine for MCP sampling.
+// Engine implements llm.LLMEngine for MCP sampling.
 type Engine struct {
 	session *mcpsdk.ServerSession
 	verbose bool
 }
 
 // New creates a new MCP engine from configuration.
-func New(cfg *engine.EngineConfig) (engine.LLMEngine, error) {
+func New(cfg *llm.EngineConfig) (llm.LLMEngine, error) {
 	session, ok := cfg.MCPSession.(*mcpsdk.ServerSession)
 	if !ok || session == nil {
 		return nil, nil
@@ -38,8 +38,8 @@ func (e *Engine) IsAvailable() bool {
 	return e.session != nil
 }
 
-func (e *Engine) Capabilities() engine.Capabilities {
-	return engine.Capabilities{
+func (e *Engine) Capabilities() llm.Capabilities {
+	return llm.Capabilities{
 		SupportsTemperature: false,
 		SupportsMaxTokens:   true,
 		SupportsComplexity:  false,
@@ -49,7 +49,7 @@ func (e *Engine) Capabilities() engine.Capabilities {
 	}
 }
 
-func (e *Engine) Execute(ctx context.Context, req *engine.Request) (string, error) {
+func (e *Engine) Execute(ctx context.Context, req *llm.Request) (string, error) {
 	if e.session == nil {
 		return "", fmt.Errorf("MCP session not available")
 	}

@@ -10,11 +10,11 @@ import (
 	"os"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
+	"github.com/DevSymphony/sym-cli/internal/llm"
 )
 
 const (
-	apiURL          = "https://api.openai.com/v1/chat/completions"
+	apiURL             = "https://api.openai.com/v1/chat/completions"
 	defaultFastModel   = "gpt-4o-mini"
 	defaultPowerModel  = "gpt-5-mini"
 	defaultTimeout     = 60 * time.Second
@@ -22,7 +22,7 @@ const (
 	defaultTemperature = 1.0
 )
 
-// Engine implements engine.LLMEngine for OpenAI API.
+// Engine implements llm.LLMEngine for OpenAI API.
 type Engine struct {
 	apiKey      string
 	fastModel   string
@@ -34,7 +34,7 @@ type Engine struct {
 }
 
 // New creates a new OpenAI engine from configuration.
-func New(cfg *engine.EngineConfig) (engine.LLMEngine, error) {
+func New(cfg *llm.EngineConfig) (llm.LLMEngine, error) {
 	if cfg.APIKey == "" {
 		return nil, nil
 	}
@@ -67,8 +67,8 @@ func (e *Engine) IsAvailable() bool {
 	return e.apiKey != ""
 }
 
-func (e *Engine) Capabilities() engine.Capabilities {
-	return engine.Capabilities{
+func (e *Engine) Capabilities() llm.Capabilities {
+	return llm.Capabilities{
 		SupportsTemperature: true,
 		SupportsMaxTokens:   true,
 		SupportsComplexity:  true,
@@ -78,7 +78,7 @@ func (e *Engine) Capabilities() engine.Capabilities {
 	}
 }
 
-func (e *Engine) Execute(ctx context.Context, req *engine.Request) (string, error) {
+func (e *Engine) Execute(ctx context.Context, req *llm.Request) (string, error) {
 	if e.apiKey == "" {
 		return "", fmt.Errorf("OpenAI API key not configured")
 	}
@@ -87,15 +87,15 @@ func (e *Engine) Execute(ctx context.Context, req *engine.Request) (string, erro
 	var reasoningEffort string
 
 	switch req.Complexity {
-	case engine.ComplexityMinimal:
+	case llm.ComplexityMinimal:
 		model = e.fastModel
 		reasoningEffort = "minimal"
-	case engine.ComplexityLow:
+	case llm.ComplexityLow:
 		model = e.fastModel
-	case engine.ComplexityMedium:
+	case llm.ComplexityMedium:
 		model = e.powerModel
 		reasoningEffort = "low"
-	case engine.ComplexityHigh:
+	case llm.ComplexityHigh:
 		model = e.powerModel
 		reasoningEffort = "medium"
 	}

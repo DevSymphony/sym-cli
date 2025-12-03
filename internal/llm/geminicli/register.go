@@ -1,9 +1,9 @@
 package geminicli
 
-import "github.com/DevSymphony/sym-cli/internal/llm/engine"
+import "github.com/DevSymphony/sym-cli/internal/llm"
 
 func init() {
-	engine.Register(&engine.Registration{
+	llm.Register(&llm.Registration{
 		Name:     "geminicli",
 		Priority: 20,
 		Factory:  New,

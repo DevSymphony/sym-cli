@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,7 +12,7 @@ import (
 func TestDefaultLLMConfig(t *testing.T) {
 	cfg := DefaultLLMConfig()
 
-	assert.Equal(t, engine.ModeAuto, cfg.Backend)
+	assert.Equal(t, ModeAuto, cfg.Backend)
 	assert.Empty(t, cfg.CLI)
 	assert.Empty(t, cfg.CLIPath)
 	assert.Empty(t, cfg.Model)
@@ -45,37 +44,37 @@ func TestLLMConfig_HasAPIKey(t *testing.T) {
 
 func TestLLMConfig_GetEffectiveBackend(t *testing.T) {
 	t.Run("explicit mode", func(t *testing.T) {
-		cfg := &LLMConfig{Backend: engine.ModeCLI}
-		assert.Equal(t, engine.ModeCLI, cfg.GetEffectiveBackend())
+		cfg := &LLMConfig{Backend: ModeCLI}
+		assert.Equal(t, ModeCLI, cfg.GetEffectiveBackend())
 	})
 
 	t.Run("auto with CLI", func(t *testing.T) {
-		cfg := &LLMConfig{Backend: engine.ModeAuto, CLI: "claude"}
-		assert.Equal(t, engine.ModeCLI, cfg.GetEffectiveBackend())
+		cfg := &LLMConfig{Backend: ModeAuto, CLI: "claude"}
+		assert.Equal(t, ModeCLI, cfg.GetEffectiveBackend())
 	})
 
 	t.Run("auto with API key", func(t *testing.T) {
-		cfg := &LLMConfig{Backend: engine.ModeAuto, APIKey: "sk-test"}
-		assert.Equal(t, engine.ModeAPI, cfg.GetEffectiveBackend())
+		cfg := &LLMConfig{Backend: ModeAuto, APIKey: "sk-test"}
+		assert.Equal(t, ModeAPI, cfg.GetEffectiveBackend())
 	})
 
 	t.Run("auto with nothing", func(t *testing.T) {
-		cfg := &LLMConfig{Backend: engine.ModeAuto}
-		assert.Equal(t, engine.ModeAuto, cfg.GetEffectiveBackend())
+		cfg := &LLMConfig{Backend: ModeAuto}
+		assert.Equal(t, ModeAuto, cfg.GetEffectiveBackend())
 	})
 }
 
 func TestLLMConfig_Validate(t *testing.T) {
 	t.Run("valid config", func(t *testing.T) {
 		cfg := &LLMConfig{
-			Backend: engine.ModeAuto,
+			Backend: ModeAuto,
 			CLI:     "claude",
 		}
 		assert.NoError(t, cfg.Validate())
 	})
 
 	t.Run("invalid backend", func(t *testing.T) {
-		cfg := &LLMConfig{Backend: engine.Mode("invalid")}
+		cfg := &LLMConfig{Backend: Mode("invalid")}
 		assert.Error(t, cfg.Validate())
 	})
 
@@ -92,7 +91,7 @@ func TestLLMConfig_Validate(t *testing.T) {
 
 func TestLLMConfig_String(t *testing.T) {
 	cfg := &LLMConfig{
-		Backend: engine.ModeAuto,
+		Backend: ModeAuto,
 		CLI:     "claude",
 		Model:   "claude-3-opus",
 	}
@@ -107,7 +106,7 @@ func TestSaveLLMConfig(t *testing.T) {
 	tmpDir := t.TempDir()
 
 	cfg := &LLMConfig{
-		Backend:    engine.ModeCLI,
+		Backend:    ModeCLI,
 		CLI:        "claude",
 		Model:      "claude-3-opus",
 		LargeModel: "claude-3-opus",
@@ -145,7 +144,7 @@ LLM_MODEL=gemini-pro
 
 	cfg := LoadLLMConfigFromDir(tmpDir)
 
-	assert.Equal(t, engine.ModeCLI, cfg.Backend)
+	assert.Equal(t, ModeCLI, cfg.Backend)
 	assert.Equal(t, "gemini", cfg.CLI)
 	assert.Equal(t, "gemini-pro", cfg.Model)
 }
@@ -154,7 +153,7 @@ func TestLoadLLMConfigFromDir_NonExistent(t *testing.T) {
 	cfg := LoadLLMConfigFromDir("/nonexistent/path")
 
 	// Should return defaults
-	assert.Equal(t, engine.ModeAuto, cfg.Backend)
+	assert.Equal(t, ModeAuto, cfg.Backend)
 	assert.Empty(t, cfg.CLI)
 }
 

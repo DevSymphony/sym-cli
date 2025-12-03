@@ -1,11 +1,37 @@
 package llm
 
 import (
+	"context"
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 	"github.com/stretchr/testify/assert"
 )
+
+// mockEngine is a test implementation of LLMEngine
+type mockEngine struct {
+	name      string
+	available bool
+}
+
+func (m *mockEngine) Name() string                                  { return m.name }
+func (m *mockEngine) IsAvailable() bool                             { return m.available }
+func (m *mockEngine) Capabilities() Capabilities                    { return Capabilities{} }
+func (m *mockEngine) Execute(_ context.Context, _ *Request) (string, error) { return "mock", nil }
+
+func init() {
+	// Register mock engine for testing
+	Register(&Registration{
+		Name:     "mock",
+		Priority: 100,
+		Factory: func(cfg *EngineConfig) (LLMEngine, error) {
+			// Return available engine only if API key is set
+			if cfg.APIKey != "" {
+				return &mockEngine{name: "mock", available: true}, nil
+			}
+			return &mockEngine{name: "mock", available: false}, nil
+		},
+	})
+}
 
 func TestNewClient(t *testing.T) {
 	t.Run("default_config", func(t *testing.T) {
@@ -16,38 +42,37 @@ func TestNewClient(t *testing.T) {
 
 	t.Run("with_options_and_config", func(t *testing.T) {
 		cfg := &LLMConfig{
-			Backend: engine.ModeAPI,
+			Backend: ModeAPI,
 			APIKey:  "sk-test",
 		}
 		client := NewClient(WithConfig(cfg), WithVerbose(true))
 		assert.NotNil(t, client)
-		assert.Equal(t, engine.ModeAPI, client.config.Backend)
+		assert.Equal(t, ModeAPI, client.config.Backend)
 	})
 
 	t.Run("with_mode_option", func(t *testing.T) {
-		client := NewClient(WithMode(engine.ModeAPI))
+		client := NewClient(WithMode(ModeAPI))
 		assert.NotNil(t, client)
 	})
 }
 
 func TestClient_GetActiveEngine(t *testing.T) {
-	t.Run("with API engine", func(t *testing.T) {
+	t.Run("with API key", func(t *testing.T) {
 		cfg := &LLMConfig{
-			Backend: engine.ModeAPI,
-			APIKey:  "sk-test",
+			APIKey: "sk-test",
 		}
-		client := NewClient(WithConfig(cfg))
+		// Use WithMode(ModeAuto) explicitly to allow all providers
+		client := NewClient(WithConfig(cfg), WithMode(ModeAuto))
 		eng := client.GetActiveEngine()
 		assert.NotNil(t, eng)
-		assert.Equal(t, "openai", eng.Name())
+		assert.Equal(t, "mock", eng.Name())
 	})
 
 	t.Run("no engine available", func(t *testing.T) {
 		cfg := &LLMConfig{
-			Backend: engine.ModeAPI,
-			// No API key
+			// No API key - mock engine will not be available
 		}
-		client := NewClient(WithConfig(cfg))
+		client := NewClient(WithConfig(cfg), WithMode(ModeAuto))
 		eng := client.GetActiveEngine()
 		assert.Nil(t, eng)
 	})
@@ -63,7 +88,7 @@ func TestRequestBuilder(t *testing.T) {
 
 	t.Run("with complexity", func(t *testing.T) {
 		builder := client.Request("system", "user").
-			WithComplexity(engine.ComplexityHigh)
+			WithComplexity(ComplexityHigh)
 		assert.NotNil(t, builder)
 	})
 
@@ -81,7 +106,7 @@ func TestRequestBuilder(t *testing.T) {
 
 	t.Run("chained options", func(t *testing.T) {
 		builder := client.Request("system", "user").
-			WithComplexity(engine.ComplexityMedium).
+			WithComplexity(ComplexityMedium).
 			WithMaxTokens(1500).
 			WithTemperature(0.8)
 		assert.NotNil(t, builder)
@@ -89,9 +114,9 @@ func TestRequestBuilder(t *testing.T) {
 }
 
 func TestModeConstants(t *testing.T) {
-	// Verify backward compatibility
-	assert.Equal(t, engine.ModeAPI, ModeAPI)
-	assert.Equal(t, engine.ModeMCP, ModeMCP)
-	assert.Equal(t, engine.ModeCLI, ModeCLI)
-	assert.Equal(t, engine.ModeAuto, ModeAuto)
+	// Verify mode constants exist
+	assert.Equal(t, Mode("api"), ModeAPI)
+	assert.Equal(t, Mode("mcp"), ModeMCP)
+	assert.Equal(t, Mode("cli"), ModeCLI)
+	assert.Equal(t, Mode("auto"), ModeAuto)
 }

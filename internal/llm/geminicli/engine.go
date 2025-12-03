@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
+	"github.com/DevSymphony/sym-cli/internal/llm"
 )
 
 const (
@@ -19,7 +19,7 @@ const (
 	defaultTimeout    = 120 * time.Second
 )
 
-// Engine implements engine.LLMEngine for Gemini CLI.
+// Engine implements llm.LLMEngine for Gemini CLI.
 type Engine struct {
 	model      string
 	largeModel string
@@ -29,7 +29,7 @@ type Engine struct {
 }
 
 // New creates a new Gemini CLI engine from configuration.
-func New(cfg *engine.EngineConfig) (engine.LLMEngine, error) {
+func New(cfg *llm.EngineConfig) (llm.LLMEngine, error) {
 	e := &Engine{
 		model:      defaultModel,
 		largeModel: defaultLargeModel,
@@ -58,13 +58,13 @@ func (e *Engine) IsAvailable() bool {
 	return err == nil
 }
 
-func (e *Engine) Capabilities() engine.Capabilities {
+func (e *Engine) Capabilities() llm.Capabilities {
 	models := []string{e.model}
 	if e.largeModel != "" && e.largeModel != e.model {
 		models = append(models, e.largeModel)
 	}
 
-	return engine.Capabilities{
+	return llm.Capabilities{
 		SupportsTemperature: true,
 		SupportsMaxTokens:   true,
 		SupportsComplexity:  e.largeModel != "",
@@ -74,9 +74,9 @@ func (e *Engine) Capabilities() engine.Capabilities {
 	}
 }
 
-func (e *Engine) Execute(ctx context.Context, req *engine.Request) (string, error) {
+func (e *Engine) Execute(ctx context.Context, req *llm.Request) (string, error) {
 	model := e.model
-	if req.Complexity >= engine.ComplexityHigh && e.largeModel != "" {
+	if req.Complexity >= llm.ComplexityHigh && e.largeModel != "" {
 		model = e.largeModel
 	}
 

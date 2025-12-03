@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/llm"
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 	"github.com/manifoldco/promptui"
 	"github.com/spf13/cobra"
 )
@@ -234,11 +233,11 @@ func configureEngineMode(cfg *llm.LLMConfig) {
 		return
 	}
 
-	modes := []engine.Mode{
-		engine.ModeAuto,
-		engine.ModeMCP,
-		engine.ModeCLI,
-		engine.ModeAPI,
+	modes := []llm.Mode{
+		llm.ModeAuto,
+		llm.ModeMCP,
+		llm.ModeCLI,
+		llm.ModeAPI,
 	}
 
 	cfg.Backend = modes[index]
@@ -418,21 +417,21 @@ func promptLLMBackendSetup() {
 
 	// Build selection items
 	var items []string
-	var modes []engine.Mode
+	var modes []llm.Mode
 
 	items = append(items, "Auto (recommended) - Use best available engine")
-	modes = append(modes, engine.ModeAuto)
+	modes = append(modes, llm.ModeAuto)
 
 	for _, cli := range clis {
 		if cli.Available {
 			items = append(items, fmt.Sprintf("%s CLI", cli.Name))
-			modes = append(modes, engine.ModeCLI)
+			modes = append(modes, llm.ModeCLI)
 		}
 	}
 
 	if hasAPIKey {
 		items = append(items, "OpenAI API")
-		modes = append(modes, engine.ModeAPI)
+		modes = append(modes, llm.ModeAPI)
 	}
 
 	items = append(items, "Skip (configure later)")
@@ -464,7 +463,7 @@ func promptLLMBackendSetup() {
 	cfg.Backend = modes[index]
 
 	// If CLI selected, set the specific CLI provider
-	if modes[index] == engine.ModeCLI {
+	if modes[index] == llm.ModeCLI {
 		// Find which CLI was selected
 		cliIndex := index - 1 // Account for "Auto" option
 		cliCount := 0

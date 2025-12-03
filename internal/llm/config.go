@@ -6,8 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 )
 
 const (
@@ -26,7 +24,7 @@ const (
 // LLMConfig holds LLM engine configuration.
 type LLMConfig struct {
 	// Backend is the preferred engine mode (auto, mcp, cli, api).
-	Backend engine.Mode `json:"backend"`
+	Backend Mode `json:"backend"`
 
 	// CLI is the CLI provider type (claude, gemini).
 	CLI string `json:"cli"`
@@ -47,7 +45,7 @@ type LLMConfig struct {
 // DefaultLLMConfig returns the default configuration.
 func DefaultLLMConfig() *LLMConfig {
 	return &LLMConfig{
-		Backend: engine.ModeAuto,
+		Backend: ModeAuto,
 		CLI:     "",
 		CLIPath: "",
 		Model:   "",
@@ -110,8 +108,8 @@ func loadConfigFromEnvFile(envPath string, cfg *LLMConfig) {
 
 		switch key {
 		case envKeyLLMBackend:
-			if engine.Mode(value).IsValid() {
-				cfg.Backend = engine.Mode(value)
+			if Mode(value).IsValid() {
+				cfg.Backend = Mode(value)
 			}
 		case envKeyLLMCLI:
 			cfg.CLI = value
@@ -130,8 +128,8 @@ func loadConfigFromEnvFile(envPath string, cfg *LLMConfig) {
 // loadConfigFromEnv loads config from system environment variables.
 func loadConfigFromEnv(cfg *LLMConfig) {
 	if backend := os.Getenv(envKeyLLMBackend); backend != "" {
-		if engine.Mode(backend).IsValid() {
-			cfg.Backend = engine.Mode(backend)
+		if Mode(backend).IsValid() {
+			cfg.Backend = Mode(backend)
 		}
 	}
 
@@ -176,7 +174,7 @@ func SaveLLMConfigToDir(dir string, cfg *LLMConfig) error {
 	// Prepare new values
 	newValues := map[string]string{}
 
-	if cfg.Backend != "" && cfg.Backend != engine.ModeAuto {
+	if cfg.Backend != "" && cfg.Backend != ModeAuto {
 		newValues[envKeyLLMBackend] = string(cfg.Backend)
 	}
 
@@ -304,21 +302,21 @@ func (c *LLMConfig) HasAPIKey() bool {
 }
 
 // GetEffectiveBackend returns the actual engine to use based on availability.
-func (c *LLMConfig) GetEffectiveBackend() engine.Mode {
-	if c.Backend != engine.ModeAuto {
+func (c *LLMConfig) GetEffectiveBackend() Mode {
+	if c.Backend != ModeAuto {
 		return c.Backend
 	}
 
 	// Auto mode: prefer CLI if available, then API
 	if c.HasCLI() {
-		return engine.ModeCLI
+		return ModeCLI
 	}
 
 	if c.HasAPIKey() {
-		return engine.ModeAPI
+		return ModeAPI
 	}
 
-	return engine.ModeAuto
+	return ModeAuto
 }
 
 // Validate checks if the configuration is valid.
