@@ -9,6 +9,12 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
+
+	// Import providers for side-effect registration
+	_ "github.com/DevSymphony/sym-cli/internal/llm/claudecode"
+	_ "github.com/DevSymphony/sym-cli/internal/llm/geminicli"
+	_ "github.com/DevSymphony/sym-cli/internal/llm/mcp"
+	_ "github.com/DevSymphony/sym-cli/internal/llm/openai"
 )
 
 const (
@@ -121,75 +127,54 @@ func NewClient(opts ...ClientOption) *Client {
 	return client
 }
 
-// initEngines initializes the engine fallback chain based on configuration.
+// initEngines initializes the engine fallback chain using the registry.
 func (c *Client) initEngines() {
 	c.engines = []engine.LLMEngine{}
 
-	// Determine which engines to include based on mode
-	switch c.mode {
-	case engine.ModeMCP:
-		c.addMCPEngine()
-	case engine.ModeCLI:
-		c.addCLIEngine()
-	case engine.ModeAPI:
-		c.addAPIEngine()
-	case engine.ModeAuto:
-		fallthrough
-	default:
-		// add all available engines
-		c.addMCPEngine()
-		c.addCLIEngine()
-		c.addAPIEngine()
+	cfg := &engine.EngineConfig{
+		APIKey:     c.config.GetAPIKey(),
+		Model:      c.config.Model,
+		LargeModel: c.config.LargeModel,
+		CLIPath:    c.config.CLIPath,
+		Verbose:    c.verbose,
+		MCPSession: c.mcpSession,
 	}
-}
 
-// addMCPEngine adds MCP engine if session is available.
-func (c *Client) addMCPEngine() {
-	if c.mcpSession != nil {
-		eng := engine.NewMCPEngine(c.mcpSession, engine.WithMCPVerbose(c.verbose))
-		c.engines = append(c.engines, eng)
-	}
-}
-
-// addCLIEngine adds CLI engine if configured.
-func (c *Client) addCLIEngine() {
-	if c.config.CLI != "" {
-		providerType := engine.CLIProviderType(c.config.CLI)
-		if !providerType.IsValid() {
-			return
+	// Get all registered providers sorted by priority
+	for _, reg := range engine.GetAllRegistrations() {
+		// Filter by mode if not auto
+		if !c.shouldUseProvider(reg.Name) {
+			continue
 		}
 
-		opts := []engine.CLIEngineOption{}
-
-		if c.config.CLIPath != "" {
-			opts = append(opts, engine.WithCLIPath(c.config.CLIPath))
+		eng, err := reg.Factory(cfg)
+		if err != nil || eng == nil {
+			continue
 		}
 
-		if c.config.Model != "" {
-			opts = append(opts, engine.WithCLIModel(c.config.Model))
-		}
-
-		if c.config.LargeModel != "" {
-			opts = append(opts, engine.WithCLILargeModel(c.config.LargeModel))
-		}
-
-		if c.verbose {
-			opts = append(opts, engine.WithCLIVerbose(true))
-		}
-
-		eng, err := engine.NewCLIEngine(providerType, opts...)
-		if err == nil && eng.IsAvailable() {
+		if eng.IsAvailable() {
 			c.engines = append(c.engines, eng)
 		}
 	}
 }
 
-// addAPIEngine adds API engine if key is available.
-func (c *Client) addAPIEngine() {
-	apiKey := c.config.GetAPIKey()
-	if apiKey != "" {
-		eng := engine.NewAPIEngine(apiKey, engine.WithAPIVerbose(c.verbose))
-		c.engines = append(c.engines, eng)
+// shouldUseProvider checks if provider should be used based on mode and config.
+func (c *Client) shouldUseProvider(name string) bool {
+	switch c.mode {
+	case engine.ModeMCP:
+		return name == "mcp"
+	case engine.ModeAPI:
+		return name == "openai"
+	case engine.ModeCLI:
+		// Use configured CLI provider or all CLI providers
+		if c.config.CLI != "" {
+			return name == c.config.CLI || name == c.config.CLI+"code" || name == c.config.CLI+"cli"
+		}
+		return name == "claudecode" || name == "geminicli"
+	case engine.ModeAuto:
+		fallthrough
+	default:
+		return true
 	}
 }
 

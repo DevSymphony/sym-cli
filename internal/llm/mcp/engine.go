@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
@@ -19,7 +18,7 @@ type Engine struct {
 }
 
 // New creates a new MCP engine from configuration.
-func New(cfg *llm.EngineConfig) (engine.LLMEngine, error) {
+func New(cfg *engine.EngineConfig) (engine.LLMEngine, error) {
 	session, ok := cfg.MCPSession.(*mcpsdk.ServerSession)
 	if !ok || session == nil {
 		return nil, nil

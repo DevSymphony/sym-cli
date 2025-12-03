@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 )
 
@@ -30,7 +29,7 @@ type Engine struct {
 }
 
 // New creates a new Gemini CLI engine from configuration.
-func New(cfg *llm.EngineConfig) (engine.LLMEngine, error) {
+func New(cfg *engine.EngineConfig) (engine.LLMEngine, error) {
 	e := &Engine{
 		model:      defaultModel,
 		largeModel: defaultLargeModel,

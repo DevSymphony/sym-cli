@@ -1,14 +1,9 @@
-package llm
+package engine
 
 import (
 	"sort"
 	"sync"
-
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 )
-
-// EngineFactory creates an LLMEngine instance from configuration.
-type EngineFactory func(cfg *EngineConfig) (engine.LLMEngine, error)
 
 // EngineConfig holds common configuration for all LLM engines.
 type EngineConfig struct {
@@ -19,6 +14,9 @@ type EngineConfig struct {
 	Verbose    bool
 	MCPSession interface{}
 }
+
+// EngineFactory creates an LLMEngine instance from configuration.
+type EngineFactory func(cfg *EngineConfig) (LLMEngine, error)
 
 // Registration represents a registered LLM provider.
 type Registration struct {
@@ -33,7 +31,6 @@ var (
 )
 
 // Register adds an LLM provider to the registry.
-// Should be called from init() in each provider package.
 func Register(r *Registration) {
 	if r == nil || r.Factory == nil {
 		return
@@ -66,16 +63,4 @@ func GetAllRegistrations() []*Registration {
 	})
 
 	return result
-}
-
-// GetRegisteredNames returns all registered provider names.
-func GetRegisteredNames() []string {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-
-	names := make([]string, 0, len(registry))
-	for name := range registry {
-		names = append(names, name)
-	}
-	return names
 }

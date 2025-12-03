@@ -10,7 +10,6 @@ import (
 	"os"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/llm/engine"
 )
 
@@ -35,7 +34,7 @@ type Engine struct {
 }
 
 // New creates a new OpenAI engine from configuration.
-func New(cfg *llm.EngineConfig) (engine.LLMEngine, error) {
+func New(cfg *engine.EngineConfig) (engine.LLMEngine, error) {
 	if cfg.APIKey == "" {
 		return nil, nil
 	}
