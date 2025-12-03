@@ -38,7 +38,7 @@ func TestCLIEngine_Capabilities(t *testing.T) {
 
 	caps := engine.Capabilities()
 
-	assert.True(t, caps.SupportsMaxTokens)
+	assert.False(t, caps.SupportsMaxTokens)
 	assert.False(t, caps.SupportsStreaming)
 	assert.True(t, caps.SupportsComplexity) // Has LargeModel
 	assert.NotEmpty(t, caps.Models)

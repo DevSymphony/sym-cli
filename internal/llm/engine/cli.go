@@ -171,7 +171,7 @@ func (e *CLIEngine) Execute(ctx context.Context, req *Request) (string, error) {
 		if cmdCtx.Err() == context.DeadlineExceeded {
 			return "", fmt.Errorf("CLI command timed out after %v", e.timeout)
 		}
-		return "", fmt.Errorf("CLI command failed: %w\nstderr: %s", err, stderr.String())
+		return "", fmt.Errorf("CLI command failed: %w\nstdout: %s\nstderr: %s", err, stdout.String(), stderr.String())
 	}
 
 	response, err := e.provider.ParseResponse(stdout.Bytes())

@@ -77,7 +77,13 @@ func WithMCPSession(session *mcpsdk.ServerSession) ClientOption {
 // WithConfig sets a custom LLM configuration.
 func WithConfig(cfg *LLMConfig) ClientOption {
 	return func(c *Client) {
+		if cfg == nil {
+			return
+		}
 		c.config = cfg
+		if mode := cfg.GetEffectiveBackend(); mode != "" {
+			c.mode = mode
+		}
 	}
 }
 
@@ -98,7 +104,7 @@ func NewClient(opts ...ClientOption) *Client {
 
 	client := &Client{
 		config:      config,
-		mode:        engine.ModeAuto,
+		mode:        config.GetEffectiveBackend(),
 		maxTokens:   defaultMaxTokens,
 		temperature: defaultTemperature,
 		verbose:     false,
