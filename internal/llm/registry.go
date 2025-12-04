@@ -12,7 +12,6 @@ type EngineConfig struct {
 	LargeModel string
 	CLIPath    string
 	Verbose    bool
-	MCPSession interface{}
 }
 
 // EngineFactory creates an LLMEngine instance from configuration.

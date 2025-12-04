@@ -208,7 +208,6 @@ func configureEngineMode(cfg *llm.LLMConfig) {
 
 	items := []string{
 		"auto - Automatically select best available engine",
-		"mcp - Always use MCP sampling (when available)",
 		"cli - Always use CLI tool",
 		"api - Always use OpenAI API",
 	}
@@ -224,7 +223,7 @@ func configureEngineMode(cfg *llm.LLMConfig) {
 		Label:     "Select engine mode",
 		Items:     items,
 		Templates: templates,
-		Size:      4,
+		Size:      3,
 	}
 
 	index, _, err := selectPrompt.Run()
@@ -235,7 +234,6 @@ func configureEngineMode(cfg *llm.LLMConfig) {
 
 	modes := []llm.Mode{
 		llm.ModeAuto,
-		llm.ModeMCP,
 		llm.ModeCLI,
 		llm.ModeAPI,
 	}

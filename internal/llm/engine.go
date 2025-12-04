@@ -94,8 +94,6 @@ type Mode string
 const (
 	// ModeAuto automatically selects the best available engine.
 	ModeAuto Mode = "auto"
-	// ModeMCP forces MCP sampling engine.
-	ModeMCP Mode = "mcp"
 	// ModeCLI forces CLI engine.
 	ModeCLI Mode = "cli"
 	// ModeAPI forces API engine.
@@ -105,7 +103,7 @@ const (
 // IsValid checks if the engine mode is valid.
 func (m Mode) IsValid() bool {
 	switch m {
-	case ModeAuto, ModeMCP, ModeCLI, ModeAPI:
+	case ModeAuto, ModeCLI, ModeAPI:
 		return true
 	default:
 		return false

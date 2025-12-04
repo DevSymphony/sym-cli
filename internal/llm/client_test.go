@@ -116,7 +116,6 @@ func TestRequestBuilder(t *testing.T) {
 func TestModeConstants(t *testing.T) {
 	// Verify mode constants exist
 	assert.Equal(t, Mode("api"), ModeAPI)
-	assert.Equal(t, Mode("mcp"), ModeMCP)
 	assert.Equal(t, Mode("cli"), ModeCLI)
 	assert.Equal(t, Mode("auto"), ModeAuto)
 }

@@ -471,16 +471,9 @@ func (s *Server) handleValidateCode(ctx context.Context, session *sdkmcp.ServerS
 		}, nil
 	}
 
-	var llmClient *llm.Client
-	if session != nil {
-		// MCP mode: use host LLM via sampling
-		llmClient = llm.NewClient(llm.WithMCPSession(session))
-		fmt.Fprintf(os.Stderr, "✓ Using host LLM via MCP sampling\n")
-	} else {
-		// Auto mode: use configured LLM backend (CLI/API)
-		llmClient = llm.NewClient()
-		fmt.Fprintf(os.Stderr, "✓ Using configured LLM backend\n")
-	}
+	// Use configured LLM backend (CLI/API)
+	llmClient := llm.NewClient()
+	fmt.Fprintf(os.Stderr, "✓ Using configured LLM backend\n")
 
 	// Create unified validator that handles all engines + RBAC
 	v := validator.NewValidator(validationPolicy, false) // verbose=false for MCP

@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/envutil"
-	mcpsdk "github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 const (
@@ -19,10 +18,9 @@ const (
 // Client represents an LLM client with fallback chain support.
 type Client struct {
 	// Engine configuration
-	config     *LLMConfig
-	mode       Mode
-	engines    []LLMEngine
-	mcpSession *mcpsdk.ServerSession
+	config  *LLMConfig
+	mode    Mode
+	engines []LLMEngine
 
 	// Default request parameters
 	maxTokens   int
@@ -52,14 +50,6 @@ func WithTimeout(_ time.Duration) ClientOption {
 // WithVerbose enables verbose logging.
 func WithVerbose(verbose bool) ClientOption {
 	return func(c *Client) { c.verbose = verbose }
-}
-
-// WithMCPSession sets the MCP session for MCP mode.
-func WithMCPSession(session *mcpsdk.ServerSession) ClientOption {
-	return func(c *Client) {
-		c.mcpSession = session
-		c.mode = ModeMCP
-	}
 }
 
 // WithConfig sets a custom LLM configuration.
@@ -119,7 +109,6 @@ func (c *Client) initEngines() {
 		LargeModel: c.config.LargeModel,
 		CLIPath:    c.config.CLIPath,
 		Verbose:    c.verbose,
-		MCPSession: c.mcpSession,
 	}
 
 	// Get all registered providers sorted by priority
@@ -143,8 +132,6 @@ func (c *Client) initEngines() {
 // shouldUseProvider checks if provider should be used based on mode and config.
 func (c *Client) shouldUseProvider(name string) bool {
 	switch c.mode {
-	case ModeMCP:
-		return name == "mcp"
 	case ModeAPI:
 		return name == "openai"
 	case ModeCLI:

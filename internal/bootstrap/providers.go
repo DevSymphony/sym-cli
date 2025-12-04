@@ -6,7 +6,6 @@ import (
 	// that registers the provider with the global registry.
 	_ "github.com/DevSymphony/sym-cli/internal/llm/claudecode"
 	_ "github.com/DevSymphony/sym-cli/internal/llm/geminicli"
-	_ "github.com/DevSymphony/sym-cli/internal/llm/mcp"
 	_ "github.com/DevSymphony/sym-cli/internal/llm/openai"
 )
 
