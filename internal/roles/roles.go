@@ -54,7 +54,6 @@ func LoadRoles() (Roles, error) {
 	data, err := os.ReadFile(rolesPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// symphonyclient integration: symphony → sym command
 			return nil, fmt.Errorf("roles.json not found. Run 'sym init' to create it")
 		}
 		return nil, err
@@ -75,7 +74,7 @@ func SaveRoles(roles Roles) error {
 		return err
 	}
 
-	// symphonyclient integration: Ensure .sym directory exists
+	// Ensure .sym directory exists
 	symDir := filepath.Dir(rolesPath)
 	if err := os.MkdirAll(symDir, 0755); err != nil {
 		return err

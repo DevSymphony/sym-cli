@@ -11,7 +11,6 @@ import (
 // Used by convert and validate commands
 var verbose bool
 
-// symphonyclient integration: Updated root command from symphony to sym
 var rootCmd = &cobra.Command{
 	Use:   "sym",
 	Short: "sym - Code Convention Management Tool with RBAC",

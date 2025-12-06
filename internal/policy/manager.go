@@ -6,10 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"github.com/DevSymphony/sym-cli/internal/git"
-	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration: use unified schema types
+	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
-// symphonyclient integration: .github → .sym directory
 var defaultPolicyPath = ".sym/user-policy.json"
 
 // GetPolicyPath returns the configured or default policy file path
@@ -38,7 +37,6 @@ func LoadPolicy(customPath string) (*schema.UserPolicy, error) {
 	if err != nil {
 		if os.IsNotExist(err) {
 			// Return empty policy if file doesn't exist
-			// symphonyclient integration: use schema.UserRule
 			return &schema.UserPolicy{
 				Version: "1.0.0",
 				Rules:   []schema.UserRule{},

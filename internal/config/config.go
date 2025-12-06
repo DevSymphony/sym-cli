@@ -9,9 +9,8 @@ import (
 )
 
 // Config represents the Symphony CLI configuration
-// Note: GitHub OAuth fields are kept for backward compatibility but are no longer used
 type Config struct {
-	PolicyPath string `json:"policy_path,omitempty"` // Custom path for user-policy.json (default: .sym/user-policy.json)
+	PolicyPath string `json:"policy_path,omitempty"` // Custom path for user-policy.json
 }
 
 var (
@@ -38,8 +37,7 @@ func LoadConfig() (*Config, error) {
 	data, err := os.ReadFile(configPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// symphonyclient integration: symphony → sym command
-			return nil, fmt.Errorf("configuration not found. Run 'sym config' to set up")
+			return nil, fmt.Errorf("configuration not found. Run 'sym init' to set up")
 		}
 		return nil, err
 	}

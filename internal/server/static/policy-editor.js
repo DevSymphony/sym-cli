@@ -1350,10 +1350,7 @@ function applyPermissions() {
         });
     }
 
-    // Note: canEditRoles permission is no longer used for user management
-    // Role selection is always allowed for all users
-
-    // Remove any existing readonly badge (legacy cleanup)
+    // Clean up deprecated UI elements
     const existingReadonlyBadge = document.getElementById('readonly-badge');
     if (existingReadonlyBadge) existingReadonlyBadge.remove();
 }
@@ -1361,10 +1358,10 @@ function applyPermissions() {
 // ==================== Initialize ====================
 async function init() {
     try {
-        // Load current user (now returns role-based identity)
+        // Load current user and role
         appState.currentUser = await API.getMe();
 
-        // Display current role with new compact UI
+        // Display current role in header
         updateUserRoleBadge(appState.currentUser.role || '역할 미선택');
         updatePermissionBadges(appState.currentUser.permissions);
 
