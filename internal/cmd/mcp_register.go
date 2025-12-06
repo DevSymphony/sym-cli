@@ -482,6 +482,16 @@ func createInstructionsFile(app string) error {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
+	// Add VS Code instructions directory to .gitignore
+	if app == "vscode" {
+		gitignorePath := ".github/instructions/"
+		if err := ensureGitignore(gitignorePath); err != nil {
+			fmt.Printf("  ⚠ Warning: Failed to update .gitignore: %v\n", err)
+		} else {
+			fmt.Printf("  ✓ Added %s to .gitignore\n", gitignorePath)
+		}
+	}
+
 	return nil
 }
 
