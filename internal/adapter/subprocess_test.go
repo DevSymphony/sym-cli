@@ -2,6 +2,8 @@ package adapter
 
 import (
 	"context"
+	"os"
+	"runtime"
 	"testing"
 	"time"
 )
@@ -41,10 +43,18 @@ func TestExecute_Success(t *testing.T) {
 
 func TestExecute_WithWorkDir(t *testing.T) {
 	executor := NewSubprocessExecutor()
-	executor.WorkDir = "/tmp"
+	executor.WorkDir = os.TempDir()
 	ctx := context.Background()
 
-	output, err := executor.Execute(ctx, "pwd")
+	var output *ToolOutput
+	var err error
+
+	if runtime.GOOS == "windows" {
+		output, err = executor.Execute(ctx, "cmd", "/c", "cd")
+	} else {
+		output, err = executor.Execute(ctx, "pwd")
+	}
+
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -61,7 +71,15 @@ func TestExecute_WithEnv(t *testing.T) {
 	}
 	ctx := context.Background()
 
-	output, err := executor.Execute(ctx, "sh", "-c", "echo $TEST_VAR")
+	var output *ToolOutput
+	var err error
+
+	if runtime.GOOS == "windows" {
+		output, err = executor.Execute(ctx, "cmd", "/c", "echo %TEST_VAR%")
+	} else {
+		output, err = executor.Execute(ctx, "sh", "-c", "echo $TEST_VAR")
+	}
+
 	if err != nil {
 		t.Fatalf("Execute failed: %v", err)
 	}
@@ -75,7 +93,15 @@ func TestExecute_NonZeroExit(t *testing.T) {
 	executor := NewSubprocessExecutor()
 	ctx := context.Background()
 
-	output, err := executor.Execute(ctx, "sh", "-c", "exit 1")
+	var output *ToolOutput
+	var err error
+
+	if runtime.GOOS == "windows" {
+		output, err = executor.Execute(ctx, "cmd", "/c", "exit 1")
+	} else {
+		output, err = executor.Execute(ctx, "sh", "-c", "exit 1")
+	}
+
 	if err != nil {
 		t.Fatalf("Execute should not return error for non-zero exit: %v", err)
 	}
@@ -87,10 +113,18 @@ func TestExecute_NonZeroExit(t *testing.T) {
 
 func TestExecute_Timeout(t *testing.T) {
 	executor := NewSubprocessExecutor()
-	executor.Timeout = 10 * time.Millisecond
+	executor.Timeout = 100 * time.Millisecond
 	ctx := context.Background()
 
-	output, err := executor.Execute(ctx, "sleep", "1")
+	var output *ToolOutput
+	var err error
+
+	if runtime.GOOS == "windows" {
+		output, err = executor.Execute(ctx, "cmd", "/c", "ping -n 3 127.0.0.1")
+	} else {
+		output, err = executor.Execute(ctx, "sleep", "1")
+	}
+
 	// Timeout can result in either error or killed exit code
 	if err == nil && (output == nil || output.ExitCode == 0) {
 		t.Error("Expected timeout error or non-zero exit code")
