@@ -134,7 +134,7 @@ Output:
 	userPrompt := fmt.Sprintf("Convert this rule to Prettier configuration:\n\n%s", rule.Say)
 
 	// Call LLM
-	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}

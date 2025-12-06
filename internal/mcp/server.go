@@ -34,15 +34,9 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 		return fmt.Errorf("failed to parse user policy: %w", err)
 	}
 
-	// Setup LLM client
-	apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
-	if apiKey == "" {
-		return fmt.Errorf("OPENAI_API_KEY not found in environment or .sym/.env")
-	}
-
-	llmClient := llm.NewClient(apiKey,
-		llm.WithModel("gpt-4o"),
-		llm.WithTimeout(30*time.Second),
+	// Setup LLM client (backend auto-selection via @llm)
+	llmClient := llm.NewClient(
+		llm.WithTimeout(30 * time.Second),
 	)
 
 	// Create converter with output directory
@@ -231,7 +225,7 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 		params := map[string]any{
 			"role": input.Role,
 		}
-		result, rpcErr := s.handleValidateCode(params)
+		result, rpcErr := s.handleValidateCode(ctx, req.Session, params)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
@@ -427,7 +421,7 @@ type ViolationItem struct {
 
 // handleValidateCode handles code validation requests.
 // It validates git changes (diff) instead of entire files for efficiency.
-func (s *Server) handleValidateCode(params map[string]interface{}) (interface{}, *RPCError) {
+func (s *Server) handleValidateCode(ctx context.Context, session *sdkmcp.ServerSession, params map[string]interface{}) (interface{}, *RPCError) {
 	// Get policy for validation (convert UserPolicy if needed)
 	validationPolicy, err := s.getValidationPolicy()
 	if err != nil {
@@ -477,16 +471,16 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 		}, nil
 	}
 
-	// Setup LLM client for validation
-	apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
-	if apiKey == "" {
-		return nil, &RPCError{
-			Code:    -32000,
-			Message: "OPENAI_API_KEY not found in environment or .sym/.env",
-		}
+	var llmClient *llm.Client
+	if session != nil {
+		// MCP mode: use host LLM via sampling
+		llmClient = llm.NewClient(llm.WithMCPSession(session))
+		fmt.Fprintf(os.Stderr, "✓ Using host LLM via MCP sampling\n")
+	} else {
+		// Auto mode: use configured LLM backend (CLI/API)
+		llmClient = llm.NewClient()
+		fmt.Fprintf(os.Stderr, "✓ Using configured LLM backend\n")
 	}
-
-	llmClient := llm.NewClient(apiKey)
 
 	// Create unified validator that handles all engines + RBAC
 	v := validator.NewValidator(validationPolicy, false) // verbose=false for MCP
@@ -496,7 +490,6 @@ func (s *Server) handleValidateCode(params map[string]interface{}) (interface{},
 	}()
 
 	// Validate git changes using unified validator
-	ctx := context.Background()
 	result, err := v.ValidateChanges(ctx, changes)
 	if err != nil {
 		return nil, &RPCError{

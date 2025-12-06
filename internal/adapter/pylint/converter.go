@@ -210,7 +210,7 @@ Output:
 	}
 
 	// Call LLM
-	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
 	if err != nil {
 		return "", nil, fmt.Errorf("LLM call failed: %w", err)
 	}
@@ -298,38 +298,38 @@ func (c *Converter) generatePylintRC(enabledRules []string, options map[string]m
 // getOptionSection returns the Pylint config section for a given option
 func getOptionSection(option string) string {
 	formatOptions := map[string]bool{
-		"max-line-length":  true,
-		"max-module-lines": true,
-		"indent-string":    true,
+		"max-line-length":    true,
+		"max-module-lines":   true,
+		"indent-string":      true,
 		"indent-after-paren": true,
 	}
 
 	basicOptions := map[string]bool{
-		"variable-rgx":       true,
-		"function-rgx":       true,
-		"class-rgx":          true,
-		"const-rgx":          true,
-		"argument-rgx":       true,
-		"attr-rgx":           true,
-		"method-rgx":         true,
-		"module-rgx":         true,
-		"good-names":         true,
-		"bad-names":          true,
+		"variable-rgx":        true,
+		"function-rgx":        true,
+		"class-rgx":           true,
+		"const-rgx":           true,
+		"argument-rgx":        true,
+		"attr-rgx":            true,
+		"method-rgx":          true,
+		"module-rgx":          true,
+		"good-names":          true,
+		"bad-names":           true,
 		"include-naming-hint": true,
 	}
 
 	designOptions := map[string]bool{
-		"max-args":             true,
-		"max-locals":           true,
-		"max-returns":          true,
-		"max-branches":         true,
-		"max-statements":       true,
-		"max-parents":          true,
-		"max-attributes":       true,
-		"min-public-methods":   true,
-		"max-public-methods":   true,
-		"max-bool-expr":        true,
-		"max-nested-blocks":    true,
+		"max-args":           true,
+		"max-locals":         true,
+		"max-returns":        true,
+		"max-branches":       true,
+		"max-statements":     true,
+		"max-parents":        true,
+		"max-attributes":     true,
+		"min-public-methods": true,
+		"max-public-methods": true,
+		"max-bool-expr":      true,
+		"max-nested-blocks":  true,
 	}
 
 	exceptOptions := map[string]bool{

@@ -231,7 +231,7 @@ Does this code violate the convention?`, file, rule.Desc, string(content))
 
 		// Call LLM
 		fileStartTime := time.Now()
-		response, err := v.llmClient.Complete(v.ctx, systemPrompt, userPrompt)
+		response, err := v.llmClient.Request(systemPrompt, userPrompt).Execute(v.ctx)
 		fileExecMs := time.Since(fileStartTime).Milliseconds()
 
 		// Record response in consolidated output

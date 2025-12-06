@@ -16,11 +16,6 @@ func promptAPIKeySetup() {
 	promptAPIKeyConfiguration(false)
 }
 
-// promptAPIKeyIfNeeded checks if OpenAI API key is configured and prompts if not
-func promptAPIKeyIfNeeded() {
-	promptAPIKeyConfiguration(true)
-}
-
 // promptAPIKeyConfiguration handles API key configuration with optional existence check
 func promptAPIKeyConfiguration(checkExisting bool) {
 	envPath := filepath.Join(".sym", ".env")

@@ -147,62 +147,67 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*pmdRule, error) {
 	systemPrompt := `You are a PMD 7.x configuration expert. Convert natural language Java coding rules to PMD rule references.
 
-Return ONLY a JSON object (no markdown fences):
+Return ONLY a JSON object with exactly these two fields (no other fields):
 {
-  "rule_ref": "category/java/CATEGORY.xml/RuleName",
-  "priority": 1-5
+  "rule_ref": "category/java/category.xml/RuleName",
+  "priority": 1
 }
 
-IMPORTANT: PMD 7.x uses "category/java/" prefix, NOT "rulesets/java/".
+Valid PMD 7.x categories and rules:
+- category/java/bestpractices.xml/UnusedPrivateMethod
+- category/java/bestpractices.xml/UnusedLocalVariable
+- category/java/bestpractices.xml/UnusedFormalParameter
+- category/java/bestpractices.xml/AvoidReassigningParameters
+- category/java/codestyle.xml/ShortVariable
+- category/java/codestyle.xml/LongVariable
+- category/java/codestyle.xml/ShortMethodName
+- category/java/codestyle.xml/ClassNamingConventions
+- category/java/codestyle.xml/MethodNamingConventions
+- category/java/codestyle.xml/FieldNamingConventions
+- category/java/codestyle.xml/UnnecessaryImport
+- category/java/design.xml/TooManyMethods
+- category/java/design.xml/ExcessiveMethodLength
+- category/java/design.xml/ExcessiveParameterList
+- category/java/design.xml/CyclomaticComplexity
+- category/java/design.xml/NPathComplexity
+- category/java/design.xml/GodClass
+- category/java/errorprone.xml/EmptyCatchBlock
+- category/java/errorprone.xml/AvoidCatchingNPE
+- category/java/errorprone.xml/EmptyIfStmt
+- category/java/security.xml/HardCodedCryptoKey
 
-Common PMD 7.x rules:
-- Best Practices: category/java/bestpractices.xml/UnusedPrivateMethod
-- Code Style: category/java/codestyle.xml/ShortVariable
-- Design: category/java/design.xml/TooManyMethods, category/java/design.xml/CyclomaticComplexity
-- Error Prone: category/java/errorprone.xml/EmptyCatchBlock
-- Security: category/java/security.xml/HardCodedCryptoKey
+Priority: 1=High, 2=Medium-High, 3=Medium, 4=Low, 5=Info
 
-Priority levels: 1=High, 2=Medium-High, 3=Medium, 4=Low, 5=Info
-
-If cannot convert, return:
+If the rule cannot be mapped to a valid PMD rule, return:
 {
   "rule_ref": "",
   "priority": 3
 }
 
-Example:
-
-Input: "Avoid unused private methods"
-Output:
-{
-  "rule_ref": "category/java/bestpractices.xml/UnusedPrivateMethod",
-  "priority": 2
-}
-
-Input: "No empty catch blocks"
-Output:
-{
-  "rule_ref": "category/java/errorprone.xml/EmptyCatchBlock",
-  "priority": 2
-}`
+IMPORTANT: Return ONLY the JSON object. Do NOT include description, message, or any other fields.`
 
 	userPrompt := fmt.Sprintf("Convert this Java rule to PMD rule reference:\n\n%s", rule.Say)
 
-	response, err := llmClient.Complete(ctx, systemPrompt, userPrompt)
+	// Call LLM with minimal complexity
+	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
 
-	// Parse response
+	// Parse response - extract JSON object
 	response = strings.TrimSpace(response)
 	response = strings.TrimPrefix(response, "```json")
 	response = strings.TrimPrefix(response, "```")
 	response = strings.TrimSuffix(response, "```")
 	response = strings.TrimSpace(response)
 
-	if response == "" {
-		return nil, fmt.Errorf("LLM returned empty response")
+	// Find JSON object boundaries to handle extra text
+	startIdx := strings.Index(response, "{")
+	endIdx := strings.LastIndex(response, "}")
+	if startIdx == -1 || endIdx == -1 || endIdx <= startIdx {
+		return nil, fmt.Errorf("no valid JSON object found in response")
 	}
+	response = response[startIdx : endIdx+1]
 
 	var result struct {
 		RuleRef  string `json:"rule_ref"`
@@ -215,6 +220,24 @@ Output:
 
 	if result.RuleRef == "" {
 		return nil, nil
+	}
+
+	// Validate rule_ref format: must start with "category/java/"
+	if !strings.HasPrefix(result.RuleRef, "category/java/") {
+		// Try to fix old format (rulesets/java/...) to new format (category/java/...)
+		if strings.HasPrefix(result.RuleRef, "rulesets/java/") {
+			result.RuleRef = strings.Replace(result.RuleRef, "rulesets/java/", "category/java/", 1)
+		} else {
+			return nil, nil // Invalid format, skip this rule
+		}
+	}
+
+	// Validate priority range
+	if result.Priority < 1 {
+		result.Priority = 3
+	}
+	if result.Priority > 5 {
+		result.Priority = 5
 	}
 
 	return &pmdRule{
