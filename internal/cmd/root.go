@@ -20,7 +20,7 @@ var rootCmd = &cobra.Command{
 Features:
   - Natural language policy definition (A → B schema conversion)
   - Multi-engine code validation (Pattern, Length, Style, AST)
-  - Role-based file access control with GitHub OAuth
+  - Local role-based file access control
   - Web dashboard for policy and role management
   - Template system for popular frameworks`,
 }
@@ -36,14 +36,10 @@ func init() {
 	// Global flags
 	rootCmd.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "enable verbose output")
 
-	// symphonyclient integration: Added symphonyclient commands
-	rootCmd.AddCommand(configCmd)
-	rootCmd.AddCommand(loginCmd)
-	rootCmd.AddCommand(logoutCmd)
+	// Core commands
 	rootCmd.AddCommand(initCmd)
 	rootCmd.AddCommand(dashboardCmd)
 	rootCmd.AddCommand(myRoleCmd)
-	rootCmd.AddCommand(whoamiCmd)
 	rootCmd.AddCommand(policyCmd)
 	// Note: mcpCmd is registered in mcp.go's init()
 

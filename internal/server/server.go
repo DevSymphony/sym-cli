@@ -13,15 +13,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/envutil"
-	"github.com/DevSymphony/sym-cli/internal/git"
-	"github.com/DevSymphony/sym-cli/internal/github"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
-	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration
+	"github.com/DevSymphony/sym-cli/pkg/schema"
 
 	"github.com/pkg/browser"
 )
@@ -30,31 +27,13 @@ import (
 var staticFiles embed.FS
 
 type Server struct {
-	port         int
-	cfg          *config.Config
-	token        *config.Token
-	githubClient *github.Client
+	port int
 }
 
 // NewServer creates a new dashboard server
 func NewServer(port int) (*Server, error) {
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		return nil, err
-	}
-
-	token, err := config.LoadToken()
-	if err != nil {
-		return nil, err
-	}
-
-	githubClient := github.NewClient(cfg.GetGitHubHost(), token.AccessToken)
-
 	return &Server{
-		port:         port,
-		cfg:          cfg,
-		token:        token,
-		githubClient: githubClient,
+		port: port,
 	}, nil
 }
 
@@ -64,8 +43,10 @@ func (s *Server) Start() error {
 
 	// API endpoints
 	mux.HandleFunc("/api/me", s.handleGetMe)
+	mux.HandleFunc("/api/select-role", s.handleSelectRole)
+	mux.HandleFunc("/api/available-roles", s.handleAvailableRoles)
 	mux.HandleFunc("/api/roles", s.handleRoles)
-	mux.HandleFunc("/api/repo-info", s.handleRepoInfo)
+	mux.HandleFunc("/api/project-info", s.handleProjectInfo)
 
 	// Policy API endpoints
 	mux.HandleFunc("/api/policy", s.handlePolicy)
@@ -115,48 +96,25 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *Server) hasPermission(username, permission string) (bool, error) {
+// hasPermissionForRole checks if a role has a specific permission
+func (s *Server) hasPermissionForRole(role, permission string) (bool, error) {
 	// Load policy to check RBAC permissions
-	policyData, err := policy.LoadPolicy(s.cfg.PolicyPath)
+	policyPath := envutil.GetPolicyPath()
+	if policyPath == "" {
+		policyPath = ".sym/user-policy.json"
+	}
+
+	policyData, err := policy.LoadPolicy(policyPath)
 	if err != nil {
 		return false, fmt.Errorf("failed to load policy: %w", err)
 	}
 
-	return s.hasPermissionWithPolicy(username, permission, policyData)
+	return s.checkPermissionForRole(role, permission, policyData)
 }
 
-func (s *Server) hasPermissionWithPolicy(username, permission string, policyData *schema.UserPolicy) (bool, error) {
-	// Load user's role from roles.json
-	userRole, err := roles.GetUserRole(username)
-	if err != nil {
-		return false, fmt.Errorf("failed to get user role: %w", err)
-	}
-
-	return s.checkPermissionForRole(userRole, permission, policyData)
-}
-
-func (s *Server) hasPermissionWithRoles(username, permission string, rolesData roles.Roles) (bool, error) {
-	// Find user's role from the given roles
-	userRole := "none"
-	for roleName, usernames := range rolesData {
-		for _, user := range usernames {
-			if user == username {
-				userRole = roleName
-				break
-			}
-		}
-		if userRole != "none" {
-			break
-		}
-	}
-
-	// Load policy to check RBAC permissions
-	policyData, err := policy.LoadPolicy(s.cfg.PolicyPath)
-	if err != nil {
-		return false, fmt.Errorf("failed to load policy: %w", err)
-	}
-
-	return s.checkPermissionForRole(userRole, permission, policyData)
+// hasPermissionForRoleWithPolicy checks permission using provided policy data
+func (s *Server) hasPermissionForRoleWithPolicy(role, permission string, policyData *schema.UserPolicy) (bool, error) {
+	return s.checkPermissionForRole(role, permission, policyData)
 }
 
 // checkPermissionForRole checks if a role has a specific permission in the policy
@@ -194,36 +152,26 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := s.githubClient.GetCurrentUser()
+	// Get current role from local file
+	role, err := roles.GetCurrentRole()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to get current role: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Get user role
-	role, err := roles.GetUserRole(user.Login)
+	// Get user permissions based on current role
+	canEditPolicy, err := s.hasPermissionForRole(role, "editPolicy")
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get role: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	// Get user permissions
-	canEditPolicy, err := s.hasPermission(user.Login, "editPolicy")
-	if err != nil {
-		// If there's an error checking permissions, default to false
 		canEditPolicy = false
 	}
 
-	canEditRoles, err := s.hasPermission(user.Login, "editRoles")
+	canEditRoles, err := s.hasPermissionForRole(role, "editRoles")
 	if err != nil {
-		// If there's an error checking permissions, default to false
 		canEditRoles = false
 	}
 
 	response := map[string]interface{}{
-		"username": user.Login,
-		"name":     user.Name,
-		"role":     role,
+		"role": role,
 		"permissions": map[string]bool{
 			"canEditPolicy": canEditPolicy,
 			"canEditRoles":  canEditRoles,
@@ -232,6 +180,70 @@ func (s *Server) handleGetMe(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(response)
+}
+
+// handleSelectRole handles POST request to select a role
+func (s *Server) handleSelectRole(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	var req struct {
+		Role string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid JSON", http.StatusBadRequest)
+		return
+	}
+
+	// Validate that the role exists
+	valid, err := roles.IsValidRole(req.Role)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to validate role: %v", err), http.StatusInternalServerError)
+		return
+	}
+	if !valid {
+		http.Error(w, fmt.Sprintf("Invalid role: %s", req.Role), http.StatusBadRequest)
+		return
+	}
+
+	// Save the selected role
+	if err := roles.SetCurrentRole(req.Role); err != nil {
+		http.Error(w, fmt.Sprintf("Failed to save role: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	// Get permissions for the new role
+	canEditPolicy, _ := s.hasPermissionForRole(req.Role, "editPolicy")
+	canEditRoles, _ := s.hasPermissionForRole(req.Role, "editRoles")
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status": "success",
+		"role":   req.Role,
+		"permissions": map[string]bool{
+			"canEditPolicy": canEditPolicy,
+			"canEditRoles":  canEditRoles,
+		},
+	})
+}
+
+// handleAvailableRoles returns the list of available roles
+func (s *Server) handleAvailableRoles(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	availableRoles, err := roles.GetAvailableRoles()
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to get available roles: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(availableRoles)
 }
 
 // handleRoles handles GET and POST requests for roles
@@ -260,14 +272,26 @@ func (s *Server) handleGetRoles(w http.ResponseWriter, r *http.Request) {
 
 // handleUpdateRoles updates the roles (requires editRoles permission)
 func (s *Server) handleUpdateRoles(w http.ResponseWriter, r *http.Request) {
-	// Get current user
-	user, err := s.githubClient.GetCurrentUser()
+	// Get current role
+	currentRole, err := roles.GetCurrentRole()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to get current role: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Parse request body first (need to check permission against the NEW roles)
+	// Check if current role has permission to edit roles
+	canEdit, err := s.hasPermissionForRole(currentRole, "editRoles")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to check permissions: %v", err), http.StatusInternalServerError)
+		return
+	}
+
+	if !canEdit {
+		http.Error(w, "Forbidden: You don't have permission to update roles", http.StatusForbidden)
+		return
+	}
+
+	// Parse request body
 	body, err := io.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
@@ -277,19 +301,6 @@ func (s *Server) handleUpdateRoles(w http.ResponseWriter, r *http.Request) {
 	var newRoles roles.Roles
 	if err := json.Unmarshal(body, &newRoles); err != nil {
 		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	// Check if user has permission to edit roles using the NEW roles
-	// (because the user's role might have changed)
-	canEdit, err := s.hasPermissionWithRoles(user.Login, "editRoles", newRoles)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to check permissions: %v", err), http.StatusInternalServerError)
-		return
-	}
-
-	if !canEdit {
-		http.Error(w, "Forbidden: You don't have permission to update roles", http.StatusForbidden)
 		return
 	}
 
@@ -306,21 +317,22 @@ func (s *Server) handleUpdateRoles(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func (s *Server) handleRepoInfo(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleProjectInfo(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
 
-	owner, repo, err := git.GetRepoInfo()
+	// Get current working directory name as project name
+	cwd, err := os.Getwd()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get repo info: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to get current directory: %v", err), http.StatusInternalServerError)
 		return
 	}
 
+	projectName := filepath.Base(cwd)
 	response := map[string]string{
-		"owner": owner,
-		"repo":  repo,
+		"project": projectName,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -360,10 +372,10 @@ func (s *Server) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
 
 // handleSavePolicy saves the policy (requires editPolicy permission)
 func (s *Server) handleSavePolicy(w http.ResponseWriter, r *http.Request) {
-	// Get current user
-	user, err := s.githubClient.GetCurrentUser()
+	// Get current role
+	currentRole, err := roles.GetCurrentRole()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to get current role: %v", err), http.StatusInternalServerError)
 		return
 	}
 
@@ -380,9 +392,8 @@ func (s *Server) handleSavePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Check if user has permission to edit policy using the NEW policy
-	// (because the user's role might have changed and the new role might only exist in the new policy)
-	canEdit, err := s.hasPermissionWithPolicy(user.Login, "editPolicy", &newPolicy)
+	// Check if current role has permission to edit policy using the NEW policy
+	canEdit, err := s.hasPermissionForRoleWithPolicy(currentRole, "editPolicy", &newPolicy)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to check permissions: %v", err), http.StatusInternalServerError)
 		return
@@ -447,15 +458,15 @@ func (s *Server) handlePolicyPath(w http.ResponseWriter, r *http.Request) {
 
 // handleSetPolicyPath sets the policy path (requires editPolicy permission)
 func (s *Server) handleSetPolicyPath(w http.ResponseWriter, r *http.Request) {
-	// Get current user
-	user, err := s.githubClient.GetCurrentUser()
+	// Get current role
+	currentRole, err := roles.GetCurrentRole()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to get current role: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Check if user has permission to edit policy
-	canEdit, err := s.hasPermission(user.Login, "editPolicy")
+	// Check if current role has permission to edit policy
+	canEdit, err := s.hasPermissionForRole(currentRole, "editPolicy")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to check permissions: %v", err), http.StatusInternalServerError)
 		return
@@ -628,15 +639,15 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get current user
-	user, err := s.githubClient.GetCurrentUser()
+	// Get current role
+	currentRole, err := roles.GetCurrentRole()
 	if err != nil {
-		http.Error(w, fmt.Sprintf("Failed to get user: %v", err), http.StatusInternalServerError)
+		http.Error(w, fmt.Sprintf("Failed to get current role: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	// Check if user has permission to edit policy
-	canEdit, err := s.hasPermission(user.Login, "editPolicy")
+	// Check if current role has permission to edit policy
+	canEdit, err := s.hasPermissionForRole(currentRole, "editPolicy")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Failed to check permissions: %v", err), http.StatusInternalServerError)
 		return

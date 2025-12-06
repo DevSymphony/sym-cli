@@ -9,7 +9,7 @@ let appState = {
         defaults: {},
         rules: []
     },
-    users: [],
+    availableRoles: [],
     templates: [],
     isDirty: false,
     originalRules: null, // Store original rules to detect changes
@@ -24,6 +24,59 @@ let appState = {
     }
 };
 
+// ==================== Role Color System ====================
+// Hash-based color generation for consistent role colors
+function getRoleColor(roleName) {
+    // Preset colors for default roles
+    const presetColors = {
+        'admin': { bg: 'bg-purple-100', text: 'text-purple-700', border: 'border-purple-300', bgHex: '#f3e8ff' },
+        'developer': { bg: 'bg-blue-100', text: 'text-blue-700', border: 'border-blue-300', bgHex: '#dbeafe' },
+        'viewer': { bg: 'bg-gray-100', text: 'text-gray-700', border: 'border-gray-300', bgHex: '#f3f4f6' }
+    };
+
+    if (presetColors[roleName]) return presetColors[roleName];
+
+    // Dynamic colors for custom roles - generate consistent color from role name hash
+    const dynamicColors = [
+        { bg: 'bg-green-100', text: 'text-green-700', border: 'border-green-300', bgHex: '#dcfce7' },
+        { bg: 'bg-yellow-100', text: 'text-yellow-700', border: 'border-yellow-300', bgHex: '#fef9c3' },
+        { bg: 'bg-red-100', text: 'text-red-700', border: 'border-red-300', bgHex: '#fee2e2' },
+        { bg: 'bg-pink-100', text: 'text-pink-700', border: 'border-pink-300', bgHex: '#fce7f3' },
+        { bg: 'bg-indigo-100', text: 'text-indigo-700', border: 'border-indigo-300', bgHex: '#e0e7ff' },
+        { bg: 'bg-teal-100', text: 'text-teal-700', border: 'border-teal-300', bgHex: '#ccfbf1' },
+        { bg: 'bg-orange-100', text: 'text-orange-700', border: 'border-orange-300', bgHex: '#ffedd5' },
+    ];
+
+    // Calculate hash from role name for consistent color assignment
+    const hash = roleName.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return dynamicColors[hash % dynamicColors.length];
+}
+
+// Get permission badges based on permissions
+function getPermissionBadges(permissions) {
+    const badges = [];
+
+    if (permissions?.canEditPolicy) {
+        badges.push({ text: '정책 편집', icon: '/icons/edit.svg', bg: 'bg-green-100', textColor: 'text-green-700' });
+    }
+    if (permissions?.canEditRoles) {
+        badges.push({ text: '역할 편집', icon: '/icons/users.svg', bg: 'bg-blue-100', textColor: 'text-blue-700' });
+    }
+
+    if (badges.length === 0) {
+        badges.push({ text: '읽기 전용', icon: '/icons/lock.svg', bg: 'bg-gray-100', textColor: 'text-gray-600' });
+    }
+
+    return badges;
+}
+
+// Render permission badge HTML with icon
+function renderPermissionBadge(badge) {
+    return `<span class="text-xs font-medium px-2 py-1 rounded-full ${badge.bg} ${badge.textColor} flex items-center gap-1">
+        <img src="${badge.icon}" alt="" class="w-3 h-3 opacity-70">${badge.text}
+    </span>`;
+}
+
 // ==================== API Calls ====================
 const API = {
     async getMe() {
@@ -31,8 +84,23 @@ const API = {
         return await res.json();
     },
 
-    async getRepoInfo() {
-        const res = await fetch('/api/repo-info');
+    async getProjectInfo() {
+        const res = await fetch('/api/project-info');
+        return await res.json();
+    },
+
+    async getAvailableRoles() {
+        const res = await fetch('/api/available-roles');
+        return await res.json();
+    },
+
+    async selectRole(role) {
+        const res = await fetch('/api/select-role', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ role })
+        });
+        if (!res.ok) throw new Error(await res.text());
         return await res.json();
     },
 
@@ -313,165 +381,78 @@ function addLanguagesToDefaults(languages) {
     return addedCount;
 }
 
-// ==================== User Management ====================
-function renderUsers() {
-    const container = document.getElementById('users-container');
-    const searchTerm = document.getElementById('user-search').value.toLowerCase();
+// ==================== Role Selection ====================
+function renderRoleSelection() {
+    const container = document.getElementById('role-selection-container');
+    if (!container) return;
 
-    const filteredUsers = appState.users.filter(u =>
-        u.username.toLowerCase().includes(searchTerm)
-    );
+    const availableRoles = appState.availableRoles || [];
+    const currentRole = appState.currentUser?.role || '';
 
-    if (filteredUsers.length === 0) {
-        container.innerHTML = '<div class="text-center text-slate-500 py-4">사용자가 없습니다</div>';
+    if (availableRoles.length === 0) {
+        container.innerHTML = '<div class="text-center text-slate-500 py-4">사용 가능한 역할이 없습니다</div>';
         return;
     }
 
-    container.innerHTML = filteredUsers.map(user => {
-        // Get all available roles from RBAC + default roles
-        const availableRoles = getAvailableRoles();
-        const roleOptions = availableRoles.map(role =>
-            `<option value="${role}" ${user.role === role ? 'selected' : ''}>${role.charAt(0).toUpperCase() + role.slice(1)}</option>`
-        ).join('');
+    container.innerHTML = availableRoles.map(role => {
+        const isCurrentRole = role === currentRole;
+        const roleConfig = appState.policy.rbac?.roles?.[role] || {};
+        const roleColor = getRoleColor(role);
+        const permBadges = getPermissionBadges({ canEditPolicy: roleConfig.canEditPolicy, canEditRoles: roleConfig.canEditRoles });
+        const badgesHtml = permBadges.map(renderPermissionBadge).join('');
 
         return `
-        <div class="flex items-center justify-between p-3 bg-gray-50 rounded-md border border-gray-200 hover:bg-gray-100">
-            <div class="flex items-center gap-3">
-                <div class="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-purple-500 flex items-center justify-center text-white font-bold text-sm">
-                    ${user.username.charAt(0).toUpperCase()}
-                </div>
-                <div>
-                    <div class="font-medium text-slate-800">${user.username}</div>
-                    <div class="text-xs text-slate-500">GitHub ID</div>
-                </div>
+        <button class="role-select-btn p-4 text-left rounded-lg border-2 transition-all ${
+            isCurrentRole
+                ? `${roleColor.border} ${roleColor.bg} ring-2 ring-opacity-50`
+                : 'border-gray-200 hover:border-gray-300 bg-white hover:bg-gray-50'
+        }" data-role="${role}" style="${isCurrentRole ? `--tw-ring-color: ${roleColor.bgHex}` : ''}">
+            <div class="flex items-center justify-between mb-2">
+                <span class="font-semibold text-lg px-2 py-0.5 rounded ${roleColor.bg} ${roleColor.text}">${role}</span>
+                ${isCurrentRole ? '<span class="text-xs bg-slate-700 text-white px-2 py-1 rounded">현재</span>' : ''}
             </div>
-            <div class="flex items-center gap-2">
-                <select class="user-role-select px-3 py-1 border border-gray-300 rounded-md text-sm" data-username="${user.username}">
-                    ${roleOptions}
-                </select>
-                <button class="delete-user-btn px-2 py-1 text-red-500 hover:bg-red-50 rounded" data-username="${user.username}">&times;</button>
-            </div>
-        </div>
+            <div class="flex gap-1 flex-wrap">${badgesHtml}</div>
+        </button>
         `;
     }).join('');
 
-    // Attach event listeners
-    document.querySelectorAll('.user-role-select').forEach(select => {
-        select.addEventListener('change', handleUserRoleChange);
-    });
-
-    document.querySelectorAll('.delete-user-btn').forEach(btn => {
-        btn.addEventListener('click', handleDeleteUser);
-    });
-
-    // Apply permissions to dynamically rendered elements
-    if (appState.currentUser?.permissions) {
-        applyPermissions();
-    }
-}
-
-async function handleUserRoleChange(e) {
-    const username = e.target.dataset.username;
-    const newRole = e.target.value;
-
-    const user = appState.users.find(u => u.username === username);
-    if (user) {
-        user.role = newRole;
-
-        // If this is the current user, update the badge immediately
-        if (username === appState.currentUser.username) {
-            appState.currentUser.role = newRole;
-            updateUserRoleBadge(newRole);
-        }
-
-        await syncUsersToRoles();
-        showToast(`${username}의 역할이 ${newRole}로 변경되었습니다`);
-        markDirty();
-    }
-}
-
-async function handleDeleteUser(e) {
-    const username = e.target.dataset.username;
-
-    // Safety check: Ensure at least one policy editor remains
-    const userToDelete = appState.users.find(u => u.username === username);
-    if (!userToDelete) return;
-
-    // Check if this user has policy edit permission
-    const userRole = appState.policy.rbac?.roles?.[userToDelete.role];
-    if (userRole && userRole.canEditPolicy) {
-        // Count how many users with policy edit permission exist
-        const policyEditors = appState.users.filter(u => {
-            const role = appState.policy.rbac?.roles?.[u.role];
-            return role && role.canEditPolicy;
-        });
-
-        // If this is the last policy editor, prevent deletion
-        if (policyEditors.length === 1) {
-            alert(`❌ ${username}은(는) 유일한 정책 편집자입니다.\n\n최소 한 명의 정책 편집자는 남아있어야 합니다.\n먼저 다른 사용자에게 정책 편집 권한을 부여한 후 삭제해주세요.`);
-            return;
-        }
-    }
-
-    if (!confirm(`${username}을(를) 삭제하시겠습니까?`)) return;
-
-    appState.users = appState.users.filter(u => u.username !== username);
-    await syncUsersToRoles();
-    renderUsers();
-    showToast(`${username}이(가) 삭제되었습니다`);
-    markDirty();
-}
-
-async function handleAddUser() {
-    const username = prompt('새 사용자의 GitHub ID를 입력하세요:');
-    if (!username || !username.trim()) return;
-
-    const trimmedUsername = username.trim();
-
-    if (appState.users.some(u => u.username === trimmedUsername)) {
-        showToast('이미 존재하는 사용자입니다', 'error');
-        return;
-    }
-
-    appState.users.push({ username: trimmedUsername, role: 'viewer' });
-    await syncUsersToRoles();
-    renderUsers();
-    showToast(`${trimmedUsername}이(가) 추가되었습니다`);
-    markDirty();
-}
-
-async function syncUsersToRoles() {
-    const roles = { admin: [], developer: [], viewer: [] };
-
-    appState.users.forEach(user => {
-        if (roles[user.role]) {
-            roles[user.role].push(user.username);
-        }
-    });
-
-    // Update policy RBAC if needed
-    // (This function updates appState.users based on roles.json)
-}
-
-async function loadUsersFromRoles() {
-    try {
-        const rolesData = await API.getRoles();
-        const users = [];
-
-        // Load all roles dynamically, not just admin/developer/viewer
-        Object.entries(rolesData).forEach(([role, usernames]) => {
-            if (Array.isArray(usernames)) {
-                usernames.forEach(username => {
-                    users.push({ username, role });
-                });
+    // Attach click handlers
+    container.querySelectorAll('.role-select-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            const selectedRole = e.currentTarget.dataset.role;
+            if (selectedRole !== currentRole) {
+                await selectRole(selectedRole);
             }
         });
+    });
+}
 
-        appState.users = users;
-        renderUsers();
+async function selectRole(role) {
+    try {
+        const result = await API.selectRole(role);
+
+        // Update current user state
+        appState.currentUser.role = result.role;
+        appState.currentUser.permissions = result.permissions;
+
+        // Update header UI
+        updateUserRoleBadge(result.role);
+        updatePermissionBadges(result.permissions);
+
+        // Re-render all UI sections first
+        renderRoleSelection();
+        renderRBAC();
+        renderRules();
+        renderLanguageTags();
+
+        // Apply permissions AFTER all renders so new elements get proper state
+        applyPermissions();
+
+        showToast(`역할이 '${result.role}'(으)로 변경되었습니다`);
+
     } catch (error) {
-        console.error('Failed to load users:', error);
-        showToast('사용자 목록을 불러오는데 실패했습니다', 'error');
+        console.error('Failed to select role:', error);
+        showToast('역할 변경에 실패했습니다: ' + error.message, 'error');
     }
 }
 
@@ -782,19 +763,18 @@ function handleRBACUpdate(e) {
             appState.policy.rbac.roles[newRoleName] = appState.policy.rbac.roles[oldRoleName];
             delete appState.policy.rbac.roles[oldRoleName];
 
-            // Update all users with this role
-            appState.users.forEach(user => {
-                if (user.role === oldRoleName) {
-                    user.role = newRoleName;
-                }
-            });
-
             roleCard.dataset.roleName = newRoleName;
             // Update all related elements
             roleCard.querySelectorAll('[data-role-name]').forEach(el => {
                 el.dataset.roleName = newRoleName;
             });
-            renderUsers(); // Update user role dropdowns when role name changes
+
+            // Update available roles list
+            const index = appState.availableRoles.indexOf(oldRoleName);
+            if (index !== -1) {
+                appState.availableRoles[index] = newRoleName;
+            }
+            renderRoleSelection();
             showToast(`역할 이름이 "${oldRoleName}"에서 "${newRoleName}"(으)로 변경되었습니다`);
         }
     } else {
@@ -820,19 +800,24 @@ function handleRBACUpdate(e) {
 function handleDeleteRBACRole(e) {
     const roleName = e.target.dataset.roleName;
 
-    // Check if any users have this role
-    const usersWithRole = appState.users.filter(u => u.role === roleName);
-    if (usersWithRole.length > 0) {
-        const usernames = usersWithRole.map(u => u.username).join(', ');
-        alert(`❌ 이 역할을 사용 중인 사용자가 있어 삭제할 수 없습니다.\n\n사용자: ${usernames}\n\n먼저 해당 사용자들의 역할을 변경한 후 삭제해주세요.`);
+    // Check if this is the currently selected role
+    if (roleName === appState.currentUser?.role) {
+        alert(`❌ 현재 선택된 역할은 삭제할 수 없습니다.\n\n다른 역할을 선택한 후 삭제해주세요.`);
         return;
     }
 
     if (!confirm(`${roleName} 역할을 삭제하시겠습니까?`)) return;
 
     delete appState.policy.rbac.roles[roleName];
+
+    // Update available roles list
+    const index = appState.availableRoles.indexOf(roleName);
+    if (index !== -1) {
+        appState.availableRoles.splice(index, 1);
+    }
+
     renderRBAC();
-    renderUsers(); // Update user role dropdowns
+    renderRoleSelection();
     showToast(`${roleName} 역할이 삭제되었습니다`);
     markDirty();
 }
@@ -1019,12 +1004,6 @@ async function savePolicy() {
     }
 
     try {
-        // Sync current user role first (in case it was changed in the UI)
-        const currentUserInList = appState.users.find(u => u.username === appState.currentUser.username);
-        if (currentUserInList) {
-            appState.currentUser.role = currentUserInList.role;
-        }
-
         // Validate: At least one role must have canEditPolicy permission
         if (appState.policy.rbac && appState.policy.rbac.roles) {
             const hasAtLeastOneEditor = Object.values(appState.policy.rbac.roles).some(role => role.canEditPolicy);
@@ -1034,25 +1013,16 @@ async function savePolicy() {
             }
         }
 
-        // Check if current user is losing policy edit privileges
-        const currentUser = appState.users.find(u => u.username === appState.currentUser.username);
+        // Check if current role is losing policy edit privileges
         const currentRole = appState.currentUser.role;
-        const newRole = currentUser?.role;
+        const currentRoleData = appState.policy.rbac?.roles?.[currentRole];
 
-        if (currentRole && newRole && currentRole !== newRole) {
-            // Check if current user is losing policy edit permission
-            const currentRoleData = appState.policy.rbac?.roles?.[currentRole];
-            const newRoleData = appState.policy.rbac?.roles?.[newRole];
-
-            if (currentRoleData?.canEditPolicy && !newRoleData?.canEditPolicy) {
-                const confirmLoss = confirm(
-                    `⚠️ 경고: 자신의 정책 편집 권한을 제거하려고 합니다.\n\n` +
-                    `현재 역할: ${currentRole}\n` +
-                    `변경될 역할: ${newRole}\n\n` +
-                    `정책 편집 권한을 잃으면 정책을 수정할 수 없게 됩니다.\n계속하시겠습니까?`
-                );
-                if (!confirmLoss) return;
-            }
+        if (currentRoleData && !currentRoleData.canEditPolicy) {
+            const confirmLoss = confirm(
+                `⚠️ 경고: 현재 역할(${currentRole})에서 정책 편집 권한을 제거하려고 합니다.\n\n` +
+                `정책 편집 권한을 잃으면 정책을 수정할 수 없게 됩니다.\n계속하시겠습니까?`
+            );
+            if (!confirmLoss) return;
         }
 
         // Update defaults from UI
@@ -1062,28 +1032,11 @@ async function savePolicy() {
         appState.policy.defaults.severity = document.getElementById('defaults-severity').value || undefined;
         appState.policy.defaults.defaultLanguage = document.getElementById('defaults-default-language').value || undefined;
 
-        // Collect roles from users
-        const roles = {};
-        appState.users.forEach(user => {
-            if (!roles[user.role]) {
-                roles[user.role] = [];
-            }
-            roles[user.role].push(user.username);
-        });
-
-        // Ensure default roles exist even if empty
-        if (!roles.admin) roles.admin = [];
-        if (!roles.developer) roles.developer = [];
-        if (!roles.viewer) roles.viewer = [];
-
-        console.log('[DEBUG] Saving roles:', roles);
-        console.log('[DEBUG] Current user role:', appState.currentUser.role);
+        console.log('[DEBUG] Current role:', appState.currentUser.role);
         console.log('[DEBUG] Policy RBAC roles:', Object.keys(appState.policy.rbac?.roles || {}));
 
-        // IMPORTANT: Save policy FIRST (so RBAC roles are defined)
-        // Then save roles (so permission checks can find the role in RBAC)
+        // Save policy
         await API.savePolicy(appState.policy);
-        await API.saveRoles(roles);
 
         // Save policy path if changed
         const newPath = document.getElementById('policy-path-input').value.trim();
@@ -1181,7 +1134,6 @@ async function loadPolicy() {
         console.log('Policy loaded. Rules count:', appState.policy.rules.length);
         console.log('Original rules stored:', appState.originalRules.substring(0, 100) + '...');
         console.log('Original RBAC stored:', appState.originalRBAC.substring(0, 100) + '...');
-        await loadUsersFromRoles();
         renderAll();
         showToast('정책을 불러왔습니다');
     } catch (error) {
@@ -1247,23 +1199,25 @@ async function saveSettings() {
 // Update user role badge display
 function updateUserRoleBadge(role) {
     const roleBadge = document.getElementById('user-role-badge');
+    const roleColor = getRoleColor(role);
     roleBadge.textContent = role;
-    roleBadge.className = `badge text-xs px-2 py-1 rounded-full ${
-        role === 'admin' ? 'bg-yellow-400 text-slate-900' :
-        role === 'developer' ? 'bg-blue-500 text-white' :
-        'bg-gray-400 text-white'
-    }`;
+    roleBadge.className = `font-semibold text-sm px-3 py-1 rounded-full ${roleColor.bg} ${roleColor.text}`;
+}
+
+function updatePermissionBadges(permissions) {
+    const container = document.getElementById('permission-badges');
+    if (!container) return;
+    const badges = getPermissionBadges(permissions);
+    container.innerHTML = badges.map(renderPermissionBadge).join('');
 }
 
 // Update user info display in header
 function updateUserInfo() {
-    const currentUser = appState.users.find(u => u.username === appState.currentUser.username);
-    if (currentUser) {
-        // Update appState.currentUser.role
-        appState.currentUser.role = currentUser.role;
-
+    // In role-based mode, just update the display with current role
+    const currentRole = appState.currentUser.role;
+    if (currentRole) {
         // Update badge display
-        updateUserRoleBadge(currentUser.role);
+        updateUserRoleBadge(currentRole);
     }
 }
 
@@ -1282,8 +1236,8 @@ function renderAll() {
     // Rules
     renderRules();
 
-    // Users (to update role dropdowns if RBAC roles changed)
-    renderUsers();
+    // Role selection
+    renderRoleSelection();
 }
 
 // ==================== Permission-Based UI ====================
@@ -1294,8 +1248,57 @@ function applyPermissions() {
 
     console.log('[Permissions] canEditPolicy:', canEditPolicy, 'canEditRoles:', canEditRoles);
 
-    // When canEditPolicy = false: Read-only policy UI
-    if (!canEditPolicy) {
+    if (canEditPolicy) {
+        // Show save buttons
+        document.getElementById('save-btn')?.classList.remove('hidden');
+        document.getElementById('floating-save-btn')?.classList.remove('hidden');
+
+        // Show template button
+        document.getElementById('template-btn')?.classList.remove('hidden');
+
+        // Enable RBAC inputs and show add/delete buttons
+        document.querySelectorAll('.role-name-input, .role-allowWrite-input, .role-denyWrite-input').forEach(el => {
+            el.disabled = false;
+            el.classList.remove('bg-gray-200', 'cursor-not-allowed');
+        });
+        document.querySelectorAll('.role-canEditPolicy-input, .role-canEditRoles-input').forEach(el => {
+            el.disabled = false;
+            el.classList.remove('cursor-not-allowed');
+        });
+        document.querySelectorAll('.delete-rbac-role-btn').forEach(el => el.classList.remove('hidden'));
+        document.getElementById('add-role-btn')?.classList.remove('hidden');
+
+        // Enable defaults inputs
+        const langInput = document.getElementById('defaults-language-input');
+        if (langInput) {
+            langInput.disabled = false;
+            langInput.classList.remove('bg-gray-200', 'cursor-not-allowed');
+        }
+        document.getElementById('add-language-btn')?.classList.remove('hidden');
+        const defaultLang = document.getElementById('defaults-default-language');
+        if (defaultLang) {
+            defaultLang.disabled = false;
+            defaultLang.classList.remove('bg-gray-200', 'cursor-not-allowed');
+        }
+        const severity = document.getElementById('defaults-severity');
+        if (severity) {
+            severity.disabled = false;
+            severity.classList.remove('bg-gray-200', 'cursor-not-allowed');
+        }
+        // Show remove buttons on language tags
+        document.querySelectorAll('.remove-language-btn').forEach(el => el.classList.remove('hidden'));
+
+        // Show rule add/edit/delete buttons
+        document.getElementById('add-rule-btn')?.classList.remove('hidden');
+        document.getElementById('add-rule-btn-bottom')?.classList.remove('hidden');
+        document.querySelectorAll('.delete-rule-btn').forEach(el => el.classList.remove('hidden'));
+
+        // Enable rule inputs
+        document.querySelectorAll('.say-input, .category-select, .language-select, .example-input').forEach(el => {
+            el.disabled = false;
+            el.classList.remove('bg-gray-200', 'cursor-not-allowed');
+        });
+    } else {
         // Hide save buttons
         document.getElementById('save-btn')?.classList.add('hidden');
         document.getElementById('floating-save-btn')?.classList.add('hidden');
@@ -1316,13 +1319,22 @@ function applyPermissions() {
         document.getElementById('add-role-btn')?.classList.add('hidden');
 
         // Disable defaults inputs
-        document.getElementById('defaults-language-input').disabled = true;
-        document.getElementById('defaults-language-input').classList.add('bg-gray-200', 'cursor-not-allowed');
+        const langInput = document.getElementById('defaults-language-input');
+        if (langInput) {
+            langInput.disabled = true;
+            langInput.classList.add('bg-gray-200', 'cursor-not-allowed');
+        }
         document.getElementById('add-language-btn')?.classList.add('hidden');
-        document.getElementById('defaults-default-language').disabled = true;
-        document.getElementById('defaults-default-language').classList.add('bg-gray-200', 'cursor-not-allowed');
-        document.getElementById('defaults-severity').disabled = true;
-        document.getElementById('defaults-severity').classList.add('bg-gray-200', 'cursor-not-allowed');
+        const defaultLang = document.getElementById('defaults-default-language');
+        if (defaultLang) {
+            defaultLang.disabled = true;
+            defaultLang.classList.add('bg-gray-200', 'cursor-not-allowed');
+        }
+        const severity = document.getElementById('defaults-severity');
+        if (severity) {
+            severity.disabled = true;
+            severity.classList.add('bg-gray-200', 'cursor-not-allowed');
+        }
         // Hide remove buttons on language tags
         document.querySelectorAll('.remove-language-btn').forEach(el => el.classList.add('hidden'));
 
@@ -1338,61 +1350,32 @@ function applyPermissions() {
         });
     }
 
-    // When canEditRoles = false: Read-only user management
-    if (!canEditRoles) {
-        // Hide "Add User" button
-        document.getElementById('add-user-btn')?.classList.add('hidden');
+    // Note: canEditRoles permission is no longer used for user management
+    // Role selection is always allowed for all users
 
-        // Hide user delete buttons
-        document.querySelectorAll('.delete-user-btn').forEach(el => el.classList.add('hidden'));
-
-        // Disable role dropdown
-        document.querySelectorAll('.user-role-select').forEach(el => {
-            el.disabled = true;
-            el.classList.add('bg-gray-200', 'cursor-not-allowed');
-        });
-    }
-
-    // Add read-only badge if any permission is missing
-    if (!canEditPolicy || !canEditRoles) {
-        const roleBadgeContainer = document.getElementById('user-role-badge').parentElement;
-        if (!document.getElementById('readonly-badge')) {
-            const readonlyBadge = document.createElement('span');
-            readonlyBadge.id = 'readonly-badge';
-            readonlyBadge.className = 'badge text-xs px-2 py-1 rounded-full bg-gray-500 text-white flex items-center gap-1';
-            readonlyBadge.innerHTML = `
-                <img src="/icons/lock.svg" alt="Lock" class="w-3 h-3">
-                읽기 전용
-            `;
-            readonlyBadge.title = !canEditPolicy && !canEditRoles ? '정책과 역할 모두 읽기 전용입니다' :
-                                  !canEditPolicy ? '정책이 읽기 전용입니다' :
-                                  '역할이 읽기 전용입니다';
-            roleBadgeContainer.appendChild(readonlyBadge);
-        }
-    }
+    // Remove any existing readonly badge (legacy cleanup)
+    const existingReadonlyBadge = document.getElementById('readonly-badge');
+    if (existingReadonlyBadge) existingReadonlyBadge.remove();
 }
 
 // ==================== Initialize ====================
 async function init() {
     try {
-        // Load current user
+        // Load current user (now returns role-based identity)
         appState.currentUser = await API.getMe();
-        document.getElementById('user-name').textContent = appState.currentUser.username;
-        document.getElementById('user-avatar').textContent = appState.currentUser.username.charAt(0).toUpperCase();
 
-        const roleBadge = document.getElementById('user-role-badge');
-        roleBadge.textContent = appState.currentUser.role;
-        roleBadge.className = `badge text-xs px-2 py-1 rounded-full ${
-            appState.currentUser.role === 'admin' ? 'bg-yellow-400 text-slate-900' :
-            appState.currentUser.role === 'developer' ? 'bg-blue-500 text-white' :
-            'bg-gray-400 text-white'
-        }`;
+        // Display current role with new compact UI
+        updateUserRoleBadge(appState.currentUser.role || '역할 미선택');
+        updatePermissionBadges(appState.currentUser.permissions);
 
-        // Load repo info
-        const repoInfo = await API.getRepoInfo();
-        document.getElementById('repo-info').textContent = `📁 ${repoInfo.owner}/${repoInfo.repo}`;
+        // Load project info
+        const projectInfo = await API.getProjectInfo();
+        document.getElementById('repo-info').textContent = `📁 ${projectInfo.project}`;
 
-        // Load policy and users
+        // Load available roles for selection
+        appState.availableRoles = await API.getAvailableRoles();
+
+        // Load policy
         await loadPolicy();
         await loadSettings();
         await loadTemplates();
@@ -1427,10 +1410,6 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('template-btn').addEventListener('click', () => {
         showModal('template-modal');
     });
-
-    // User management
-    document.getElementById('add-user-btn').addEventListener('click', handleAddUser);
-    document.getElementById('user-search').addEventListener('input', () => renderUsers());
 
     // Rules management
     document.getElementById('add-rule-btn').addEventListener('click', handleAddRule);

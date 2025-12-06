@@ -1,12 +1,13 @@
 package cmd
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
-	"github.com/DevSymphony/sym-cli/internal/config"
-	"github.com/DevSymphony/sym-cli/internal/git"
-	"github.com/DevSymphony/sym-cli/internal/github"
+	"strconv"
+	"strings"
+
 	"github.com/DevSymphony/sym-cli/internal/roles"
 
 	"github.com/spf13/cobra"
@@ -14,96 +15,117 @@ import (
 
 var myRoleCmd = &cobra.Command{
 	Use:   "my-role",
-	Short: "Check your role in the current repository",
-	Long: `Display your role in the current repository based on roles.json.
+	Short: "Check or change your currently selected role",
+	Long: `Display your currently selected role or change it.
 
-Output can be formatted as JSON using --json flag for scripting purposes.`,
+Output can be formatted as JSON using --json flag for scripting purposes.
+Use --select flag to interactively select a new role.`,
 	Run: runMyRole,
 }
 
-var myRoleJSON bool
+var (
+	myRoleJSON   bool
+	myRoleSelect bool
+)
 
 func init() {
 	myRoleCmd.Flags().BoolVar(&myRoleJSON, "json", false, "Output in JSON format")
+	myRoleCmd.Flags().BoolVar(&myRoleSelect, "select", false, "Interactively select a new role")
 }
 
 func runMyRole(cmd *cobra.Command, args []string) {
-	// Check if logged in
-	if !config.IsLoggedIn() {
+	// Check if roles.json exists
+	exists, err := roles.RolesExists()
+	if err != nil || !exists {
 		if myRoleJSON {
-			output := map[string]string{"error": "not logged in"}
+			output := map[string]string{"error": "roles.json not found"}
 			_ = json.NewEncoder(os.Stdout).Encode(output)
 		} else {
-			fmt.Println("❌ Not logged in")
-			fmt.Println("Run 'sym login' first")
+			fmt.Println("❌ roles.json not found")
+			fmt.Println("Run 'sym init' first")
 		}
 		os.Exit(1)
 	}
 
-	// Check if in git repository
-	if !git.IsGitRepo() {
-		if myRoleJSON {
-			output := map[string]string{"error": "not a git repository"}
-			_ = json.NewEncoder(os.Stdout).Encode(output)
-		} else {
-			fmt.Println("❌ Not a git repository")
-			fmt.Println("Navigate to a git repository before running this command")
-		}
-		os.Exit(1)
+	// If --select flag is provided, prompt for role selection
+	if myRoleSelect {
+		selectNewRole()
+		return
 	}
 
-	// Get current user
-	cfg, err := config.LoadConfig()
+	// Get current role
+	role, err := roles.GetCurrentRole()
 	if err != nil {
-		handleError("Failed to load config", err, myRoleJSON)
-		os.Exit(1)
-	}
-
-	token, err := config.LoadToken()
-	if err != nil {
-		handleError("Failed to load token", err, myRoleJSON)
-		os.Exit(1)
-	}
-
-	client := github.NewClient(cfg.GetGitHubHost(), token.AccessToken)
-	user, err := client.GetCurrentUser()
-	if err != nil {
-		handleError("Failed to get current user", err, myRoleJSON)
-		os.Exit(1)
-	}
-
-	// Get user role
-	role, err := roles.GetUserRole(user.Login)
-	if err != nil {
-		handleError("Failed to get role", err, myRoleJSON)
-		os.Exit(1)
-	}
-
-	// Get repo info
-	owner, repo, err := git.GetRepoInfo()
-	if err != nil {
-		handleError("Failed to get repository info", err, myRoleJSON)
+		handleError("Failed to get current role", err, myRoleJSON)
 		os.Exit(1)
 	}
 
 	if myRoleJSON {
 		output := map[string]string{
-			"username": user.Login,
-			"role":     role,
-			"owner":    owner,
-			"repo":     repo,
+			"role": role,
 		}
 		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
-		fmt.Printf("Repository: %s/%s\n", owner, repo)
-		fmt.Printf("User: %s\n", user.Login)
-		fmt.Printf("Role: %s\n", role)
-
-		if role == "none" {
-			fmt.Println("\n⚠ You don't have any role assigned in this repository")
-			fmt.Println("Contact an admin to get access")
+		if role == "" {
+			fmt.Println("⚠ No role selected")
+			fmt.Println("Run 'sym my-role --select' to select a role")
+			fmt.Println("Or use the dashboard: 'sym dashboard'")
+		} else {
+			fmt.Printf("Current role: %s\n", role)
+			fmt.Println("\nTo change your role:")
+			fmt.Println("  sym my-role --select")
 		}
 	}
+}
+
+func selectNewRole() {
+	availableRoles, err := roles.GetAvailableRoles()
+	if err != nil {
+		fmt.Printf("❌ Failed to get available roles: %v\n", err)
+		os.Exit(1)
+	}
+
+	if len(availableRoles) == 0 {
+		fmt.Println("❌ No roles defined in roles.json")
+		os.Exit(1)
+	}
+
+	currentRole, _ := roles.GetCurrentRole()
+
+	fmt.Println("🎭 Select your role:")
+	fmt.Println()
+	for i, role := range availableRoles {
+		marker := "  "
+		if role == currentRole {
+			marker = "→ "
+		}
+		fmt.Printf("%s%d. %s\n", marker, i+1, role)
+	}
+	fmt.Println()
+
+	reader := bufio.NewReader(os.Stdin)
+	fmt.Print("Enter number (1-" + strconv.Itoa(len(availableRoles)) + "): ")
+	input, _ := reader.ReadString('\n')
+	input = strings.TrimSpace(input)
+
+	if input == "" {
+		fmt.Println("⚠ No selection made")
+		return
+	}
+
+	num, err := strconv.Atoi(input)
+	if err != nil || num < 1 || num > len(availableRoles) {
+		fmt.Println("❌ Invalid selection")
+		os.Exit(1)
+	}
+
+	selectedRole := availableRoles[num-1]
+	if err := roles.SetCurrentRole(selectedRole); err != nil {
+		fmt.Printf("❌ Failed to save role: %v\n", err)
+		os.Exit(1)
+	}
+
+	fmt.Printf("✓ Your role has been changed to: %s\n", selectedRole)
 }
 
 func handleError(msg string, err error, jsonMode bool) {
