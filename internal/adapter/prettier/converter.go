@@ -43,8 +43,9 @@ func (c *Converter) GetRoutingHints() []string {
 	}
 }
 
-// ConvertRules converts formatting rules to Prettier config using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+// ConvertRules converts formatting rules to Prettier config using LLM.
+// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.ConversionResult, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("LLM provider is required")
 	}
@@ -60,29 +61,52 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 		"arrowParens":   "always",
 	}
 
+	// Track rule conversion results
+	successRuleIDs := make([]string, 0)
+	failedRuleIDs := make([]string, 0)
+
 	// Use LLM to infer settings from rules
 	for _, rule := range rules {
 		config, err := c.convertSingleRule(ctx, rule, provider)
 		if err != nil {
-			continue // Skip rules that cannot be converted
+			failedRuleIDs = append(failedRuleIDs, rule.ID)
+			continue
+		}
+
+		// Check if LLM returned empty config (rule cannot be enforced by Prettier)
+		if len(config) == 0 {
+			failedRuleIDs = append(failedRuleIDs, rule.ID)
+			continue
 		}
 
 		// Merge LLM-generated config
 		for key, value := range config {
 			prettierConfig[key] = value
 		}
+		successRuleIDs = append(successRuleIDs, rule.ID)
 	}
 
-	content, err := json.MarshalIndent(prettierConfig, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	// Build result with tracking info
+	convResult := &adapter.ConversionResult{
+		SuccessRules: successRuleIDs,
+		FailedRules:  failedRuleIDs,
 	}
 
-	return &adapter.LinterConfig{
-		Filename: ".prettierrc",
-		Content:  content,
-		Format:   "json",
-	}, nil
+	// Generate config only if at least one rule succeeded
+	if len(successRuleIDs) > 0 {
+		content, err := json.MarshalIndent(prettierConfig, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
+
+		convResult.Config = &adapter.LinterConfig{
+			Filename: ".prettierrc",
+			Content:  content,
+			Format:   "json",
+		}
+	}
+
+	return convResult, nil
 }
 
 // convertSingleRule converts a single user rule to Prettier config using LLM

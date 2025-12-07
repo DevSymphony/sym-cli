@@ -101,6 +101,9 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
 
+	// Track failed rules per linter for fallback to llm-validator
+	failedRulesPerLinter := make(map[string][]string)
+
 	// Limit concurrent LLM calls to CPU count
 	maxConcurrent := runtime.NumCPU()
 	sem := make(chan struct{}, maxConcurrent)
@@ -128,41 +131,96 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 			if converter == nil {
 				mu.Lock()
 				result.Errors[linter] = fmt.Errorf("unsupported linter: %s", linter)
+				// Mark all rules as failed for this linter
+				for _, rule := range ruleSet {
+					failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], rule.ID)
+				}
 				mu.Unlock()
 				return
 			}
 
-			// Convert rules using LLM
-			configFile, err := converter.ConvertRules(ctx, ruleSet, c.llmProvider)
+			// Convert rules using LLM - now returns ConversionResult with per-rule tracking
+			convResult, err := converter.ConvertRules(ctx, ruleSet, c.llmProvider)
 			if err != nil {
 				mu.Lock()
 				result.Errors[linter] = fmt.Errorf("conversion failed: %w", err)
+				// Total failure - all rules should fallback
+				for _, rule := range ruleSet {
+					failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], rule.ID)
+				}
 				mu.Unlock()
 				return
 			}
 
-			// Write config file to .sym directory
-			outputPath := filepath.Join(c.outputDir, configFile.Filename)
-			if err := os.WriteFile(outputPath, configFile.Content, 0644); err != nil {
+			// Track failed rules from partial conversion
+			if len(convResult.FailedRules) > 0 {
 				mu.Lock()
-				result.Errors[linter] = fmt.Errorf("failed to write file: %w", err)
+				failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], convResult.FailedRules...)
 				mu.Unlock()
-				return
 			}
 
-			mu.Lock()
-			result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
-			mu.Unlock()
+			// Only write config if at least one rule succeeded
+			if convResult.Config != nil && len(convResult.SuccessRules) > 0 {
+				outputPath := filepath.Join(c.outputDir, convResult.Config.Filename)
+				if err := os.WriteFile(outputPath, convResult.Config.Content, 0644); err != nil {
+					mu.Lock()
+					result.Errors[linter] = fmt.Errorf("failed to write file: %w", err)
+					mu.Unlock()
+					return
+				}
 
-			fmt.Fprintf(os.Stderr, "✓ Generated %s configuration: %s\n", linter, outputPath)
+				mu.Lock()
+				result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
+				mu.Unlock()
+
+				fmt.Fprintf(os.Stderr, "✓ Generated %s configuration: %s\n", linter, outputPath)
+			}
 		}(linterName, rules)
 	}
 
 	// Wait for all goroutines to complete
 	wg.Wait()
 
-	// Check if we have any successful conversions
-	if len(result.GeneratedFiles) == 0 && len(result.Errors) > 0 {
+	// Step 4.1: Update ruleToLinters mapping - remove failed linters and add llm-validator fallback
+	for linter, failedRuleIDs := range failedRulesPerLinter {
+		for _, ruleID := range failedRuleIDs {
+			// Remove failed linter from this rule's linters
+			currentLinters := ruleToLinters[ruleID]
+			updatedLinters := []string{}
+			for _, l := range currentLinters {
+				if l != linter {
+					updatedLinters = append(updatedLinters, l)
+				}
+			}
+
+			// Add llm-validator as fallback if not already present
+			hasLLMValidator := false
+			for _, l := range updatedLinters {
+				if l == llmValidatorEngine {
+					hasLLMValidator = true
+					break
+				}
+			}
+			if !hasLLMValidator {
+				updatedLinters = append(updatedLinters, llmValidatorEngine)
+			}
+
+			ruleToLinters[ruleID] = updatedLinters
+		}
+	}
+
+	// Log fallback info
+	totalFallbacks := 0
+	for _, failedRuleIDs := range failedRulesPerLinter {
+		totalFallbacks += len(failedRuleIDs)
+	}
+	if totalFallbacks > 0 {
+		fmt.Fprintf(os.Stderr, "ℹ️  %d rule(s) fell back to llm-validator due to conversion failures\n", totalFallbacks)
+	}
+
+	// Check if we have any successful conversions (excluding llm-validator rules)
+	// Note: We don't fail if all rules went to llm-validator
+	if len(result.GeneratedFiles) == 0 && len(result.Errors) > 0 && totalFallbacks == 0 {
 		return result, fmt.Errorf("all conversions failed")
 	}
 

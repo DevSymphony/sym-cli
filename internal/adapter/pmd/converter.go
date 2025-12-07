@@ -63,17 +63,19 @@ type pmdRule struct {
 	Priority int      `xml:"priority,omitempty"`
 }
 
-// ConvertRules converts user rules to PMD configuration using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+// ConvertRules converts user rules to PMD configuration using LLM.
+// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.ConversionResult, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("LLM provider is required")
 	}
 
 	// Convert rules in parallel
 	type ruleResult struct {
-		index int
-		rule  *pmdRule
-		err   error
+		index  int
+		ruleID string
+		rule   *pmdRule
+		err    error
 	}
 
 	results := make(chan ruleResult, len(rules))
@@ -86,9 +88,10 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 
 			pmdRule, err := c.convertSingleRule(ctx, r, provider)
 			results <- ruleResult{
-				index: idx,
-				rule:  pmdRule,
-				err:   err,
+				index:  idx,
+				ruleID: r.ID,
+				rule:   pmdRule,
+				err:    err,
 			}
 		}(i, rule)
 	}
@@ -98,23 +101,34 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 		close(results)
 	}()
 
-	// Collect rules
+	// Collect rules with per-rule tracking
 	var pmdRules []pmdRule
-	var errors []string
+	successRuleIDs := make([]string, 0)
+	failedRuleIDs := make([]string, 0)
 
 	for result := range results {
 		if result.err != nil {
-			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
 			continue
 		}
 
 		if result.rule != nil {
 			pmdRules = append(pmdRules, *result.rule)
+			successRuleIDs = append(successRuleIDs, result.ruleID)
+		} else {
+			// Skipped = cannot be enforced by this linter
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
 		}
 	}
 
+	// Build result with tracking info
+	convResult := &adapter.ConversionResult{
+		SuccessRules: successRuleIDs,
+		FailedRules:  failedRuleIDs,
+	}
+
 	if len(pmdRules) == 0 {
-		return nil, fmt.Errorf("no rules converted: %v", errors)
+		return convResult, nil
 	}
 
 	// Build PMD ruleset
@@ -136,11 +150,13 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 	xmlHeader := `<?xml version="1.0"?>` + "\n"
 	fullContent := []byte(xmlHeader + string(content))
 
-	return &adapter.LinterConfig{
+	convResult.Config = &adapter.LinterConfig{
 		Filename: "pmd.xml",
 		Content:  fullContent,
 		Format:   "xml",
-	}, nil
+	}
+
+	return convResult, nil
 }
 
 // convertSingleRule converts a single rule using LLM

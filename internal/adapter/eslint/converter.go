@@ -45,8 +45,9 @@ func (c *Converter) GetRoutingHints() []string {
 	}
 }
 
-// ConvertRules converts user rules to ESLint configuration using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+// ConvertRules converts user rules to ESLint configuration using LLM.
+// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.ConversionResult, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("LLM provider is required")
 	}
@@ -54,6 +55,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 	// Convert rules in parallel using goroutines
 	type ruleResult struct {
 		index    int
+		ruleID   string
 		ruleName string
 		config   interface{}
 		err      error
@@ -71,6 +73,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 			ruleName, config, err := c.convertSingleRule(ctx, r, provider)
 			results <- ruleResult{
 				index:    idx,
+				ruleID:   r.ID,
 				ruleName: ruleName,
 				config:   config,
 				err:      err,
@@ -84,60 +87,63 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 		close(results)
 	}()
 
-	// Collect results
+	// Collect results with per-rule tracking
 	eslintRules := make(map[string]interface{})
-	var errors []string
-	skippedCount := 0
+	successRuleIDs := make([]string, 0)
+	failedRuleIDs := make([]string, 0)
 
 	for result := range results {
 		if result.err != nil {
-			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
-			fmt.Fprintf(os.Stderr, "⚠️  ESLint rule %d conversion error: %v\n", result.index+1, result.err)
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
+			fmt.Fprintf(os.Stderr, "⚠️  ESLint rule %s conversion error: %v\n", result.ruleID, result.err)
 			continue
 		}
 
 		if result.ruleName != "" {
 			eslintRules[result.ruleName] = result.config
-			fmt.Fprintf(os.Stderr, "✓ ESLint rule %d → %s\n", result.index+1, result.ruleName)
+			successRuleIDs = append(successRuleIDs, result.ruleID)
+			fmt.Fprintf(os.Stderr, "✓ ESLint rule %s → %s\n", result.ruleID, result.ruleName)
 		} else {
-			skippedCount++
-			fmt.Fprintf(os.Stderr, "⊘ ESLint rule %d skipped (cannot be enforced by ESLint)\n", result.index+1)
+			// Skipped = cannot be enforced by this linter, fallback to llm-validator
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
+			fmt.Fprintf(os.Stderr, "⊘ ESLint rule %s skipped (cannot be enforced by ESLint)\n", result.ruleID)
 		}
 	}
 
-	if skippedCount > 0 {
-		fmt.Fprintf(os.Stderr, "ℹ️  %d rule(s) skipped for ESLint (will use llm-validator)\n", skippedCount)
+	// Build result with tracking info
+	convResult := &adapter.ConversionResult{
+		SuccessRules: successRuleIDs,
+		FailedRules:  failedRuleIDs,
 	}
 
-	if len(eslintRules) == 0 {
-		return nil, fmt.Errorf("no rules converted successfully: %v", errors)
+	// Generate config only if at least one rule succeeded
+	if len(eslintRules) > 0 {
+		eslintConfig := map[string]interface{}{
+			"env": map[string]bool{
+				"es2021":  true,
+				"node":    true,
+				"browser": true,
+			},
+			"parserOptions": map[string]interface{}{
+				"ecmaVersion": "latest",
+				"sourceType":  "module",
+			},
+			"rules": eslintRules,
+		}
+
+		content, err := json.MarshalIndent(eslintConfig, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
+
+		convResult.Config = &adapter.LinterConfig{
+			Filename: ".eslintrc.json",
+			Content:  content,
+			Format:   "json",
+		}
 	}
 
-	// Build ESLint configuration
-	eslintConfig := map[string]interface{}{
-		"env": map[string]bool{
-			"es2021":  true,
-			"node":    true,
-			"browser": true,
-		},
-		"parserOptions": map[string]interface{}{
-			"ecmaVersion": "latest",
-			"sourceType":  "module",
-		},
-		"rules": eslintRules,
-	}
-
-	// Marshal to JSON
-	content, err := json.MarshalIndent(eslintConfig, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
-	}
-
-	return &adapter.LinterConfig{
-		Filename: ".eslintrc.json",
-		Content:  content,
-		Format:   "json",
-	}, nil
+	return convResult, nil
 }
 
 // convertSingleRule converts a single user rule to ESLint rule using LLM

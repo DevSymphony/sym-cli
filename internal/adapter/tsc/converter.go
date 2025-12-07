@@ -43,8 +43,9 @@ func (c *Converter) GetRoutingHints() []string {
 	}
 }
 
-// ConvertRules converts type-checking rules to tsconfig.json using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+// ConvertRules converts type-checking rules to tsconfig.json using LLM.
+// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.ConversionResult, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("LLM provider is required")
 	}
@@ -71,29 +72,52 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 
 	compilerOpts := tsConfig["compilerOptions"].(map[string]interface{})
 
+	// Track rule conversion results
+	successRuleIDs := make([]string, 0)
+	failedRuleIDs := make([]string, 0)
+
 	// Use LLM to infer settings from rules
 	for _, rule := range rules {
 		config, err := c.convertSingleRule(ctx, rule, provider)
 		if err != nil {
-			continue // Skip rules that cannot be converted
+			failedRuleIDs = append(failedRuleIDs, rule.ID)
+			continue
+		}
+
+		// Check if LLM returned empty config (rule cannot be enforced by TSC)
+		if len(config) == 0 {
+			failedRuleIDs = append(failedRuleIDs, rule.ID)
+			continue
 		}
 
 		// Merge LLM-generated compiler options
 		for key, value := range config {
 			compilerOpts[key] = value
 		}
+		successRuleIDs = append(successRuleIDs, rule.ID)
 	}
 
-	content, err := json.MarshalIndent(tsConfig, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	// Build result with tracking info
+	convResult := &adapter.ConversionResult{
+		SuccessRules: successRuleIDs,
+		FailedRules:  failedRuleIDs,
 	}
 
-	return &adapter.LinterConfig{
-		Filename: "tsconfig.json",
-		Content:  content,
-		Format:   "json",
-	}, nil
+	// Generate config only if at least one rule succeeded
+	if len(successRuleIDs) > 0 {
+		content, err := json.MarshalIndent(tsConfig, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
+
+		convResult.Config = &adapter.LinterConfig{
+			Filename: "tsconfig.json",
+			Content:  content,
+			Format:   "json",
+		}
+	}
+
+	return convResult, nil
 }
 
 // convertSingleRule converts a single user rule to TypeScript compiler option using LLM

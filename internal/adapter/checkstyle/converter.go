@@ -64,8 +64,9 @@ type checkstyleConfig struct {
 	Modules []checkstyleModule `xml:"module"`
 }
 
-// ConvertRules converts user rules to Checkstyle configuration using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+// ConvertRules converts user rules to Checkstyle configuration using LLM.
+// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.ConversionResult, error) {
 	if provider == nil {
 		return nil, fmt.Errorf("LLM provider is required")
 	}
@@ -73,6 +74,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 	// Convert rules in parallel
 	type moduleResult struct {
 		index  int
+		ruleID string
 		module *checkstyleModule
 		err    error
 	}
@@ -88,6 +90,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 			module, err := c.convertSingleRule(ctx, r, provider)
 			results <- moduleResult{
 				index:  idx,
+				ruleID: r.ID,
 				module: module,
 				err:    err,
 			}
@@ -99,23 +102,34 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 		close(results)
 	}()
 
-	// Collect modules
+	// Collect modules with per-rule tracking
 	var modules []checkstyleModule
-	var errors []string
+	successRuleIDs := make([]string, 0)
+	failedRuleIDs := make([]string, 0)
 
 	for result := range results {
 		if result.err != nil {
-			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
 			continue
 		}
 
 		if result.module != nil {
 			modules = append(modules, *result.module)
+			successRuleIDs = append(successRuleIDs, result.ruleID)
+		} else {
+			// Skipped = cannot be enforced by this linter
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
 		}
 	}
 
+	// Build result with tracking info
+	convResult := &adapter.ConversionResult{
+		SuccessRules: successRuleIDs,
+		FailedRules:  failedRuleIDs,
+	}
+
 	if len(modules) == 0 {
-		return nil, fmt.Errorf("no rules converted: %v", errors)
+		return convResult, nil
 	}
 
 	// Separate modules into Checker-level and TreeWalker-level
@@ -173,11 +187,13 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 `
 	fullContent := []byte(xmlHeader + string(content))
 
-	return &adapter.LinterConfig{
+	convResult.Config = &adapter.LinterConfig{
 		Filename: "checkstyle.xml",
 		Content:  fullContent,
 		Format:   "xml",
-	}, nil
+	}
+
+	return convResult, nil
 }
 
 // convertSingleRule converts a single rule using LLM
