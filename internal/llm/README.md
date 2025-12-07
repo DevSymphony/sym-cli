@@ -68,7 +68,7 @@ OPENAI_API_KEY=sk-...
 
 | Name | Type | Default Model | Installation |
 |------|------|---------------|--------------|
-| `claudecode` | CLI | claude-haiku-4-5-20251001 | `npm i -g @anthropic-ai/claude-cli` |
+| `claudecode` | CLI | sonnet | `npm i -g @anthropic-ai/claude-cli` |
 | `geminicli` | CLI | gemini-2.5-flash | `npm i -g @google/gemini-cli` |
 | `openaiapi` | API | gpt-4o-mini | Set `OPENAI_API_KEY` env var |
 
@@ -104,6 +104,9 @@ type Provider struct {
     model string
 }
 
+// Compile-time check: Provider must implement RawProvider interface
+var _ llm.RawProvider = (*Provider)(nil)
+
 func (p *Provider) Name() string {
     return "myprovider"
 }
@@ -119,6 +122,8 @@ func (p *Provider) Close() error {
 }
 ```
 
+> **Note**: The `var _ llm.RawProvider = (*Provider)(nil)` line is a compile-time check that ensures `Provider` implements the `RawProvider` interface. If any method is missing or has the wrong signature, the code will fail to compile.
+
 ### Step 3: Register in init()
 
 ```go
@@ -129,6 +134,15 @@ func init() {
         DefaultModel: "default-model-v1",
         Available:    checkAvailability(), // Check CLI exists or API key set
         Path:         cliPath,             // CLI path (empty for API)
+        Models: []llm.ModelInfo{
+            {ID: "model-v1", DisplayName: "Model V1", Description: "Standard model", Recommended: true},
+            {ID: "model-v2", DisplayName: "Model V2", Description: "Advanced model", Recommended: false},
+        },
+        APIKey: llm.APIKeyConfig{
+            Required:   true,                    // Set false for CLI-based providers
+            EnvVarName: "MY_PROVIDER_API_KEY",   // Environment variable name
+            Prefix:     "mp-",                   // Expected prefix for validation (optional)
+        },
     })
 }
 
@@ -158,8 +172,10 @@ import (
 
 ### Key Rules
 
+- Add compile-time check: `var _ llm.RawProvider = (*Provider)(nil)`
 - Implement `RawProvider.ExecuteRaw()` - parsing is handled automatically by wrapper
 - Return clear error message if CLI not installed or API key missing
 - Check availability in init() to set ProviderInfo.Available
+- Define `Models` with at least one model marked as `Recommended: true`
+- Set `APIKey.Required: false` for CLI-based providers (they handle auth internally)
 - Refer to existing providers (claudecode, openaiapi) for patterns
-- See `DESIGN.md` for architecture details

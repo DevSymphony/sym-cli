@@ -46,11 +46,28 @@ type Config struct {
 	Verbose  bool   // Enable verbose logging
 }
 
+// ModelInfo describes a model available for a provider.
+type ModelInfo struct {
+	ID          string // Internal model identifier (e.g., "sonnet", "gpt-4o-mini")
+	DisplayName string // Human-readable name for UI
+	Description string // Short description
+	Recommended bool   // Default/recommended model flag
+}
+
+// APIKeyConfig describes API key requirements for a provider.
+type APIKeyConfig struct {
+	Required   bool   // Whether this provider requires an API key
+	EnvVarName string // Environment variable name (e.g., "OPENAI_API_KEY")
+	Prefix     string // Expected prefix for validation (e.g., "sk-")
+}
+
 // ProviderInfo contains provider metadata.
 type ProviderInfo struct {
 	Name         string
 	DisplayName  string
 	DefaultModel string
 	Available    bool
-	Path         string // CLI path or empty for API providers
+	Path         string       // CLI path or empty for API providers
+	Models       []ModelInfo  // Available models for this provider
+	APIKey       APIKeyConfig // API key configuration
 }

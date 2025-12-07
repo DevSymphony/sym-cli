@@ -32,6 +32,12 @@ func init() {
 		DefaultModel: defaultModel,
 		Available:    available,
 		Path:         path,
+		Models: []llm.ModelInfo{
+			{ID: "sonnet", DisplayName: "sonnet", Description: "Balanced performance and speed", Recommended: true},
+			{ID: "opus", DisplayName: "opus", Description: "Highest capability", Recommended: false},
+			{ID: "haiku", DisplayName: "haiku", Description: "Fast and efficient", Recommended: false},
+		},
+		APIKey: llm.APIKeyConfig{Required: false},
 	})
 }
 
@@ -42,6 +48,9 @@ type Provider struct {
 	verbose bool
 	cliPath string
 }
+
+// Compile-time check: Provider must implement RawProvider interface
+var _ llm.RawProvider = (*Provider)(nil)
 
 // newProvider creates a new Claude Code provider.
 // Returns error if Claude CLI is not installed.

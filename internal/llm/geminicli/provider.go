@@ -32,6 +32,11 @@ func init() {
 		DefaultModel: defaultModel,
 		Available:    available,
 		Path:         path,
+		Models: []llm.ModelInfo{
+			{ID: "gemini-2.5-flash", DisplayName: "2.5 flash", Description: "Fast and efficient", Recommended: true},
+			{ID: "gemini-2.5-pro", DisplayName: "2.5 pro", Description: "Higher capability", Recommended: false},
+		},
+		APIKey: llm.APIKeyConfig{Required: false},
 	})
 }
 
@@ -42,6 +47,9 @@ type Provider struct {
 	verbose bool
 	cliPath string
 }
+
+// Compile-time check: Provider must implement RawProvider interface
+var _ llm.RawProvider = (*Provider)(nil)
 
 // newProvider creates a new Gemini CLI provider.
 // Returns error if Gemini CLI is not installed.

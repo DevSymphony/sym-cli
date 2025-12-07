@@ -169,66 +169,30 @@ func runLLMSetup(_ *cobra.Command, _ []string) {
     }
   }`)
 	fmt.Println()
+
+	// Dynamically generate model aliases from registry
 	fmt.Println("Supported model aliases:")
-	fmt.Println("  Claude: sonnet, opus, haiku")
-	fmt.Println("  Gemini: gemini-2.5-flash, gemini-2.5-pro")
+	for _, p := range providers {
+		if len(p.Models) > 0 {
+			modelIDs := make([]string, 0, len(p.Models))
+			for _, m := range p.Models {
+				modelIDs = append(modelIDs, m.ID)
+			}
+			fmt.Printf("  %s: %s\n", p.DisplayName, strings.Join(modelIDs, ", "))
+		}
+	}
 	fmt.Println()
 
-	fmt.Println("For OpenAI API, also add to .sym/.env:")
-	fmt.Println("  OPENAI_API_KEY=sk-...")
-	fmt.Println()
+	// Show API key instructions for providers that require them
+	for _, p := range providers {
+		if p.APIKey.Required && p.APIKey.EnvVarName != "" {
+			fmt.Printf("For %s, also add to .sym/.env:\n", p.DisplayName)
+			fmt.Printf("  %s=%s...\n", p.APIKey.EnvVarName, p.APIKey.Prefix)
+			fmt.Println()
+		}
+	}
 
 	fmt.Println("After configuration, run 'sym llm test' to verify.")
-}
-
-// LLM provider options and model mappings
-var llmProviderOptions = []string{
-	"OpenAI API",
-	"Claude Code",
-	"Gemini CLI",
-	"Skip",
-}
-
-var llmProviderToName = map[string]string{
-	"OpenAI API":  "openaiapi",
-	"Claude Code": "claudecode",
-	"Gemini CLI":  "geminicli",
-}
-
-// Claude model options with descriptions
-// Note: Claude CLI accepts short aliases like "sonnet", "opus", "haiku"
-var claudeModelOptions = []string{
-	"sonnet - Balanced performance and speed (recommended)",
-	"opus   - Highest capability",
-	"haiku  - Fast and efficient",
-}
-
-var claudeModelToShortName = map[string]string{
-	"sonnet - Balanced performance and speed (recommended)": "sonnet",
-	"opus   - Highest capability":                           "opus",
-	"haiku  - Fast and efficient":                           "haiku",
-}
-
-// Gemini model options with descriptions
-var geminiModelOptions = []string{
-	"2.5 flash - Fast and efficient (recommended)",
-	"2.5 pro   - Higher capability",
-}
-
-var geminiModelToShortName = map[string]string{
-	"2.5 flash - Fast and efficient (recommended)": "gemini-2.5-flash",
-	"2.5 pro   - Higher capability":                "gemini-2.5-pro",
-}
-
-// OpenAI model options with descriptions
-var openaiModelOptions = []string{
-	"gpt-4o-mini - Fast and efficient (recommended)",
-	"gpt-5-mini  - Next generation model",
-}
-
-var openaiModelToID = map[string]string{
-	"gpt-4o-mini - Fast and efficient (recommended)": "gpt-4o-mini",
-	"gpt-5-mini  - Next generation model":            "gpt-5-mini",
 }
 
 // promptLLMBackendSetup is called from init command to setup LLM provider.
@@ -242,78 +206,62 @@ func promptLLMBackendSetup() {
 	fmt.Println(ui.Indent("Symphony uses LLM for policy conversion and code validation"))
 	fmt.Println()
 
+	// Get provider options dynamically from registry
+	providerOptions := llm.GetProviderOptions(true) // includes "Skip"
+
 	// Select provider
-	var selectedProvider string
+	var selectedDisplayName string
 	providerPrompt := &survey.Select{
 		Message: "Select LLM provider:",
-		Options: llmProviderOptions,
+		Options: providerOptions,
 	}
 
-	if err := survey.AskOne(providerPrompt, &selectedProvider); err != nil {
+	if err := survey.AskOne(providerPrompt, &selectedDisplayName); err != nil {
 		fmt.Println("Skipped LLM configuration")
 		return
 	}
 
-	if selectedProvider == "Skip" {
+	if selectedDisplayName == "Skip" {
 		fmt.Println("Skipped LLM configuration")
 		fmt.Println(ui.Indent("Tip: Run 'sym init --setup-llm' to configure later"))
 		return
 	}
 
-	providerName := llmProviderToName[selectedProvider]
+	// Get provider info from registry
+	providerInfo := llm.GetProviderByDisplayName(selectedDisplayName)
+	if providerInfo == nil {
+		ui.PrintError(fmt.Sprintf("Unknown provider: %s", selectedDisplayName))
+		return
+	}
+
+	providerName := providerInfo.Name
 	var modelID string
 
-	// Handle provider-specific configuration
-	switch selectedProvider {
-	case "OpenAI API":
-		// Prompt for API key
-		if err := promptAndSaveAPIKey(); err != nil {
+	// Handle API key if required
+	if llm.RequiresAPIKey(providerName) {
+		if err := promptAndSaveAPIKey(providerName); err != nil {
 			ui.PrintError(fmt.Sprintf("Failed to save API key: %v", err))
 			return
 		}
-		// Select OpenAI model
-		var selectedOption string
-		modelPrompt := &survey.Select{
-			Message: "Select OpenAI model:",
-			Options: openaiModelOptions,
-			Default: openaiModelOptions[0], // gpt-4o-mini (recommended)
-		}
-		if err := survey.AskOne(modelPrompt, &selectedOption); err != nil {
-			fmt.Println("Skipped model selection, using default")
-			modelID = "gpt-4o-mini"
-		} else {
-			modelID = openaiModelToID[selectedOption]
-		}
+	}
 
-	case "Claude Code":
-		// Select Claude model
+	// Select model (common for all providers)
+	modelOptions := llm.GetModelOptions(providerName)
+	if len(modelOptions) > 0 {
 		var selectedOption string
 		modelPrompt := &survey.Select{
-			Message: "Select Claude model:",
-			Options: claudeModelOptions,
-			Default: claudeModelOptions[0], // sonnet (recommended)
+			Message: fmt.Sprintf("Select %s model:", providerInfo.DisplayName),
+			Options: modelOptions,
+			Default: llm.GetDefaultModelOption(providerName),
 		}
 		if err := survey.AskOne(modelPrompt, &selectedOption); err != nil {
 			fmt.Println("Skipped model selection, using default")
-			modelID = "sonnet"
+			modelID = providerInfo.DefaultModel
 		} else {
-			modelID = claudeModelToShortName[selectedOption]
+			modelID = llm.GetModelIDFromOption(providerName, selectedOption)
 		}
-
-	case "Gemini CLI":
-		// Select Gemini model
-		var selectedOption string
-		modelPrompt := &survey.Select{
-			Message: "Select Gemini model:",
-			Options: geminiModelOptions,
-			Default: geminiModelOptions[0], // 2.5 flash (recommended)
-		}
-		if err := survey.AskOne(modelPrompt, &selectedOption); err != nil {
-			fmt.Println("Skipped model selection, using default")
-			modelID = "gemini-2.5-flash"
-		} else {
-			modelID = geminiModelToShortName[selectedOption]
-		}
+	} else {
+		modelID = providerInfo.DefaultModel
 	}
 
 	// Save to config.json
@@ -322,32 +270,38 @@ func promptLLMBackendSetup() {
 		return
 	}
 
-	ui.PrintOK(fmt.Sprintf("LLM provider saved: %s (%s)", selectedProvider, modelID))
+	ui.PrintOK(fmt.Sprintf("LLM provider saved: %s (%s)", selectedDisplayName, modelID))
 }
 
-// promptAndSaveAPIKey prompts for OpenAI API key and saves to .env
-func promptAndSaveAPIKey() error {
+// promptAndSaveAPIKey prompts for API key and saves to .env
+func promptAndSaveAPIKey(providerName string) error {
+	envVarName := llm.GetAPIKeyEnvVar(providerName)
+	if envVarName == "" {
+		return fmt.Errorf("provider %s does not have API key configuration", providerName)
+	}
+
 	var apiKey string
 	prompt := &survey.Password{
-		Message: "Enter your OpenAI API key:",
+		Message: fmt.Sprintf("Enter your %s:", envVarName),
 	}
 
 	if err := survey.AskOne(prompt, &apiKey); err != nil {
 		return err
 	}
 
-	if apiKey == "" {
-		return fmt.Errorf("API key cannot be empty")
-	}
-
-	// Validate API key format
-	if !strings.HasPrefix(apiKey, "sk-") {
-		ui.PrintWarn("API key should start with 'sk-'")
+	// Validate API key using registry
+	if err := llm.ValidateAPIKey(providerName, apiKey); err != nil {
+		ui.PrintWarn(err.Error())
+		// Continue anyway - it's a warning, not a blocking error
+		// But if the key is empty, we should return the error
+		if apiKey == "" {
+			return err
+		}
 	}
 
 	// Save to .env file
 	envPath := config.GetProjectEnvPath()
-	if err := saveAPIKeyToEnv(envPath, apiKey); err != nil {
+	if err := saveAPIKeyToEnv(envPath, envVarName, apiKey); err != nil {
 		return err
 	}
 
@@ -362,9 +316,8 @@ func promptAndSaveAPIKey() error {
 }
 
 // saveAPIKeyToEnv saves the API key to the .env file
-func saveAPIKeyToEnv(envPath, apiKey string) error {
-	// Use existing envutil package
-	return envutil.SaveKeyToEnvFile(envPath, "OPENAI_API_KEY", apiKey)
+func saveAPIKeyToEnv(envPath, envVarName, apiKey string) error {
+	return envutil.SaveKeyToEnvFile(envPath, envVarName, apiKey)
 }
 
 // ensureGitignore ensures that the given path is in .gitignore

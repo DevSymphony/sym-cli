@@ -38,6 +38,15 @@ func init() {
 		DefaultModel: defaultModel,
 		Available:    envutil.GetAPIKey("OPENAI_API_KEY") != "",
 		Path:         "",
+		Models: []llm.ModelInfo{
+			{ID: "gpt-4o-mini", DisplayName: "gpt-4o-mini", Description: "Fast and efficient", Recommended: true},
+			{ID: "gpt-5-mini", DisplayName: "gpt-5-mini", Description: "Next generation model", Recommended: false},
+		},
+		APIKey: llm.APIKeyConfig{
+			Required:   true,
+			EnvVarName: "OPENAI_API_KEY",
+			Prefix:     "sk-",
+		},
 	})
 }
 
@@ -50,6 +59,9 @@ type Provider struct {
 	temperature float64
 	verbose     bool
 }
+
+// Compile-time check: Provider must implement RawProvider interface
+var _ llm.RawProvider = (*Provider)(nil)
 
 // newProvider creates a new OpenAI API provider.
 // Returns ErrAPIKeyRequired if API key is not provided.
