@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/DevSymphony/sym-cli/internal/envutil"
-	"github.com/manifoldco/promptui"
+	"github.com/DevSymphony/sym-cli/internal/ui"
 )
 
 // promptAPIKeySetup prompts user to setup API key (without checking if it exists)
@@ -23,87 +24,100 @@ func promptAPIKeyConfiguration(checkExisting bool) {
 	if checkExisting {
 		// 1. Check environment variable or .env file
 		if envutil.GetAPIKey("OPENAI_API_KEY") != "" {
-			fmt.Println("\n✓ OpenAI API key detected from environment or .sym/.env")
+			ui.PrintOK("OpenAI API key detected from environment or .sym/.env")
 			return
 		}
 
 		// 2. Check .sym/.env file
 		if hasAPIKeyInEnvFile(envPath) {
-			fmt.Println("\n✓ OpenAI API key found in .sym/.env")
+			ui.PrintOK("OpenAI API key found in .sym/.env")
 			return
 		}
 
 		// Neither found - show warning
-		fmt.Println("\n⚠ OpenAI API key not found")
-		fmt.Println("  (Required for convert, validate commands and MCP auto-conversion)")
+		ui.PrintWarn("OpenAI API key not found")
+		fmt.Println(ui.Indent("Required for convert, validate commands and MCP auto-conversion"))
 		fmt.Println()
 	}
 
 	// Create selection prompt
-	items := []string{
+	options := []string{
 		"Enter API key",
 		"Skip (set manually later)",
 	}
 
-	templates := &promptui.SelectTemplates{
-		Label:    "{{ . }}?",
-		Active:   "▸ {{ . | cyan }}",
-		Inactive: "  {{ . }}",
-		Selected: "✓ {{ . | green }}",
+	var selected string
+	prompt := &survey.Select{
+		Message: "Would you like to configure it now?",
+		Options: options,
 	}
 
-	selectPrompt := promptui.Select{
-		Label:     "Would you like to configure it now",
-		Items:     items,
-		Templates: templates,
-		Size:      2,
-	}
-
-	index, _, err := selectPrompt.Run()
-	if err != nil {
-		fmt.Println("\nSkipped API key configuration")
+	if err := survey.AskOne(prompt, &selected); err != nil {
+		fmt.Println("Skipped API key configuration")
 		return
 	}
 
-	switch index {
-	case 0: // Enter API key
-		apiKey, err := promptForAPIKey()
+	switch selected {
+	case "Enter API key":
+		apiKey, err := promptForAPIKeyWithSurvey()
 		if err != nil {
-			fmt.Printf("\n❌ Failed to read API key: %v\n", err)
+			ui.PrintError(fmt.Sprintf("Failed to read API key: %v", err))
 			return
 		}
 
 		// Validate API key format
 		if err := validateAPIKey(apiKey); err != nil {
-			fmt.Printf("\n⚠ Warning: %v\n", err)
-			fmt.Println("  API key was saved anyway. Make sure it's correct.")
+			ui.PrintWarn(fmt.Sprintf("%v", err))
+			fmt.Println(ui.Indent("API key was saved anyway. Make sure it's correct."))
 		}
 
 		// Save to .sym/.env
 		if err := envutil.SaveKeyToEnvFile(envPath, "OPENAI_API_KEY", apiKey); err != nil {
-			fmt.Printf("\n❌ Failed to save API key: %v\n", err)
+			ui.PrintError(fmt.Sprintf("Failed to save API key: %v", err))
 			return
 		}
 
-		fmt.Println("\n✓ API key saved to .sym/.env")
+		ui.PrintOK("API key saved to .sym/.env")
 
 		// Add to .gitignore
 		if err := ensureGitignore(".sym/.env"); err != nil {
-			fmt.Printf("⚠ Warning: Failed to update .gitignore: %v\n", err)
-			fmt.Println("  Please manually add '.sym/.env' to .gitignore")
+			ui.PrintWarn(fmt.Sprintf("Failed to update .gitignore: %v", err))
+			fmt.Println(ui.Indent("Please manually add '.sym/.env' to .gitignore"))
 		} else {
-			fmt.Println("✓ Added .sym/.env to .gitignore")
+			ui.PrintOK("Added .sym/.env to .gitignore")
 		}
 
-	case 1: // Skip
-		fmt.Println("\nSkipped API key configuration")
-		fmt.Println("\n💡 Tip: You can set OPENAI_API_KEY in:")
-		fmt.Println("  - .sym/.env file")
-		fmt.Println("  - System environment variable")
+	case "Skip (set manually later)":
+		fmt.Println("Skipped API key configuration")
+		fmt.Println()
+		fmt.Println("Tip: You can set OPENAI_API_KEY in:")
+		fmt.Println(ui.Indent(".sym/.env file"))
+		fmt.Println(ui.Indent("System environment variable"))
 	}
 }
 
-// promptForAPIKey prompts user to enter API key
+// promptForAPIKeyWithSurvey prompts user to enter API key using survey
+func promptForAPIKeyWithSurvey() (string, error) {
+	var apiKey string
+	prompt := &survey.Password{
+		Message: "Enter your OpenAI API key:",
+	}
+
+	if err := survey.AskOne(prompt, &apiKey); err != nil {
+		return "", err
+	}
+
+	// Clean the input
+	apiKey = cleanAPIKey(apiKey)
+
+	if len(apiKey) == 0 {
+		return "", fmt.Errorf("API key cannot be empty")
+	}
+
+	return apiKey, nil
+}
+
+// promptForAPIKey prompts user to enter API key (legacy, kept for compatibility)
 func promptForAPIKey() (string, error) {
 	fmt.Print("Enter your OpenAI API key: ")
 

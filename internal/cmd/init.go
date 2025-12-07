@@ -6,9 +6,10 @@ import (
 	"path/filepath"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
-	"github.com/DevSymphony/sym-cli/internal/envutil"
+	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
+	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 
 	"github.com/spf13/cobra"
@@ -50,21 +51,21 @@ func init() {
 func runInit(cmd *cobra.Command, args []string) {
 	// MCP registration only mode
 	if registerMCPOnly {
-		fmt.Println("🔧 Registering Symphony MCP server...")
+		ui.PrintTitle("MCP", "Registering Symphony MCP server")
 		promptMCPRegistration()
 		return
 	}
 
 	// API key setup only mode (deprecated)
 	if setupAPIKeyOnly {
-		fmt.Println("🔑 Setting up OpenAI API key...")
+		ui.PrintTitle("API", "Setting up OpenAI API key")
 		promptAPIKeySetup()
 		return
 	}
 
 	// LLM setup only mode
 	if setupLLMOnly {
-		fmt.Println("🤖 Setting up LLM backend...")
+		ui.PrintTitle("LLM", "Setting up LLM backend")
 		promptLLMBackendSetup()
 		return
 	}
@@ -72,12 +73,12 @@ func runInit(cmd *cobra.Command, args []string) {
 	// Check if roles.json already exists
 	exists, err := roles.RolesExists()
 	if err != nil {
-		fmt.Printf("❌ Failed to check roles.json: %v\n", err)
+		ui.PrintError(fmt.Sprintf("Failed to check roles.json: %v", err))
 		os.Exit(1)
 	}
 
 	if exists && !initForce {
-		fmt.Println("⚠ roles.json already exists")
+		ui.PrintWarn("roles.json already exists")
 		fmt.Println("Use --force flag to overwrite")
 		os.Exit(1)
 	}
@@ -85,7 +86,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	// If force flag is set, remove existing code-policy.json
 	if initForce {
 		if err := removeExistingCodePolicy(); err != nil {
-			fmt.Printf("⚠ Warning: Failed to remove existing code-policy.json: %v\n", err)
+			ui.PrintWarn(fmt.Sprintf("Failed to remove existing code-policy.json: %v", err))
 		}
 	}
 
@@ -97,7 +98,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	}
 
 	if err := roles.SaveRoles(newRoles); err != nil {
-		fmt.Printf("❌ Failed to create roles.json: %v\n", err)
+		ui.PrintError(fmt.Sprintf("Failed to create roles.json: %v", err))
 		os.Exit(1)
 	}
 
@@ -111,15 +112,14 @@ func runInit(cmd *cobra.Command, args []string) {
 		fmt.Printf("⚠ Warning: Failed to create policy file: %v\n", err)
 		fmt.Println("You can manually create it later using the dashboard")
 	} else {
-		fmt.Println("✓ user-policy.json created with default RBAC roles")
+		ui.PrintOK("user-policy.json created with default RBAC roles")
 	}
 
-	// Create .sym/.env with default POLICY_PATH
-	fmt.Println("\nSetting up environment configuration...")
-	if err := initializeEnvFile(); err != nil {
-		fmt.Printf("⚠ Warning: Failed to create .sym/.env: %v\n", err)
+	// Create .sym/config.json with default settings
+	if err := initializeConfigFile(); err != nil {
+		ui.PrintWarn(fmt.Sprintf("Failed to create config.json: %v", err))
 	} else {
-		fmt.Println("✓ .sym/.env created with default policy path")
+		ui.PrintOK("config.json created")
 	}
 
 	// Set default role to admin during initialization
@@ -139,11 +139,9 @@ func runInit(cmd *cobra.Command, args []string) {
 		promptLLMBackendSetup()
 	}
 
-	// Show dashboard guide after all initialization is complete
-	fmt.Println("\n🎯 What's Next: Use Symphony Dashboard")
+	// Show completion message
 	fmt.Println()
-	fmt.Println("Start the web dashboard:")
-	fmt.Println("  sym dashboard")
+	ui.PrintDone("Initialization complete")
 	fmt.Println()
 	fmt.Println("Dashboard features:")
 	fmt.Println("  📋 Manage roles - Configure permissions for each role")
@@ -205,26 +203,19 @@ func createDefaultPolicy() error {
 	return policy.SavePolicy(defaultPolicy, defaultPolicyPath)
 }
 
-// initializeEnvFile creates .sym/.env with default configuration
-func initializeEnvFile() error {
-	envPath := filepath.Join(".sym", ".env")
-	defaultPolicyPath := ".sym/user-policy.json"
-
-	// Check if .env already exists
-	if _, err := os.Stat(envPath); err == nil {
-		// File exists, check if POLICY_PATH is already set
-		existingPath := envutil.LoadKeyFromEnvFile(envPath, "POLICY_PATH")
-		if existingPath != "" {
-			// POLICY_PATH already set, nothing to do
-			return nil
-		}
-		// POLICY_PATH not set, add it
-		return envutil.SaveKeyToEnvFile(envPath, "POLICY_PATH", defaultPolicyPath)
+// initializeConfigFile creates .sym/config.json with default settings
+func initializeConfigFile() error {
+	// Check if config.json already exists
+	if config.ProjectConfigExists() {
+		return nil
 	}
 
-	// .env doesn't exist, create it with default settings
-	content := fmt.Sprintf("# Symphony local configuration\nPOLICY_PATH=%s\nCURRENT_ROLE=admin\n", defaultPolicyPath)
-	return os.WriteFile(envPath, []byte(content), 0644)
+	// Create default project config
+	defaultConfig := &config.ProjectConfig{
+		PolicyPath: ".sym/user-policy.json",
+	}
+
+	return config.SaveProjectConfig(defaultConfig)
 }
 
 // removeExistingCodePolicy removes generated linter config files when --force flag is used
@@ -240,9 +231,9 @@ func removeExistingCodePolicy() error {
 			filePath := filepath.Join(symDir, filename)
 			if _, err := os.Stat(filePath); err == nil {
 				if err := os.Remove(filePath); err != nil {
-					fmt.Printf("⚠ Warning: Failed to remove %s: %v\n", filePath, err)
+					ui.PrintWarn(fmt.Sprintf("Failed to remove %s: %v", filePath, err))
 				} else {
-					fmt.Printf("✓ Removed existing %s\n", filePath)
+					fmt.Println(ui.Indent(fmt.Sprintf("Removed existing %s", filePath)))
 				}
 			}
 		}
@@ -254,7 +245,7 @@ func removeExistingCodePolicy() error {
 		if err := os.Remove(legacyPath); err != nil {
 			return fmt.Errorf("failed to remove %s: %w", legacyPath, err)
 		}
-		fmt.Printf("✓ Removed existing %s\n", legacyPath)
+		fmt.Println(ui.Indent(fmt.Sprintf("Removed existing %s", legacyPath)))
 	}
 
 	return nil

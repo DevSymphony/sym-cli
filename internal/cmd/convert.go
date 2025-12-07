@@ -133,24 +133,19 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 		convertOutputDir = ".sym"
 	}
 
-	timeout := time.Duration(convertTimeout) * time.Second
-	llmClient := llm.NewClient(
-		llm.WithTimeout(timeout),
-	)
-
-	// Ensure at least one backend is available (MCP/CLI/API)
-	availabilityCtx, cancelAvailability := context.WithTimeout(context.Background(), timeout)
-	defer cancelAvailability()
-
-	if err := llmClient.CheckAvailability(availabilityCtx); err != nil {
-		return fmt.Errorf("no available LLM backend for convert: %w\nTip: run 'sym init --setup-llm' or configure LLM_BACKEND / LLM_CLI / OPENAI_API_KEY in .sym/.env", err)
+	// Create LLM provider
+	cfg := llm.LoadConfig()
+	llmProvider, err := llm.New(cfg)
+	if err != nil {
+		return fmt.Errorf("no available LLM backend for convert: %w\nTip: configure LLM_PROVIDER in .sym/.env", err)
 	}
+	defer llmProvider.Close()
 
 	// Create new converter
-	conv := converter.NewConverter(llmClient, convertOutputDir)
+	conv := converter.NewConverter(llmProvider, convertOutputDir)
 
-	// Setup context with generous timeout for parallel processing
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(convertTimeout*10)*time.Second)
+	// Setup context with generous timeout for parallel processing (10 minutes to match validator)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	fmt.Printf("\n🚀 Converting with language-based routing and parallel LLM inference\n")
