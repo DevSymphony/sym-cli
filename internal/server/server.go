@@ -678,17 +678,20 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 	// Determine output directory (same as input file)
 	outputDir := filepath.Dir(policyPath)
 
-	// Setup LLM client (backend auto-selection via @llm)
-	timeout := 30 * time.Second
-	llmClient := llm.NewClient(
-		llm.WithTimeout(timeout),
-	)
+	// Setup LLM provider
+	llmCfg := llm.LoadConfig()
+	llmProvider, err := llm.New(llmCfg)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create LLM provider: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer llmProvider.Close()
 
-	// Create converter with LLM client and output directory
-	conv := converter.NewConverter(llmClient, outputDir)
+	// Create converter with LLM provider and output directory
+	conv := converter.NewConverter(llmProvider, outputDir)
 
-	// Setup context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(30*10)*time.Second)
+	// Setup context with timeout (10 minutes to match validator)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	// Convert using new API
