@@ -35,19 +35,23 @@ if err != nil {
 response, err := provider.Execute(ctx, prompt, llm.JSON)
 ```
 
-### Environment Variables
+### Configuration
 
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `LLM_PROVIDER` | Provider name (claudecode, geminicli, openaiapi) | Yes |
-| `LLM_MODEL` | Model name | No (uses default) |
-| `OPENAI_API_KEY` | OpenAI API key | openaiapi only |
+Config file: `.sym/config.json`
 
-Config file: `.sym/.env`
+```json
+{
+  "llm": {
+    "provider": "claudecode",
+    "model": "sonnet"
+  }
+}
+```
+
+For OpenAI API, also add API key to `.sym/.env`:
 
 ```bash
-LLM_PROVIDER=claudecode
-LLM_MODEL=claude-sonnet-4-20250514
+OPENAI_API_KEY=sk-...
 ```
 
 ### Response Format
