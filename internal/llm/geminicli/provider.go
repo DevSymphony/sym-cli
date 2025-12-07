@@ -35,7 +35,7 @@ func init() {
 	})
 }
 
-// Provider implements llm.Provider for Gemini CLI.
+// Provider implements llm.RawProvider for Gemini CLI.
 type Provider struct {
 	model   string
 	timeout time.Duration
@@ -45,7 +45,7 @@ type Provider struct {
 
 // newProvider creates a new Gemini CLI provider.
 // Returns error if Gemini CLI is not installed.
-func newProvider(cfg llm.Config) (llm.Provider, error) {
+func newProvider(cfg llm.Config) (llm.RawProvider, error) {
 	path, err := exec.LookPath(command)
 	if err != nil {
 		return nil, fmt.Errorf("gemini CLI not installed: run 'npm install -g @anthropic-ai/gemini-cli' to install")
@@ -68,7 +68,7 @@ func (p *Provider) Name() string {
 	return providerName
 }
 
-func (p *Provider) Execute(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
+func (p *Provider) ExecuteRaw(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
 	args := []string{"prompt", "-m", p.model, prompt}
 
 	if p.verbose {
@@ -98,8 +98,7 @@ func (p *Provider) Execute(ctx context.Context, prompt string, format llm.Respon
 		fmt.Fprintf(os.Stderr, "[geminicli] Response: %d chars\n", len(response))
 	}
 
-	// Parse response based on format
-	return llm.Parse(response, format)
+	return response, nil
 }
 
 // Close is a no-op for CLI-based providers.

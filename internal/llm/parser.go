@@ -227,3 +227,24 @@ func isValidXML(s string) bool {
 		tokenCount++
 	}
 }
+
+// parse extracts structured content from LLM responses based on format.
+func parse(response string, format ResponseFormat) (string, error) {
+	opts := ParseOptions{
+		Format:     toInternalFormat(format),
+		StrictMode: true,
+	}
+	return ParseResponse(response, opts)
+}
+
+// toInternalFormat converts ResponseFormat to internal format for parser.
+func toInternalFormat(f ResponseFormat) internalFormat {
+	switch f {
+	case JSON:
+		return ResponseFormatJSON
+	case XML:
+		return ResponseFormatXML
+	default:
+		return ResponseFormatText
+	}
+}

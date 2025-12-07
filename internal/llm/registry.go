@@ -6,27 +6,32 @@ import (
 	"strings"
 )
 
-// providerFactory creates a provider instance.
-type providerFactory func(cfg Config) (Provider, error)
+// rawProviderFactory creates a RawProvider instance.
+type rawProviderFactory func(cfg Config) (RawProvider, error)
 
-var providers = make(map[string]providerFactory)
+var providers = make(map[string]rawProviderFactory)
 var providerMeta = make(map[string]ProviderInfo)
 
 // RegisterProvider registers a provider factory.
 // Called by provider packages in their init() functions.
-func RegisterProvider(name string, factory providerFactory, info ProviderInfo) {
+func RegisterProvider(name string, factory rawProviderFactory, info ProviderInfo) {
 	providers[name] = factory
 	providerMeta[name] = info
 }
 
 // New creates a new LLM provider based on the configuration.
 // Returns an error if the provider is not available (CLI not installed, API key missing, etc.)
+// The returned Provider automatically handles response parsing.
 func New(cfg Config) (Provider, error) {
 	factory, ok := providers[cfg.Provider]
 	if !ok {
 		return nil, fmt.Errorf("unknown provider: %s (available: %s)", cfg.Provider, availableProviders())
 	}
-	return factory(cfg)
+	rawProvider, err := factory(cfg)
+	if err != nil {
+		return nil, err
+	}
+	return wrapWithParser(rawProvider), nil
 }
 
 // GetProviderInfo returns metadata for a provider.

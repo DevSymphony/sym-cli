@@ -13,6 +13,18 @@ type Provider interface {
 	Close() error
 }
 
+// RawProvider is the interface for provider implementations.
+// Provider implementations should implement this interface.
+// The registry will automatically wrap RawProvider with parsing logic.
+type RawProvider interface {
+	// ExecuteRaw sends a prompt and returns the raw (unparsed) response.
+	ExecuteRaw(ctx context.Context, prompt string, format ResponseFormat) (string, error)
+	// Name returns the provider name.
+	Name() string
+	// Close releases any resources held by the provider.
+	Close() error
+}
+
 // ResponseFormat specifies the expected response format.
 type ResponseFormat string
 

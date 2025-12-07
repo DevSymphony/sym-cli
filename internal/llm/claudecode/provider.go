@@ -35,7 +35,7 @@ func init() {
 	})
 }
 
-// Provider implements llm.Provider for Claude Code CLI.
+// Provider implements llm.RawProvider for Claude Code CLI.
 type Provider struct {
 	model   string
 	timeout time.Duration
@@ -45,7 +45,7 @@ type Provider struct {
 
 // newProvider creates a new Claude Code provider.
 // Returns error if Claude CLI is not installed.
-func newProvider(cfg llm.Config) (llm.Provider, error) {
+func newProvider(cfg llm.Config) (llm.RawProvider, error) {
 	path, err := exec.LookPath(command)
 	if err != nil {
 		return nil, fmt.Errorf("claude CLI not installed: run 'npm install -g @anthropic-ai/claude-cli' to install")
@@ -68,8 +68,14 @@ func (p *Provider) Name() string {
 	return providerName
 }
 
-func (p *Provider) Execute(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
+func (p *Provider) ExecuteRaw(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
 	args := []string{"-p", prompt, "--output-format", "text"}
+
+	// MCP 서버 로딩 비활성화: 재귀 호출 방지
+	// Symphony가 claude CLI를 호출할 때 MCP가 다시 로드되면 무한 루프 발생
+	// --mcp-config는 JSON 문자열도 지원함 (파일 경로 외에)
+	args = append(args, "--strict-mcp-config", "--mcp-config", `{"mcpServers":{}}`)
+
 	if p.model != "" {
 		args = append(args, "--model", p.model)
 	}
@@ -101,8 +107,7 @@ func (p *Provider) Execute(ctx context.Context, prompt string, format llm.Respon
 		fmt.Fprintf(os.Stderr, "[claudecode] Response: %d chars\n", len(response))
 	}
 
-	// Parse response based on format
-	return llm.Parse(response, format)
+	return response, nil
 }
 
 // Close is a no-op for CLI-based providers.

@@ -10,33 +10,32 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// mockProvider is a test provider for unit tests.
-type mockProvider struct {
+// mockRawProvider is a test provider for unit tests.
+type mockRawProvider struct {
 	name     string
 	response string
 	err      error
 }
 
-func (m *mockProvider) Execute(ctx context.Context, prompt string, format ResponseFormat) (string, error) {
+func (m *mockRawProvider) ExecuteRaw(ctx context.Context, prompt string, format ResponseFormat) (string, error) {
 	if m.err != nil {
 		return "", m.err
 	}
-	// Real providers call Parse(), so mock should too
-	return Parse(m.response, format)
+	return m.response, nil
 }
 
-func (m *mockProvider) Name() string {
+func (m *mockRawProvider) Name() string {
 	return m.name
 }
 
-func (m *mockProvider) Close() error {
+func (m *mockRawProvider) Close() error {
 	return nil
 }
 
 func init() {
 	// Register a test provider
-	RegisterProvider("test-provider", func(cfg Config) (Provider, error) {
-		return &mockProvider{
+	RegisterProvider("test-provider", func(cfg Config) (RawProvider, error) {
+		return &mockRawProvider{
 			name:     "test-provider",
 			response: "test response",
 		}, nil
@@ -203,24 +202,24 @@ func TestListProviders(t *testing.T) {
 	assert.True(t, found, "test-provider should be in list")
 }
 
-func TestParse(t *testing.T) {
+func Test_parse(t *testing.T) {
 	t.Run("parses JSON from response", func(t *testing.T) {
 		response := `Here is the result: {"key": "value"}`
-		result, err := Parse(response, JSON)
+		result, err := parse(response, JSON)
 		require.NoError(t, err)
 		assert.Equal(t, `{"key": "value"}`, result)
 	})
 
 	t.Run("parses XML from response", func(t *testing.T) {
 		response := `Here is XML: <root>value</root>`
-		result, err := Parse(response, XML)
+		result, err := parse(response, XML)
 		require.NoError(t, err)
 		assert.Equal(t, `<root>value</root>`, result)
 	})
 
 	t.Run("returns text as-is", func(t *testing.T) {
 		response := "Just plain text"
-		result, err := Parse(response, Text)
+		result, err := parse(response, Text)
 		require.NoError(t, err)
 		assert.Equal(t, response, result)
 	})

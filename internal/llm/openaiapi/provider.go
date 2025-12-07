@@ -40,7 +40,7 @@ func init() {
 	})
 }
 
-// Provider implements llm.Provider for OpenAI API.
+// Provider implements llm.RawProvider for OpenAI API.
 type Provider struct {
 	apiKey      string
 	model       string
@@ -52,7 +52,7 @@ type Provider struct {
 
 // newProvider creates a new OpenAI API provider.
 // Returns ErrAPIKeyRequired if API key is not provided.
-func newProvider(cfg llm.Config) (llm.Provider, error) {
+func newProvider(cfg llm.Config) (llm.RawProvider, error) {
 	apiKey := cfg.APIKey
 	if apiKey == "" {
 		apiKey = os.Getenv("OPENAI_API_KEY")
@@ -80,7 +80,7 @@ func (p *Provider) Name() string {
 	return providerName
 }
 
-func (p *Provider) Execute(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
+func (p *Provider) ExecuteRaw(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
 	apiReq := apiRequest{
 		Model: p.model,
 		Messages: []apiMessage{
@@ -151,8 +151,7 @@ func (p *Provider) Execute(ctx context.Context, prompt string, format llm.Respon
 		fmt.Fprintf(os.Stderr, "[openaiapi] Response: %d chars, Tokens: %d\n", len(content), apiResp.Usage.TotalTokens)
 	}
 
-	// Parse response based on format
-	return llm.Parse(content, format)
+	return content, nil
 }
 
 // isReasoningModel returns true if the model is a reasoning model (gpt-5, o1, o3, o4).

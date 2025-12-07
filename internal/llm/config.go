@@ -89,23 +89,3 @@ func loadEnvFileAPIKey(path string, cfg *Config) {
 	}
 }
 
-// Parse extracts structured content from LLM responses based on format.
-func Parse(response string, format ResponseFormat) (string, error) {
-	opts := ParseOptions{
-		Format:     toInternalFormat(format),
-		StrictMode: true,
-	}
-	return ParseResponse(response, opts)
-}
-
-// toInternalFormat converts ResponseFormat to internal format for parser.
-func toInternalFormat(f ResponseFormat) internalFormat {
-	switch f {
-	case JSON:
-		return ResponseFormatJSON
-	case XML:
-		return ResponseFormatXML
-	default:
-		return ResponseFormatText
-	}
-}
