@@ -43,7 +43,7 @@ type Validator struct {
 	selector        *FileSelector
 	ctx             context.Context
 	ctxCancel       context.CancelFunc
-	llmClient       *llm.Client
+	llmProvider     llm.Provider
 }
 
 // NewValidator creates a new adapter-based validator
@@ -65,7 +65,7 @@ func NewValidator(policy *schema.CodePolicy, verbose bool) *Validator {
 		selector:        NewFileSelector(workDir),
 		ctx:             ctx,
 		ctxCancel:       cancel,
-		llmClient:       nil,
+		llmProvider:     nil,
 	}
 }
 
@@ -84,13 +84,13 @@ func NewValidatorWithWorkDir(policy *schema.CodePolicy, verbose bool, workDir st
 		selector:        NewFileSelector(workDir),
 		ctx:             ctx,
 		ctxCancel:       cancel,
-		llmClient:       nil,
+		llmProvider:     nil,
 	}
 }
 
-// SetLLMClient sets the LLM client for this validator
-func (v *Validator) SetLLMClient(client *llm.Client) {
-	v.llmClient = client
+// SetLLMProvider sets the LLM provider for this validator
+func (v *Validator) SetLLMProvider(provider llm.Provider) {
+	v.llmProvider = provider
 }
 
 // executeRule executes a rule using the appropriate adapter
@@ -176,8 +176,8 @@ func (v *Validator) executeRule(engineName string, rule schema.PolicyRule, files
 
 // executeLLMRule executes an LLM-based rule
 func (v *Validator) executeLLMRule(rule schema.PolicyRule, files []string) ([]Violation, error) {
-	if v.llmClient == nil {
-		return nil, fmt.Errorf("LLM client not configured")
+	if v.llmProvider == nil {
+		return nil, fmt.Errorf("LLM provider not configured")
 	}
 
 	// Validate required fields for LLM validator
@@ -230,7 +230,8 @@ Does this code violate the convention?`, file, rule.Desc, string(content))
 
 		// Call LLM
 		fileStartTime := time.Now()
-		response, err := v.llmClient.Request(systemPrompt, userPrompt).Execute(v.ctx)
+		prompt := systemPrompt + "\n\n" + userPrompt
+		response, err := v.llmProvider.Execute(v.ctx, prompt, llm.Text)
 		fileExecMs := time.Since(fileStartTime).Milliseconds()
 
 		// Record response in consolidated output
@@ -464,13 +465,14 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 
 // validateLLMChanges validates changes using LLM in parallel
 func (v *Validator) validateLLMChanges(ctx context.Context, changes []GitChange, rule schema.PolicyRule, result *ValidationResult) {
-	if v.llmClient == nil {
+	if v.llmProvider == nil {
+		fmt.Fprintf(os.Stderr, "⚠️  LLM provider not configured, skipping LLM validation for rule %s\n", rule.ID)
 		return
 	}
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
-	llmValidator := NewLLMValidator(v.llmClient, v.policy)
+	llmValidator := NewLLMValidator(v.llmProvider, v.policy)
 
 	for _, change := range changes {
 		if change.Status == "D" {
@@ -500,6 +502,13 @@ func (v *Validator) validateLLMChanges(ctx context.Context, changes []GitChange,
 
 			violation, err := llmValidator.CheckRule(ctx, ch, lines, r)
 			if err != nil {
+				mu.Lock()
+				result.Errors = append(result.Errors, ValidationError{
+					RuleID:  r.ID,
+					Engine:  "llm-validator",
+					Message: fmt.Sprintf("failed to check rule: %v", err),
+				})
+				mu.Unlock()
 				return
 			}
 
