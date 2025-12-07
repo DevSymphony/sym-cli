@@ -1,65 +1,56 @@
+// Package llm provides a unified interface for LLM providers.
 package llm
 
 import (
-	"sort"
-	"sync"
+	"fmt"
+	"strings"
 )
 
-// EngineConfig holds common configuration for all LLM engines.
-type EngineConfig struct {
-	APIKey     string
-	Model      string
-	LargeModel string
-	CLIPath    string
-	Verbose    bool
+// providerFactory creates a provider instance.
+type providerFactory func(cfg Config) (Provider, error)
+
+var providers = make(map[string]providerFactory)
+var providerMeta = make(map[string]ProviderInfo)
+
+// RegisterProvider registers a provider factory.
+// Called by provider packages in their init() functions.
+func RegisterProvider(name string, factory providerFactory, info ProviderInfo) {
+	providers[name] = factory
+	providerMeta[name] = info
 }
 
-// EngineFactory creates an LLMEngine instance from configuration.
-type EngineFactory func(cfg *EngineConfig) (LLMEngine, error)
-
-// Registration represents a registered LLM provider.
-type Registration struct {
-	Name     string
-	Priority int // Higher = preferred in auto mode
-	Factory  EngineFactory
-}
-
-var (
-	registry   = make(map[string]*Registration)
-	registryMu sync.RWMutex
-)
-
-// Register adds an LLM provider to the registry.
-func Register(r *Registration) {
-	if r == nil || r.Factory == nil {
-		return
+// New creates a new LLM provider based on the configuration.
+// Returns an error if the provider is not available (CLI not installed, API key missing, etc.)
+func New(cfg Config) (Provider, error) {
+	factory, ok := providers[cfg.Provider]
+	if !ok {
+		return nil, fmt.Errorf("unknown provider: %s (available: %s)", cfg.Provider, availableProviders())
 	}
-	registryMu.Lock()
-	defer registryMu.Unlock()
-	registry[r.Name] = r
+	return factory(cfg)
 }
 
-// GetRegistration returns a registration by name.
-func GetRegistration(name string) (*Registration, bool) {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-	r, ok := registry[name]
-	return r, ok
-}
-
-// GetAllRegistrations returns all registrations sorted by priority (descending).
-func GetAllRegistrations() []*Registration {
-	registryMu.RLock()
-	defer registryMu.RUnlock()
-
-	result := make([]*Registration, 0, len(registry))
-	for _, r := range registry {
-		result = append(result, r)
+// GetProviderInfo returns metadata for a provider.
+func GetProviderInfo(name string) *ProviderInfo {
+	info, ok := providerMeta[name]
+	if !ok {
+		return nil
 	}
+	return &info
+}
 
-	sort.Slice(result, func(i, j int) bool {
-		return result[i].Priority > result[j].Priority
-	})
-
+// ListProviders returns info for all registered providers.
+func ListProviders() []ProviderInfo {
+	result := make([]ProviderInfo, 0, len(providerMeta))
+	for _, info := range providerMeta {
+		result = append(result, info)
+	}
 	return result
+}
+
+func availableProviders() string {
+	names := make([]string, 0, len(providers))
+	for name := range providers {
+		names = append(names, name)
+	}
+	return strings.Join(names, ", ")
 }
