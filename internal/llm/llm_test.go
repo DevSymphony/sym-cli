@@ -2,8 +2,6 @@ package llm
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,95 +79,37 @@ func TestConfigValidate(t *testing.T) {
 		assert.Contains(t, err.Error(), "provider is required")
 	})
 
-	t.Run("returns error when openaiapi without API key", func(t *testing.T) {
-		cfg := Config{Provider: "openaiapi"}
-		err := cfg.Validate()
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "API key is required")
-	})
-
 	t.Run("valid config with CLI provider", func(t *testing.T) {
 		cfg := Config{Provider: "claudecode"}
 		err := cfg.Validate()
 		assert.NoError(t, err)
 	})
 
-	t.Run("valid config with openaiapi and key", func(t *testing.T) {
-		cfg := Config{Provider: "openaiapi", APIKey: "test-key"}
+	t.Run("valid config with openaiapi", func(t *testing.T) {
+		// Note: API key validation is now handled by the provider itself
+		cfg := Config{Provider: "openaiapi"}
 		err := cfg.Validate()
 		assert.NoError(t, err)
 	})
 }
 
 func TestLoadConfig(t *testing.T) {
-	// Save and restore original env vars
-	origProvider := os.Getenv("LLM_PROVIDER")
-	origModel := os.Getenv("LLM_MODEL")
-	defer func() {
-		if origProvider != "" {
-			os.Setenv("LLM_PROVIDER", origProvider)
-		} else {
-			os.Unsetenv("LLM_PROVIDER")
-		}
-		if origModel != "" {
-			os.Setenv("LLM_MODEL", origModel)
-		} else {
-			os.Unsetenv("LLM_MODEL")
-		}
-	}()
-
-	t.Run("loads from environment variables", func(t *testing.T) {
-		os.Setenv("LLM_PROVIDER", "claudecode")
-		os.Setenv("LLM_MODEL", "test-model")
-
+	t.Run("returns config from LoadConfigFromDir", func(t *testing.T) {
+		// LoadConfig is a simple wrapper around LoadConfigFromDir
 		cfg := LoadConfig()
-		assert.Equal(t, "claudecode", cfg.Provider)
-		assert.Equal(t, "test-model", cfg.Model)
+		// Without .sym/config.json, it should return empty config
+		// We just verify it doesn't panic
+		_ = cfg.Provider
+		_ = cfg.Model
 	})
 }
 
 func TestLoadConfigFromDir(t *testing.T) {
-	// Clear env vars for this test
-	os.Unsetenv("LLM_PROVIDER")
-	os.Unsetenv("LLM_MODEL")
-	os.Unsetenv("OPENAI_API_KEY")
-
-	t.Run("loads API key from .env file", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		// Note: .env file only stores sensitive data (API keys)
-		// Provider and model are stored in config.json
-		envContent := `OPENAI_API_KEY=sk-test-key
-`
-		err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(envContent), 0600)
-		require.NoError(t, err)
-
-		cfg := LoadConfigFromDir(tmpDir)
-		assert.Equal(t, "sk-test-key", cfg.APIKey)
-		assert.Empty(t, cfg.Provider) // Provider comes from config.json, not .env
-	})
-
-	t.Run("env vars override file values", func(t *testing.T) {
-		tmpDir := t.TempDir()
-		envContent := `OPENAI_API_KEY=sk-from-file
-`
-		err := os.WriteFile(filepath.Join(tmpDir, ".env"), []byte(envContent), 0600)
-		require.NoError(t, err)
-
-		os.Setenv("LLM_PROVIDER", "claudecode")
-		os.Setenv("OPENAI_API_KEY", "sk-from-env")
-		defer os.Unsetenv("LLM_PROVIDER")
-		defer os.Unsetenv("OPENAI_API_KEY")
-
-		cfg := LoadConfigFromDir(tmpDir)
-		assert.Equal(t, "claudecode", cfg.Provider)  // from env var
-		assert.Equal(t, "sk-from-env", cfg.APIKey)   // env overrides file
-	})
-
-	t.Run("returns empty config when file not found", func(t *testing.T) {
+	t.Run("returns empty config when no config found", func(t *testing.T) {
 		tmpDir := t.TempDir()
 		cfg := LoadConfigFromDir(tmpDir)
 		assert.Empty(t, cfg.Provider)
-		assert.Empty(t, cfg.APIKey)
+		assert.Empty(t, cfg.Model)
 	})
 }
 

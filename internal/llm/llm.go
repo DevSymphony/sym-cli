@@ -43,7 +43,6 @@ func (f ResponseFormat) String() string {
 type Config struct {
 	Provider string // "claudecode", "geminicli", "openaiapi"
 	Model    string // Model name (optional, uses provider default)
-	APIKey   string // API key for OpenAI
 	Verbose  bool   // Enable verbose logging
 }
 

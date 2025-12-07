@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 )
 
@@ -30,12 +31,12 @@ const (
 var ErrAPIKeyRequired = errors.New("openaiapi: API key is required (set OPENAI_API_KEY environment variable)")
 
 func init() {
-	// OpenAI availability depends on API key, checked in New()
+	// OpenAI availability depends on API key (from env vars or .sym/.env)
 	llm.RegisterProvider(providerName, newProvider, llm.ProviderInfo{
 		Name:         providerName,
 		DisplayName:  displayName,
 		DefaultModel: defaultModel,
-		Available:    os.Getenv("OPENAI_API_KEY") != "",
+		Available:    envutil.GetAPIKey("OPENAI_API_KEY") != "",
 		Path:         "",
 	})
 }
@@ -53,10 +54,8 @@ type Provider struct {
 // newProvider creates a new OpenAI API provider.
 // Returns ErrAPIKeyRequired if API key is not provided.
 func newProvider(cfg llm.Config) (llm.RawProvider, error) {
-	apiKey := cfg.APIKey
-	if apiKey == "" {
-		apiKey = os.Getenv("OPENAI_API_KEY")
-	}
+	// Provider handles its own API key loading from env vars and .sym/.env
+	apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
 	if apiKey == "" {
 		return nil, ErrAPIKeyRequired
 	}
