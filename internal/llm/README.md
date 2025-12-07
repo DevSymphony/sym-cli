@@ -6,10 +6,12 @@ Unified interface for LLM providers.
 
 ```
 internal/llm/
-├── llm.go           # Provider interface, Config, ResponseFormat
+├── llm.go           # Provider, RawProvider interface, Config, ResponseFormat
 ├── registry.go      # RegisterProvider, New, ListProviders
-├── config.go        # LoadConfig, Parse
-├── parser.go        # Response parsing
+├── wrapper.go       # parsedProvider (auto parsing wrapper)
+├── config.go        # LoadConfig
+├── parser.go        # Response parsing (private)
+├── DESIGN.md        # Architecture documentation
 ├── claudecode/      # Claude Code CLI provider
 ├── geminicli/       # Gemini CLI provider
 └── openaiapi/       # OpenAI API provider
@@ -84,7 +86,7 @@ internal/llm/<provider>/
 └── provider.go
 ```
 
-### Step 2: Implement Provider Interface
+### Step 2: Implement RawProvider Interface
 
 ```go
 package myprovider
@@ -102,12 +104,14 @@ func (p *Provider) Name() string {
     return "myprovider"
 }
 
-func (p *Provider) Execute(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
-    // Execute prompt
+func (p *Provider) ExecuteRaw(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
+    // Execute prompt and return raw response
     response := callLLM(prompt)
+    return response, nil  // No manual parsing needed
+}
 
-    // Parse response (required)
-    return llm.Parse(response, format)
+func (p *Provider) Close() error {
+    return nil
 }
 ```
 
@@ -124,7 +128,7 @@ func init() {
     })
 }
 
-func newProvider(cfg llm.Config) (llm.Provider, error) {
+func newProvider(cfg llm.Config) (llm.RawProvider, error) {
     // Return error if CLI not installed or API key missing
     if !isAvailable() {
         return nil, fmt.Errorf("provider not available")
@@ -150,7 +154,8 @@ import (
 
 ### Key Rules
 
-- Use `llm.Parse(response, format)` for response parsing
+- Implement `RawProvider.ExecuteRaw()` - parsing is handled automatically by wrapper
 - Return clear error message if CLI not installed or API key missing
 - Check availability in init() to set ProviderInfo.Available
 - Refer to existing providers (claudecode, openaiapi) for patterns
+- See `DESIGN.md` for architecture details
