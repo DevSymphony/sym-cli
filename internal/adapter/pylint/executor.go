@@ -37,9 +37,7 @@ func (a *Adapter) execute(ctx context.Context, config []byte, files []string) (*
 func (a *Adapter) getExecutionArgs(configPath string, files []string) []string {
 	args := []string{
 		"--output-format=json",
-		"--disable=all",      // Disable all checks first
-		"--enable=invalid-name", // Enable only naming checks (C0103)
-		"--rcfile=" + configPath,
+		"--rcfile=" + configPath, // Use .pylintrc settings as-is
 	}
 	args = append(args, files...)
 

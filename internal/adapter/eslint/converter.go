@@ -46,9 +46,9 @@ func (c *Converter) GetRoutingHints() []string {
 }
 
 // ConvertRules converts user rules to ESLint configuration using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
-	if llmClient == nil {
-		return nil, fmt.Errorf("LLM client is required")
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("LLM provider is required")
 	}
 
 	// Convert rules in parallel using goroutines
@@ -68,7 +68,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 		go func(idx int, r schema.UserRule) {
 			defer wg.Done()
 
-			ruleName, config, err := c.convertSingleRule(ctx, r, llmClient)
+			ruleName, config, err := c.convertSingleRule(ctx, r, provider)
 			results <- ruleResult{
 				index:    idx,
 				ruleName: ruleName,
@@ -141,7 +141,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 }
 
 // convertSingleRule converts a single user rule to ESLint rule using LLM
-func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (string, interface{}, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, provider llm.Provider) (string, interface{}, error) {
 	systemPrompt := `You are an ESLint configuration expert. Convert natural language coding rules to ESLint rule configurations.
 
 Return ONLY a JSON object (no markdown fences) with this structure:
@@ -217,8 +217,9 @@ Output:
 		userPrompt += fmt.Sprintf("\nSeverity: %s", rule.Severity)
 	}
 
-	// Call LLM with minimal complexity
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
+	// Call LLM
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		return "", nil, fmt.Errorf("LLM call failed: %w", err)
 	}

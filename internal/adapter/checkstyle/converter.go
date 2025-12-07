@@ -65,9 +65,9 @@ type checkstyleConfig struct {
 }
 
 // ConvertRules converts user rules to Checkstyle configuration using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
-	if llmClient == nil {
-		return nil, fmt.Errorf("LLM client is required")
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("LLM provider is required")
 	}
 
 	// Convert rules in parallel
@@ -85,7 +85,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 		go func(idx int, r schema.UserRule) {
 			defer wg.Done()
 
-			module, err := c.convertSingleRule(ctx, r, llmClient)
+			module, err := c.convertSingleRule(ctx, r, provider)
 			results <- moduleResult{
 				index:  idx,
 				module: module,
@@ -181,7 +181,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 }
 
 // convertSingleRule converts a single rule using LLM
-func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*checkstyleModule, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, provider llm.Provider) (*checkstyleModule, error) {
 	systemPrompt := `You are a Checkstyle configuration expert. Convert natural language Java coding rules to Checkstyle modules.
 
 Return ONLY a JSON object (no markdown fences):
@@ -255,8 +255,9 @@ Output:
 
 	userPrompt := fmt.Sprintf("Convert this Java rule to Checkstyle module:\n\n%s", rule.Say)
 
-	// Call LLM with minimal complexity
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
+	// Call LLM
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}

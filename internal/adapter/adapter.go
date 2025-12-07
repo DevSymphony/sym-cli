@@ -115,7 +115,7 @@ type LinterConverter interface {
 	GetRoutingHints() []string
 
 	// ConvertRules converts user rules to native linter configuration using LLM
-	ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error)
+	ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*LinterConfig, error)
 }
 
 // LinterConfig represents a generated configuration file.

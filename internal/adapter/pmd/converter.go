@@ -64,9 +64,9 @@ type pmdRule struct {
 }
 
 // ConvertRules converts user rules to PMD configuration using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
-	if llmClient == nil {
-		return nil, fmt.Errorf("LLM client is required")
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("LLM provider is required")
 	}
 
 	// Convert rules in parallel
@@ -84,7 +84,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 		go func(idx int, r schema.UserRule) {
 			defer wg.Done()
 
-			pmdRule, err := c.convertSingleRule(ctx, r, llmClient)
+			pmdRule, err := c.convertSingleRule(ctx, r, provider)
 			results <- ruleResult{
 				index: idx,
 				rule:  pmdRule,
@@ -144,7 +144,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 }
 
 // convertSingleRule converts a single rule using LLM
-func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*pmdRule, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, provider llm.Provider) (*pmdRule, error) {
 	systemPrompt := `You are a PMD 7.x configuration expert. Convert natural language Java coding rules to PMD rule references.
 
 Return ONLY a JSON object with exactly these two fields (no other fields):
@@ -188,8 +188,9 @@ IMPORTANT: Return ONLY the JSON object. Do NOT include description, message, or 
 
 	userPrompt := fmt.Sprintf("Convert this Java rule to PMD rule reference:\n\n%s", rule.Say)
 
-	// Call LLM with minimal complexity
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
+	// Call LLM
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}

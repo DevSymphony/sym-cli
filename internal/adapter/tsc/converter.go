@@ -44,9 +44,9 @@ func (c *Converter) GetRoutingHints() []string {
 }
 
 // ConvertRules converts type-checking rules to tsconfig.json using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
-	if llmClient == nil {
-		return nil, fmt.Errorf("LLM client is required")
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.LinterConfig, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("LLM provider is required")
 	}
 
 	// Start with strict TypeScript configuration
@@ -73,7 +73,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 
 	// Use LLM to infer settings from rules
 	for _, rule := range rules {
-		config, err := c.convertSingleRule(ctx, rule, llmClient)
+		config, err := c.convertSingleRule(ctx, rule, provider)
 		if err != nil {
 			continue // Skip rules that cannot be converted
 		}
@@ -97,7 +97,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 }
 
 // convertSingleRule converts a single user rule to TypeScript compiler option using LLM
-func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (map[string]interface{}, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, provider llm.Provider) (map[string]interface{}, error) {
 	systemPrompt := `You are a TypeScript compiler configuration expert. Convert natural language type-checking rules to tsconfig.json compiler options.
 
 Return ONLY a JSON object (no markdown fences) with TypeScript compiler options.
@@ -148,7 +148,8 @@ Output:
 	userPrompt := fmt.Sprintf("Convert this rule to TypeScript compiler configuration:\n\n%s", rule.Say)
 
 	// Call LLM
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}
