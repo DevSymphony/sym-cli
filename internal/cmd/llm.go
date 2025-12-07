@@ -1,8 +1,10 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -72,9 +74,6 @@ func runLLMStatus(_ *cobra.Command, _ []string) {
 	}
 	if cfg.Model != "" {
 		fmt.Printf("  Model: %s\n", cfg.Model)
-	}
-	if cfg.APIKey != "" {
-		fmt.Println("  API Key: configured")
 	}
 	fmt.Println()
 
@@ -221,6 +220,16 @@ var geminiModelToShortName = map[string]string{
 	"2.5 pro   - Higher capability":                "gemini-2.5-pro",
 }
 
+// OpenAI model options with descriptions
+var openaiModelOptions = []string{
+	"gpt-4o-mini - Fast and efficient (recommended)",
+	"gpt-5-mini  - Next generation model",
+}
+
+var openaiModelToID = map[string]string{
+	"gpt-4o-mini - Fast and efficient (recommended)": "gpt-4o-mini",
+	"gpt-5-mini  - Next generation model":            "gpt-5-mini",
+}
 
 // promptLLMBackendSetup is called from init command to setup LLM provider.
 func promptLLMBackendSetup() {
@@ -262,7 +271,19 @@ func promptLLMBackendSetup() {
 			ui.PrintError(fmt.Sprintf("Failed to save API key: %v", err))
 			return
 		}
-		modelID = "gpt-4o" // Default model for OpenAI
+		// Select OpenAI model
+		var selectedOption string
+		modelPrompt := &survey.Select{
+			Message: "Select OpenAI model:",
+			Options: openaiModelOptions,
+			Default: openaiModelOptions[0], // gpt-4o-mini (recommended)
+		}
+		if err := survey.AskOne(modelPrompt, &selectedOption); err != nil {
+			fmt.Println("Skipped model selection, using default")
+			modelID = "gpt-4o-mini"
+		} else {
+			modelID = openaiModelToID[selectedOption]
+		}
 
 	case "Claude Code":
 		// Select Claude model
@@ -344,5 +365,37 @@ func promptAndSaveAPIKey() error {
 func saveAPIKeyToEnv(envPath, apiKey string) error {
 	// Use existing envutil package
 	return envutil.SaveKeyToEnvFile(envPath, "OPENAI_API_KEY", apiKey)
+}
+
+// ensureGitignore ensures that the given path is in .gitignore
+func ensureGitignore(path string) error {
+	gitignorePath := ".gitignore"
+
+	// Read existing .gitignore
+	var lines []string
+	existingFile, err := os.Open(gitignorePath)
+	if err == nil {
+		scanner := bufio.NewScanner(existingFile)
+		for scanner.Scan() {
+			line := scanner.Text()
+			lines = append(lines, line)
+			// Check if already exists
+			if strings.TrimSpace(line) == path {
+				_ = existingFile.Close()
+				return nil // Already in .gitignore
+			}
+		}
+		_ = existingFile.Close()
+	}
+
+	// Add to .gitignore
+	lines = append(lines, "", "# Symphony API key configuration", path)
+	content := strings.Join(lines, "\n") + "\n"
+
+	if err := os.WriteFile(gitignorePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to update .gitignore: %w", err)
+	}
+
+	return nil
 }
 

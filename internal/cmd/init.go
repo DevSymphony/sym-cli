@@ -32,8 +32,6 @@ var (
 	initForce       bool
 	skipMCPRegister bool
 	registerMCPOnly bool
-	skipAPIKey      bool
-	setupAPIKeyOnly bool
 	skipLLMSetup    bool
 	setupLLMOnly    bool
 )
@@ -42,8 +40,6 @@ func init() {
 	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing roles.json")
 	initCmd.Flags().BoolVar(&skipMCPRegister, "skip-mcp", false, "Skip MCP server registration prompt")
 	initCmd.Flags().BoolVar(&registerMCPOnly, "register-mcp", false, "Register MCP server only (skip roles/policy init)")
-	initCmd.Flags().BoolVar(&skipAPIKey, "skip-api-key", false, "Skip OpenAI API key configuration prompt (deprecated, use --skip-llm)")
-	initCmd.Flags().BoolVar(&setupAPIKeyOnly, "setup-api-key", false, "Setup OpenAI API key only (deprecated, use --setup-llm)")
 	initCmd.Flags().BoolVar(&skipLLMSetup, "skip-llm", false, "Skip LLM backend configuration prompt")
 	initCmd.Flags().BoolVar(&setupLLMOnly, "setup-llm", false, "Setup LLM backend only (skip roles/policy init)")
 }
@@ -53,13 +49,6 @@ func runInit(cmd *cobra.Command, args []string) {
 	if registerMCPOnly {
 		ui.PrintTitle("MCP", "Registering Symphony MCP server")
 		promptMCPRegistration()
-		return
-	}
-
-	// API key setup only mode (deprecated)
-	if setupAPIKeyOnly {
-		ui.PrintTitle("API", "Setting up OpenAI API key")
-		promptAPIKeySetup()
 		return
 	}
 
@@ -135,7 +124,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	}
 
 	// LLM backend configuration prompt
-	if !skipLLMSetup && !skipAPIKey {
+	if !skipLLMSetup {
 		promptLLMBackendSetup()
 	}
 
