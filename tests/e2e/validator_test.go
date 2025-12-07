@@ -30,11 +30,13 @@ func TestE2E_ValidatorWithPolicy(t *testing.T) {
 	require.NoError(t, err, "Failed to load policy")
 	require.NotEmpty(t, policy.Rules, "Policy should have rules")
 
-	// Create LLM client
-	client := llm.NewClient()
+	// Create LLM provider
+	cfg := llm.LoadConfig()
+	provider, err := llm.New(cfg)
+	require.NoError(t, err, "LLM provider creation should succeed")
 
 	// Create validator
-	v := validator.NewLLMValidator(client, policy)
+	v := validator.NewLLMValidator(provider, policy)
 
 	// Create a test change (simulating git diff output)
 	changes := []validator.GitChange{
@@ -82,11 +84,13 @@ func TestE2E_ValidatorWithGoodCode(t *testing.T) {
 	policy, err := loadPolicy(".sym/code-policy.json")
 	require.NoError(t, err)
 
-	// Create LLM client
-	client := llm.NewClient()
+	// Create LLM provider
+	cfg := llm.LoadConfig()
+	provider, err := llm.New(cfg)
+	require.NoError(t, err, "LLM provider creation should succeed")
 
 	// Create validator
-	v := validator.NewLLMValidator(client, policy)
+	v := validator.NewLLMValidator(provider, policy)
 
 	// Create a test change with good code
 	changes := []validator.GitChange{
@@ -181,11 +185,13 @@ func TestE2E_ValidatorFilter(t *testing.T) {
 	policy, err := loadPolicy(".sym/code-policy.json")
 	require.NoError(t, err)
 
-	// Create LLM client
-	client := llm.NewClient()
+	// Create LLM provider
+	cfg := llm.LoadConfig()
+	provider, err := llm.New(cfg)
+	require.NoError(t, err, "LLM provider creation should succeed")
 
 	// Create validator
-	v := validator.NewLLMValidator(client, policy)
+	v := validator.NewLLMValidator(provider, policy)
 
 	// Test with Go file
 	changes := []validator.GitChange{
