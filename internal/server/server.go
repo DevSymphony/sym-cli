@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/converter"
-	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
@@ -98,10 +98,11 @@ func (s *Server) corsMiddleware(next http.Handler) http.Handler {
 
 // hasPermissionForRole checks if a role has a specific permission
 func (s *Server) hasPermissionForRole(role, permission string) (bool, error) {
-	// Load policy to check RBAC permissions
-	policyPath := envutil.GetPolicyPath()
-	if policyPath == "" {
-		policyPath = ".sym/user-policy.json"
+	// Load policy path from config.json
+	projectCfg, _ := config.LoadProjectConfig()
+	policyPath := ".sym/user-policy.json"
+	if projectCfg != nil && projectCfg.PolicyPath != "" {
+		policyPath = projectCfg.PolicyPath
 	}
 
 	policyData, err := policy.LoadPolicy(policyPath)
@@ -353,8 +354,9 @@ func (s *Server) handlePolicy(w http.ResponseWriter, r *http.Request) {
 
 // handleGetPolicy returns the current policy
 func (s *Server) handleGetPolicy(w http.ResponseWriter, r *http.Request) {
-	// Get policy path from .sym/.env (or use default)
-	policyPath := envutil.GetPolicyPath()
+	// Get policy path from .sym/config.json
+	projectCfg, _ := config.LoadProjectConfig()
+	policyPath := projectCfg.PolicyPath
 	if policyPath == "" {
 		policyPath = ".sym/user-policy.json"
 	}
@@ -404,8 +406,9 @@ func (s *Server) handleSavePolicy(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get policy path from .sym/.env (or use default)
-	policyPath := envutil.GetPolicyPath()
+	// Get policy path from .sym/config.json
+	projectCfg, _ := config.LoadProjectConfig()
+	policyPath := projectCfg.PolicyPath
 	if policyPath == "" {
 		policyPath = ".sym/user-policy.json"
 	}
@@ -435,14 +438,11 @@ func (s *Server) handleSavePolicy(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handlePolicyPath(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		// Load policy path from .sym/.env
-		policyPath := envutil.GetPolicyPath()
+		// Load policy path from .sym/config.json
+		projectCfg, _ := config.LoadProjectConfig()
+		policyPath := projectCfg.PolicyPath
 		if policyPath == "" {
-			// Default to .sym/user-policy.json if not set
 			policyPath = ".sym/user-policy.json"
-			fmt.Printf("No POLICY_PATH in .sym/.env, using default: %s\n", policyPath)
-		} else {
-			fmt.Printf("Loaded POLICY_PATH from .sym/.env: %s\n", policyPath)
 		}
 
 		w.Header().Set("Content-Type", "application/json")
@@ -489,8 +489,9 @@ func (s *Server) handleSetPolicyPath(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Printf("Received policy path from client: '%s' (length: %d)\n", req.PolicyPath, len(req.PolicyPath))
 
-	// Get current policy path from .env
-	oldPolicyPath := envutil.GetPolicyPath()
+	// Get current policy path from config.json
+	projectCfg, _ := config.LoadProjectConfig()
+	oldPolicyPath := projectCfg.PolicyPath
 	if oldPolicyPath == "" {
 		oldPolicyPath = ".sym/user-policy.json" // default
 	}
@@ -532,14 +533,15 @@ func (s *Server) handleSetPolicyPath(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Save to .sym/.env file
-	fmt.Printf("Saving policy path to .sym/.env: %s\n", req.PolicyPath)
-	if err := envutil.SaveKeyToEnvFile(filepath.Join(".sym", ".env"), "POLICY_PATH", req.PolicyPath); err != nil {
+	// Save to .sym/config.json
+	fmt.Printf("Saving policy path to config.json: %s\n", req.PolicyPath)
+	projectCfg.PolicyPath = req.PolicyPath
+	if err := config.SaveProjectConfig(projectCfg); err != nil {
 		fmt.Printf("Failed to save policy path: %v\n", err)
 		http.Error(w, fmt.Sprintf("Failed to save policy path: %v", err), http.StatusInternalServerError)
 		return
 	}
-	fmt.Printf("Policy path saved successfully to .sym/.env\n")
+	fmt.Printf("Policy path saved successfully to config.json\n")
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(map[string]string{
@@ -660,8 +662,9 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 
 	fmt.Println("Starting policy conversion...")
 
-	// Get policy path from .env
-	policyPath := envutil.GetPolicyPath()
+	// Get policy path from config.json
+	projectCfg, _ := config.LoadProjectConfig()
+	policyPath := projectCfg.PolicyPath
 	if policyPath == "" {
 		policyPath = ".sym/user-policy.json"
 	}

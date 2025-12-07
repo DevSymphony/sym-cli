@@ -76,7 +76,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	cfg := llm.LoadConfig()
 	llmProvider, err := llm.New(cfg)
 	if err != nil {
-		return fmt.Errorf("no available LLM backend for validate: %w\nTip: configure LLM_PROVIDER in .sym/.env", err)
+		return fmt.Errorf("no available LLM backend for validate: %w\nTip: configure provider in .sym/config.json", err)
 	}
 
 	var changes []validator.GitChange

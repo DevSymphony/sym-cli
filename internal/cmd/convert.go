@@ -5,11 +5,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
+	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -17,12 +17,9 @@ import (
 )
 
 var (
-	convertInputFile           string
-	convertOutputFile          string
-	convertTargets             []string
-	convertOutputDir           string
-	convertConfidenceThreshold float64
-	convertTimeout             int
+	convertInputFile string
+	convertTargets   []string
+	convertOutputDir string
 )
 
 var convertCmd = &cobra.Command{
@@ -41,25 +38,17 @@ map them to appropriate linter rules.`,
   sym convert -i user-policy.json --targets eslint
 
   # Convert for Java with specific model
-  sym convert -i user-policy.json --targets checkstyle,pmd --openai-model gpt-5-mini
-  # Convert for Java with specific model
-  sym convert -i user-policy.json --targets checkstyle,pmd --openai-model gpt-5-mini
+  sym convert -i user-policy.json --targets checkstyle,pmd
 
   # Use custom output directory
-  sym convert -i user-policy.json --targets all --output-dir ./custom-dir
-
-  # Legacy mode (internal policy only)
-  sym convert -i user-policy.json -o code-policy.json`,
+  sym convert -i user-policy.json --targets all --output-dir ./custom-dir`,
 	RunE: runConvert,
 }
 
 func init() {
 	convertCmd.Flags().StringVarP(&convertInputFile, "input", "i", "", "input user policy file (default: from .sym/.env POLICY_PATH)")
-	convertCmd.Flags().StringVarP(&convertOutputFile, "output", "o", "", "output code policy file (legacy mode)")
 	convertCmd.Flags().StringSliceVar(&convertTargets, "targets", []string{}, buildTargetsDescription())
 	convertCmd.Flags().StringVar(&convertOutputDir, "output-dir", "", "output directory for linter configs (default: same as input file directory)")
-	convertCmd.Flags().Float64Var(&convertConfidenceThreshold, "confidence-threshold", 0.7, "minimum confidence for LLM inference (0.0-1.0)")
-	convertCmd.Flags().IntVar(&convertTimeout, "timeout", 30, "timeout for API calls in seconds")
 }
 
 // buildTargetsDescription dynamically builds the --targets flag description
@@ -74,13 +63,14 @@ func buildTargetsDescription() string {
 func runConvert(cmd *cobra.Command, args []string) error {
 	// Determine input file path
 	if convertInputFile == "" {
-		// Try to load from .env
-		policyPath := loadPolicyPathFromEnv()
+		// Load from config.json
+		projectCfg, _ := config.LoadProjectConfig()
+		policyPath := projectCfg.PolicyPath
 		if policyPath == "" {
 			policyPath = ".sym/user-policy.json" // fallback default
 		}
 		convertInputFile = policyPath
-		fmt.Printf("Using policy path from .env: %s\n", convertInputFile)
+		fmt.Printf("Using policy path from config: %s\n", convertInputFile)
 	}
 
 	// Read input file
@@ -100,32 +90,6 @@ func runConvert(cmd *cobra.Command, args []string) error {
 	return runNewConverter(&userPolicy)
 }
 
-// loadPolicyPathFromEnv reads POLICY_PATH from .sym/.env
-func loadPolicyPathFromEnv() string {
-	envPath := filepath.Join(".sym", ".env")
-	data, err := os.ReadFile(envPath)
-	if err != nil {
-		return ""
-	}
-
-	lines := strings.Split(string(data), "\n")
-	prefix := "POLICY_PATH="
-
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		// Skip comments and empty lines
-		if len(line) == 0 || line[0] == '#' {
-			continue
-		}
-		// Check if line starts with POLICY_PATH=
-		if strings.HasPrefix(line, prefix) {
-			return strings.TrimSpace(line[len(prefix):])
-		}
-	}
-
-	return ""
-}
-
 func runNewConverter(userPolicy *schema.UserPolicy) error {
 	// Determine output directory
 	if convertOutputDir == "" {
@@ -137,7 +101,7 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 	cfg := llm.LoadConfig()
 	llmProvider, err := llm.New(cfg)
 	if err != nil {
-		return fmt.Errorf("no available LLM backend for convert: %w\nTip: configure LLM_PROVIDER in .sym/.env", err)
+		return fmt.Errorf("no available LLM backend for convert: %w\nTip: configure provider in .sym/config.json", err)
 	}
 	defer llmProvider.Close()
 

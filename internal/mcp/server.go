@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/converter"
-	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
@@ -125,8 +125,9 @@ func (s *Server) Start() error {
 	// Only try to load policies if we have a directory
 	if dir != "" {
 		// Try to load user-policy.json for natural language descriptions
-		// First check .env for POLICY_PATH, otherwise use default
-		userPolicyPath := envutil.GetPolicyPath()
+		// Get policy path from config.json
+		projectCfg, _ := config.LoadProjectConfig()
+		userPolicyPath := projectCfg.PolicyPath
 		if userPolicyPath == "" {
 			userPolicyPath = filepath.Join(dir, "user-policy.json")
 		} else if !filepath.IsAbs(userPolicyPath) {
