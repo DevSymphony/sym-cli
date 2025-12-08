@@ -2,7 +2,9 @@ package validator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -30,15 +32,15 @@ type ValidationResult struct {
 // This validator is specifically for Git diff validation.
 // For regular file validation, use Validator which orchestrates all engines including LLM.
 type LLMValidator struct {
-	client    *llm.Client
+	provider  llm.Provider
 	policy    *schema.CodePolicy
 	validator *Validator
 }
 
 // NewLLMValidator creates a new LLM validator
-func NewLLMValidator(client *llm.Client, policy *schema.CodePolicy) *LLMValidator {
+func NewLLMValidator(provider llm.Provider, policy *schema.CodePolicy) *LLMValidator {
 	return &LLMValidator{
-		client:    client,
+		provider:  provider,
 		policy:    policy,
 		validator: NewValidator(policy, false), // Use main validator for orchestration
 	}
@@ -47,6 +49,7 @@ func NewLLMValidator(client *llm.Client, policy *schema.CodePolicy) *LLMValidato
 // Validate validates git changes against LLM-based rules.
 // This method is for diff-based validation (pre-commit hooks, PR validation).
 // For regular file validation, use validator.Validate() which orchestrates all engines.
+// Concurrency is limited to CPU count to prevent CPU spike.
 func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*ValidationResult, error) {
 	result := &ValidationResult{
 		Violations: make([]Violation, 0),
@@ -59,8 +62,19 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 	}
 
 	// Check each change against LLM rules using goroutines for parallel processing
+	// Limit concurrency to prevent resource exhaustion
+	// Use CPU/4, minimum 2, maximum 4 to balance performance and stability
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+
+	maxConcurrent := runtime.NumCPU() / 4
+	if maxConcurrent < 2 {
+		maxConcurrent = 2
+	}
+	if maxConcurrent > 4 {
+		maxConcurrent = 4
+	}
+	sem := make(chan struct{}, maxConcurrent)
 
 	for _, change := range changes {
 		if change.Status == "D" {
@@ -77,7 +91,7 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 			continue
 		}
 
-		// Validate against each LLM rule in parallel
+		// Validate against each LLM rule in parallel with concurrency limit
 		for _, rule := range llmRules {
 			mu.Lock()
 			result.Checked++
@@ -86,6 +100,10 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 			wg.Add(1)
 			go func(ch GitChange, lines []string, r schema.PolicyRule) {
 				defer wg.Done()
+
+				// Acquire semaphore
+				sem <- struct{}{}
+				defer func() { <-sem }()
 
 				violation, err := v.CheckRule(ctx, ch, lines, r)
 				if err != nil {
@@ -191,8 +209,9 @@ Response:
 
 Analyze the code and determine if it violates the rule. Respond with JSON only.`, change.FilePath, rule.Desc, codeSnippet)
 
-	// Call LLM with low reasoning (needs thought for code validation)
-	response, err := v.client.Request(systemPrompt, userPrompt).Execute(ctx)
+	// Call LLM
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := v.provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		return nil, err
 	}
@@ -284,43 +303,12 @@ func parseValidationResponse(response string) validationResponse {
 	return result
 }
 
-// parseJSON parses JSON string into the target struct
+// parseJSON parses JSON string into the target struct using encoding/json
 func parseJSON(jsonStr string, target interface{}) error {
-	decoder := strings.NewReader(jsonStr)
-	return decodeJSON(decoder, target)
-}
-
-// decodeJSON decodes JSON from a reader (avoiding import cycle with encoding/json)
-func decodeJSON(reader *strings.Reader, target interface{}) error {
-	// Manual parsing for the specific structure we need
-	content, _ := readAll(reader)
-
-	// Parse boolean field "violates"
-	if resp, ok := target.(*jsonValidationResponse); ok {
-		resp.Violates = strings.Contains(strings.ToLower(content), `"violates":true`) ||
-			strings.Contains(strings.ToLower(content), `"violates": true`)
-
-		resp.Confidence = extractJSONField(content, "confidence")
-		resp.Description = extractJSONField(content, "description")
-		resp.Suggestion = extractJSONField(content, "suggestion")
+	if err := json.Unmarshal([]byte(jsonStr), target); err != nil {
+		return fmt.Errorf("failed to parse JSON response: %w", err)
 	}
-
 	return nil
-}
-
-func readAll(reader *strings.Reader) (string, error) {
-	var builder strings.Builder
-	buf := make([]byte, 1024)
-	for {
-		n, err := reader.Read(buf)
-		if n > 0 {
-			builder.Write(buf[:n])
-		}
-		if err != nil {
-			break
-		}
-	}
-	return builder.String(), nil
 }
 
 // parseValidationResponseFallback is used when JSON parsing fails

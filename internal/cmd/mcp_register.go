@@ -9,7 +9,8 @@ import (
 	"runtime"
 	"strings"
 
-	"github.com/manifoldco/promptui"
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/DevSymphony/sym-cli/internal/ui"
 )
 
 // MCPRegistrationConfig represents the MCP configuration structure
@@ -41,159 +42,88 @@ type VSCodeServerConfig struct {
 	Env     map[string]string `json:"env,omitempty"`
 }
 
-// editorItem represents an editor option with selection state
-type editorItem struct {
-	Name     string
-	AppID    string
-	Selected bool
-	IsSubmit bool
-	IsSkip   bool
+// MCP tool options for multi-select
+var mcpToolOptions = []string{
+	"Claude Code",
+	"Cursor",
+	"VS Code Copilot",
 }
 
-// bellSkipper wraps os.Stdout to skip bell characters (prevents alert sound)
-type bellSkipper struct{}
-
-func (bs *bellSkipper) Write(b []byte) (int, error) {
-	const bell = '\a'
-	// Filter out bell characters
-	filtered := make([]byte, 0, len(b))
-	for _, c := range b {
-		if c != bell {
-			filtered = append(filtered, c)
-		}
-	}
-	return os.Stdout.Write(filtered)
-}
-
-func (bs *bellSkipper) Close() error {
-	return nil
+// mcpToolToApp maps display name to internal app identifier
+var mcpToolToApp = map[string]string{
+	"Claude Code":     "claude-code",
+	"Cursor":          "cursor",
+	"VS Code Copilot": "vscode",
 }
 
 // promptMCPRegistration prompts user to register Symphony as MCP server
 func promptMCPRegistration() {
 	// Check if npx is available
 	if !checkNpxAvailable() {
-		fmt.Println("\n⚠ Warning: 'npx' not found. MCP features require Node.js.")
-		fmt.Println("  Download: https://nodejs.org/")
+		ui.PrintWarn("'npx' not found. MCP features require Node.js.")
+		fmt.Println(ui.Indent("Download: https://nodejs.org/"))
 
-		confirmPrompt := promptui.Prompt{
-			Label:     "Continue anyway",
-			IsConfirm: true,
+		var continueAnyway bool
+		prompt := &survey.Confirm{
+			Message: "Continue anyway?",
+			Default: false,
 		}
-
-		result, err := confirmPrompt.Run()
-		if err != nil || strings.ToLower(result) != "y" {
+		if err := survey.AskOne(prompt, &continueAnyway); err != nil || !continueAnyway {
 			fmt.Println("Skipped MCP registration")
 			return
 		}
 	}
 
-	fmt.Println("\n📡 Would you like to register Symphony as an MCP server?")
-	fmt.Println("   (Symphony MCP provides code convention tools for AI assistants)")
-	fmt.Println("   Press Enter to toggle selection, then select Submit to apply")
+	// Use custom template to hide "type to filter" and typed characters
+	restore := useMultiSelectTemplateNoFilter()
+	defer restore()
+
+	fmt.Println()
+	ui.PrintTitle("MCP", "Register Symphony as an MCP server")
+	fmt.Println(ui.Indent("Symphony MCP provides code convention tools for AI assistants"))
+	fmt.Println(ui.Indent("(Use arrows to move, space to select, enter to submit)"))
 	fmt.Println()
 
-	// Initialize editor items
-	items := []editorItem{
-		{Name: "Claude Desktop (global)", AppID: "claude-desktop"},
-		{Name: "Claude Code (project)", AppID: "claude-code"},
-		{Name: "Cursor (project)", AppID: "cursor"},
-		{Name: "VS Code Copilot (project)", AppID: "vscode"},
-		{Name: "Cline (global)", AppID: "cline"},
-		{Name: "Submit", IsSubmit: true},
+	// Multi-select prompt for tools
+	var selectedTools []string
+	prompt := &survey.MultiSelect{
+		Message: "Select vibe coding tools to integrate:",
+		Options: mcpToolOptions,
 	}
 
-	// Track cursor position across loop iterations
-	cursorPos := 0
+	if err := survey.AskOne(prompt, &selectedTools); err != nil {
+		fmt.Println("Skipped MCP registration")
+		return
+	}
 
-	// Multi-select loop
-	for {
-		// Count selected items first
-		selectedCount := 0
-		for _, item := range items {
-			if item.Selected {
-				selectedCount++
-			}
+	// If no tools selected, skip
+	if len(selectedTools) == 0 {
+		fmt.Println("Skipped MCP registration")
+		fmt.Println(ui.Indent("Tip: Run 'sym init --register-mcp' to register MCP later"))
+		return
+	}
+
+	// Register selected tools
+	var registered []string
+	var failed []string
+
+	for _, tool := range selectedTools {
+		app := mcpToolToApp[tool]
+		if err := registerMCP(app); err != nil {
+			failed = append(failed, fmt.Sprintf("%s: %v", tool, err))
+		} else {
+			registered = append(registered, tool)
 		}
+	}
 
-		// Build display items with checkboxes
-		displayItems := make([]string, len(items))
-		for i, item := range items {
-			if item.IsSubmit {
-				if selectedCount == 0 {
-					displayItems[i] = "⏭  Skip"
-				} else {
-					displayItems[i] = fmt.Sprintf("✅ Submit (%d selected)", selectedCount)
-				}
-			} else {
-				checkbox := "☐"
-				if item.Selected {
-					checkbox = "☑"
-				}
-				displayItems[i] = fmt.Sprintf("%s %s", checkbox, item.Name)
-			}
-		}
-
-		templates := &promptui.SelectTemplates{
-			Label:    "{{ . }}",
-			Active:   "▸ {{ . | cyan }}",
-			Inactive: "  {{ . }}",
-			Selected: "{{ . }}",
-		}
-
-		prompt := promptui.Select{
-			Label:        "Select editors (Enter to toggle)",
-			Items:        displayItems,
-			Templates:    templates,
-			Size:         6,
-			HideSelected: true,
-			CursorPos:    cursorPos,
-			Stdout:       &bellSkipper{},
-		}
-
-		index, _, err := prompt.Run()
-		if err != nil {
-			fmt.Println("\nSkipped MCP registration")
-			return
-		}
-
-		selectedItem := &items[index]
-
-		if selectedItem.IsSubmit {
-			// Collect selected apps
-			var selectedApps []string
-			for _, item := range items {
-				if item.Selected && item.AppID != "" {
-					selectedApps = append(selectedApps, item.AppID)
-				}
-			}
-
-			// If no editors selected, act as Skip
-			if len(selectedApps) == 0 {
-				fmt.Println("Skipped MCP registration")
-				fmt.Println("\n💡 Tip: Run 'sym init --register-mcp' to register MCP later")
-				return
-			}
-
-			// Register all selected apps
-			successCount := 0
-			for _, appID := range selectedApps {
-				if registerMCP(appID) == nil {
-					successCount++
-				}
-			}
-
-			if successCount > 0 {
-				fmt.Printf("\n✅ MCP registration complete! Registered to %d app(s).\n", successCount)
-				fmt.Println("   Restart/reload the apps to use Symphony.")
-			}
-			return
-		}
-
-		// Toggle selection for editor items
-		selectedItem.Selected = !selectedItem.Selected
-		// Preserve cursor position for next iteration
-		cursorPos = index
+	// Print results
+	fmt.Println()
+	if len(registered) > 0 {
+		ui.PrintOK(fmt.Sprintf("Registered: %s", strings.Join(registered, ", ")))
+		fmt.Println(ui.Indent("Reload/restart the tools to use Symphony"))
+	}
+	for _, f := range failed {
+		ui.PrintError(fmt.Sprintf("Failed to register %s", f))
 	}
 }
 
@@ -202,19 +132,13 @@ func registerMCP(app string) error {
 	configPath := getMCPConfigPath(app)
 
 	if configPath == "" {
-		fmt.Printf("\n⚠ %s config path could not be determined\n", getAppDisplayName(app))
+		fmt.Println(ui.Warn(fmt.Sprintf("%s config path could not be determined", getAppDisplayName(app))))
 		return fmt.Errorf("config path not determined")
 	}
 
-	// Check if this is a project-specific config
-	isProjectConfig := app != "claude-desktop" && app != "cline"
-
-	if isProjectConfig {
-		fmt.Printf("\n✓ Configuring %s (project-specific)\n", getAppDisplayName(app))
-	} else {
-		fmt.Printf("\n✓ Configuring %s (global)\n", getAppDisplayName(app))
-	}
-	fmt.Printf("  Location: %s\n", configPath)
+	// All supported apps are now project-specific
+	fmt.Println(ui.Indent(fmt.Sprintf("Configuring %s", getAppDisplayName(app))))
+	fmt.Println(ui.Indent(fmt.Sprintf("Location: %s", configPath)))
 
 	// Create config directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
@@ -237,22 +161,22 @@ func registerMCP(app string) error {
 				// Invalid JSON, create backup
 				backupPath := configPath + ".bak"
 				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
-					fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
 				} else {
-					fmt.Printf("  ⚠ Invalid JSON, backup created: %s\n", filepath.Base(backupPath))
+					fmt.Println(ui.Indent(fmt.Sprintf("Invalid JSON, backup created: %s", filepath.Base(backupPath))))
 				}
 				vscodeConfig = VSCodeMCPConfig{}
 			} else {
 				// Valid JSON, create backup
 				backupPath := configPath + ".bak"
 				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
-					fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
 				} else {
-					fmt.Printf("  Backup: %s\n", filepath.Base(backupPath))
+					fmt.Println(ui.Indent(fmt.Sprintf("Backup: %s", filepath.Base(backupPath))))
 				}
 			}
 		} else {
-			fmt.Printf("  Creating new configuration file\n")
+			fmt.Println(ui.Indent("Creating new configuration file"))
 		}
 
 		// Initialize Servers if nil
@@ -281,22 +205,22 @@ func registerMCP(app string) error {
 				// Invalid JSON, create backup
 				backupPath := configPath + ".bak"
 				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
-					fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
 				} else {
-					fmt.Printf("  ⚠ Invalid JSON, backup created: %s\n", filepath.Base(backupPath))
+					fmt.Println(ui.Indent(fmt.Sprintf("Invalid JSON, backup created: %s", filepath.Base(backupPath))))
 				}
 				config = MCPRegistrationConfig{}
 			} else {
 				// Valid JSON, create backup
 				backupPath := configPath + ".bak"
 				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
-					fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
 				} else {
-					fmt.Printf("  Backup: %s\n", filepath.Base(backupPath))
+					fmt.Println(ui.Indent(fmt.Sprintf("Backup: %s", filepath.Base(backupPath))))
 				}
 			}
 		} else {
-			fmt.Printf("  Creating new configuration file\n")
+			fmt.Println(ui.Indent("Creating new configuration file"))
 		}
 
 		// Initialize MCPServers if nil
@@ -329,14 +253,11 @@ func registerMCP(app string) error {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
-	fmt.Printf("  ✓ Symphony MCP server registered\n")
+	fmt.Println(ui.Indent("Symphony MCP server registered"))
 
-	// Create instructions file for project-specific configs
-	// Note: Cline has global MCP config but project-specific .clinerules
-	if isProjectConfig || app == "cline" {
-		if err := createInstructionsFile(app); err != nil {
-			fmt.Printf("  ⚠ Failed to create instructions file: %v\n", err)
-		}
+	// Create instructions file for all supported apps
+	if err := createInstructionsFile(app); err != nil {
+		fmt.Println(ui.Indent(fmt.Sprintf("Failed to create instructions file: %v", err)))
 	}
 
 	return nil
@@ -448,25 +369,25 @@ func createInstructionsFile(app string) error {
 		if appendMode {
 			// Check if Symphony instructions already exist
 			if strings.Contains(string(existingContent), "# Symphony Code Conventions") {
-				fmt.Printf("  ✓ Instructions already exist in %s\n", instructionsPath)
+				fmt.Println(ui.Indent(fmt.Sprintf("Instructions already exist in %s", instructionsPath)))
 				return nil
 			}
 			// Append to existing file
 			content = string(existingContent) + "\n\n" + content
-			fmt.Printf("  ✓ Appended Symphony instructions to %s\n", instructionsPath)
+			fmt.Println(ui.Indent(fmt.Sprintf("Appended Symphony instructions to %s", instructionsPath)))
 		} else {
 			// Create backup
 			backupPath := instructionsPath + ".bak"
 			if err := os.WriteFile(backupPath, existingContent, 0644); err != nil {
-				fmt.Printf("  ⚠ Failed to create backup: %v\n", err)
+				fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
 			} else {
-				fmt.Printf("  Backup: %s\n", filepath.Base(backupPath))
+				fmt.Println(ui.Indent(fmt.Sprintf("Backup: %s", filepath.Base(backupPath))))
 			}
-			fmt.Printf("  ✓ Created %s\n", instructionsPath)
+			fmt.Println(ui.Indent(fmt.Sprintf("Created %s", instructionsPath)))
 		}
 	} else {
 		// Create new file
-		fmt.Printf("  ✓ Created %s\n", instructionsPath)
+		fmt.Println(ui.Indent(fmt.Sprintf("Created %s", instructionsPath)))
 	}
 
 	// Create directory if needed
@@ -486,9 +407,9 @@ func createInstructionsFile(app string) error {
 	if app == "vscode" {
 		gitignorePath := ".github/instructions/"
 		if err := ensureGitignore(gitignorePath); err != nil {
-			fmt.Printf("  ⚠ Warning: Failed to update .gitignore: %v\n", err)
+			fmt.Println(ui.Indent(fmt.Sprintf("Warning: Failed to update .gitignore: %v", err)))
 		} else {
-			fmt.Printf("  ✓ Added %s to .gitignore\n", gitignorePath)
+			fmt.Println(ui.Indent(fmt.Sprintf("Added %s to .gitignore", gitignorePath)))
 		}
 	}
 

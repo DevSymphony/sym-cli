@@ -19,11 +19,6 @@ func GetAPIKey(keyName string) string {
 	return LoadKeyFromEnvFile(filepath.Join(".sym", ".env"), keyName)
 }
 
-// GetPolicyPath retrieves policy path from .sym/.env
-func GetPolicyPath() string {
-	return LoadKeyFromEnvFile(filepath.Join(".sym", ".env"), "POLICY_PATH")
-}
-
 // LoadKeyFromEnvFile reads a specific key from .env file
 func LoadKeyFromEnvFile(envPath, key string) string {
 	file, err := os.Open(envPath)

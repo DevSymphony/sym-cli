@@ -63,17 +63,19 @@ type pmdRule struct {
 	Priority int      `xml:"priority,omitempty"`
 }
 
-// ConvertRules converts user rules to PMD configuration using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
-	if llmClient == nil {
-		return nil, fmt.Errorf("LLM client is required")
+// ConvertRules converts user rules to PMD configuration using LLM.
+// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.ConversionResult, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("LLM provider is required")
 	}
 
 	// Convert rules in parallel
 	type ruleResult struct {
-		index int
-		rule  *pmdRule
-		err   error
+		index  int
+		ruleID string
+		rule   *pmdRule
+		err    error
 	}
 
 	results := make(chan ruleResult, len(rules))
@@ -84,11 +86,12 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 		go func(idx int, r schema.UserRule) {
 			defer wg.Done()
 
-			pmdRule, err := c.convertSingleRule(ctx, r, llmClient)
+			pmdRule, err := c.convertSingleRule(ctx, r, provider)
 			results <- ruleResult{
-				index: idx,
-				rule:  pmdRule,
-				err:   err,
+				index:  idx,
+				ruleID: r.ID,
+				rule:   pmdRule,
+				err:    err,
 			}
 		}(i, rule)
 	}
@@ -98,23 +101,34 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 		close(results)
 	}()
 
-	// Collect rules
+	// Collect rules with per-rule tracking
 	var pmdRules []pmdRule
-	var errors []string
+	successRuleIDs := make([]string, 0)
+	failedRuleIDs := make([]string, 0)
 
 	for result := range results {
 		if result.err != nil {
-			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
 			continue
 		}
 
 		if result.rule != nil {
 			pmdRules = append(pmdRules, *result.rule)
+			successRuleIDs = append(successRuleIDs, result.ruleID)
+		} else {
+			// Skipped = cannot be enforced by this linter
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
 		}
 	}
 
+	// Build result with tracking info
+	convResult := &adapter.ConversionResult{
+		SuccessRules: successRuleIDs,
+		FailedRules:  failedRuleIDs,
+	}
+
 	if len(pmdRules) == 0 {
-		return nil, fmt.Errorf("no rules converted: %v", errors)
+		return convResult, nil
 	}
 
 	// Build PMD ruleset
@@ -136,15 +150,17 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 	xmlHeader := `<?xml version="1.0"?>` + "\n"
 	fullContent := []byte(xmlHeader + string(content))
 
-	return &adapter.LinterConfig{
+	convResult.Config = &adapter.LinterConfig{
 		Filename: "pmd.xml",
 		Content:  fullContent,
 		Format:   "xml",
-	}, nil
+	}
+
+	return convResult, nil
 }
 
 // convertSingleRule converts a single rule using LLM
-func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (*pmdRule, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, provider llm.Provider) (*pmdRule, error) {
 	systemPrompt := `You are a PMD 7.x configuration expert. Convert natural language Java coding rules to PMD rule references.
 
 Return ONLY a JSON object with exactly these two fields (no other fields):
@@ -188,8 +204,9 @@ IMPORTANT: Return ONLY the JSON object. Do NOT include description, message, or 
 
 	userPrompt := fmt.Sprintf("Convert this Java rule to PMD rule reference:\n\n%s", rule.Say)
 
-	// Call LLM with minimal complexity
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
+	// Call LLM
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}

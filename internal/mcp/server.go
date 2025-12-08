@@ -9,8 +9,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/converter"
-	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
@@ -34,17 +34,20 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 		return fmt.Errorf("failed to parse user policy: %w", err)
 	}
 
-	// Setup LLM client (backend auto-selection via @llm)
-	llmClient := llm.NewClient(
-		llm.WithTimeout(30 * time.Second),
-	)
+	// Setup LLM provider
+	cfg := llm.LoadConfig()
+	llmProvider, err := llm.New(cfg)
+	if err != nil {
+		return fmt.Errorf("failed to create LLM provider: %w", err)
+	}
+	defer llmProvider.Close()
 
 	// Create converter with output directory
 	outputDir := filepath.Dir(codePolicyPath)
-	conv := converter.NewConverter(llmClient, outputDir)
+	conv := converter.NewConverter(llmProvider, outputDir)
 
-	// Setup context with timeout
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(30*10)*time.Second)
+	// Setup context with timeout (10 minutes to match validator)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
 	fmt.Fprintf(os.Stderr, "Converting %d rules...\n", len(userPolicy.Rules))
@@ -122,8 +125,9 @@ func (s *Server) Start() error {
 	// Only try to load policies if we have a directory
 	if dir != "" {
 		// Try to load user-policy.json for natural language descriptions
-		// First check .env for POLICY_PATH, otherwise use default
-		userPolicyPath := envutil.GetPolicyPath()
+		// Get policy path from config.json
+		projectCfg, _ := config.LoadProjectConfig()
+		userPolicyPath := projectCfg.PolicyPath
 		if userPolicyPath == "" {
 			userPolicyPath = filepath.Join(dir, "user-policy.json")
 		} else if !filepath.IsAbs(userPolicyPath) {
@@ -471,20 +475,20 @@ func (s *Server) handleValidateCode(ctx context.Context, session *sdkmcp.ServerS
 		}, nil
 	}
 
-	var llmClient *llm.Client
-	if session != nil {
-		// MCP mode: use host LLM via sampling
-		llmClient = llm.NewClient(llm.WithMCPSession(session))
-		fmt.Fprintf(os.Stderr, "✓ Using host LLM via MCP sampling\n")
-	} else {
-		// Auto mode: use configured LLM backend (CLI/API)
-		llmClient = llm.NewClient()
-		fmt.Fprintf(os.Stderr, "✓ Using configured LLM backend\n")
+	// Use configured LLM provider
+	llmCfg := llm.LoadConfig()
+	llmProvider, err := llm.New(llmCfg)
+	if err != nil {
+		return nil, &RPCError{
+			Code:    -32000,
+			Message: fmt.Sprintf("failed to create LLM provider: %v", err),
+		}
 	}
+	fmt.Fprintf(os.Stderr, "✓ Using LLM provider: %s\n", llmProvider.Name())
 
 	// Create unified validator that handles all engines + RBAC
 	v := validator.NewValidator(validationPolicy, false) // verbose=false for MCP
-	v.SetLLMClient(llmClient)
+	v.SetLLMProvider(llmProvider)
 	defer func() {
 		_ = v.Close() // Ignore close error in MCP context
 	}()
@@ -595,8 +599,7 @@ func (s *Server) getValidationPolicy() (*schema.CodePolicy, error) {
 // needsConversion checks if user policy needs to be converted to code policy.
 // Returns true if:
 // 1. code-policy.json doesn't exist, OR
-// 2. user policy has more rules than code policy (indicating new rules added), OR
-// 3. user policy has rule IDs that don't exist in code policy
+// 2. user policy has rule IDs that don't exist in code policy (after extracting source ID)
 func (s *Server) needsConversion(codePolicyPath string) bool {
 	// If no code policy exists, conversion is needed
 	if s.codePolicy == nil {
@@ -608,25 +611,36 @@ func (s *Server) needsConversion(codePolicyPath string) bool {
 		return false
 	}
 
-	// Check if user policy has more rules
-	if len(s.userPolicy.Rules) > len(s.codePolicy.Rules) {
-		return true
-	}
-
-	// Check if all user policy rule IDs exist in code policy
-	codePolicyRuleIDs := make(map[string]bool)
+	// Extract source rule IDs from code policy
+	// code-policy rules have IDs like "FMT-001-eslint", we extract "FMT-001"
+	codePolicySourceIDs := make(map[string]bool)
 	for _, rule := range s.codePolicy.Rules {
-		codePolicyRuleIDs[rule.ID] = true
+		sourceID := extractSourceRuleID(rule.ID)
+		codePolicySourceIDs[sourceID] = true
 	}
 
+	// Check if all user policy rule IDs have corresponding code policy rules
 	for _, userRule := range s.userPolicy.Rules {
-		if !codePolicyRuleIDs[userRule.ID] {
+		if !codePolicySourceIDs[userRule.ID] {
 			// Found a user rule that doesn't exist in code policy
 			return true
 		}
 	}
 
 	return false
+}
+
+// extractSourceRuleID extracts the original user-policy rule ID from a code-policy rule ID.
+// For example: "FMT-001-eslint" -> "FMT-001"
+func extractSourceRuleID(codePolicyRuleID string) string {
+	// Known linter suffixes that are appended during conversion (see converter.go:179)
+	linterSuffixes := []string{"-eslint", "-prettier", "-tsc", "-pylint", "-checkstyle", "-pmd", "-llm-validator"}
+	for _, suffix := range linterSuffixes {
+		if strings.HasSuffix(codePolicyRuleID, suffix) {
+			return strings.TrimSuffix(codePolicyRuleID, suffix)
+		}
+	}
+	return codePolicyRuleID
 }
 
 // convertUserPolicy converts user policy to code policy using LLM.

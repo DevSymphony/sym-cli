@@ -114,8 +114,9 @@ type LinterConverter interface {
 	// These hints are collected and included in the LLM prompt for rule routing.
 	GetRoutingHints() []string
 
-	// ConvertRules converts user rules to native linter configuration using LLM
-	ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*LinterConfig, error)
+	// ConvertRules converts user rules to native linter configuration using LLM.
+	// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+	ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*ConversionResult, error)
 }
 
 // LinterConfig represents a generated configuration file.
@@ -123,4 +124,13 @@ type LinterConfig struct {
 	Filename string // e.g., ".eslintrc.json", "checkstyle.xml"
 	Content  []byte // File content
 	Format   string // "json", "xml", "yaml"
+}
+
+// ConversionResult contains the conversion output with per-rule tracking.
+// This allows the main converter to know which rules succeeded vs failed,
+// enabling fallback to llm-validator for failed rules.
+type ConversionResult struct {
+	Config       *LinterConfig // Generated config file (may be nil if all rules failed)
+	SuccessRules []string      // Rule IDs that converted successfully
+	FailedRules  []string      // Rule IDs that couldn't be converted (fallback to llm-validator)
 }

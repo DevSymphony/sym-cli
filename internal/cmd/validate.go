@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/llm"
+	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/spf13/cobra"
@@ -73,17 +73,11 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("failed to parse policy: %w", err)
 	}
 
-	// Create LLM client
-	llmClient := llm.NewClient(
-		llm.WithTimeout(time.Duration(validateTimeout) * time.Second),
-	)
-
-	// Ensure at least one backend is available (MCP/CLI/API)
-	availabilityCtx, cancel := context.WithTimeout(context.Background(), time.Duration(validateTimeout)*time.Second)
-	defer cancel()
-
-	if err := llmClient.CheckAvailability(availabilityCtx); err != nil {
-		return fmt.Errorf("no available LLM backend for validate: %w\nTip: run 'sym init --setup-llm' or configure LLM_BACKEND / LLM_CLI / OPENAI_API_KEY in .sym/.env", err)
+	// Create LLM provider
+	cfg := llm.LoadConfig()
+	llmProvider, err := llm.New(cfg)
+	if err != nil {
+		return fmt.Errorf("no available LLM backend for validate: %w\nTip: configure provider in .sym/config.json", err)
 	}
 
 	var changes []validator.GitChange
@@ -110,7 +104,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 
 	// Create unified validator that handles all engines + RBAC
 	v := validator.NewValidator(&policy, true) // verbose=true for CLI
-	v.SetLLMClient(llmClient)
+	v.SetLLMProvider(llmProvider)
 	defer func() {
 		if err := v.Close(); err != nil {
 			fmt.Printf("Warning: failed to close validator: %v\n", err)
@@ -141,7 +135,7 @@ func printValidationResult(result *validator.ValidationResult) {
 	fmt.Printf("Failed:  %d\n\n", result.Failed)
 
 	if len(result.Violations) == 0 {
-		fmt.Println("✓ All checks passed!")
+		ui.PrintOK("All checks passed")
 		return
 	}
 

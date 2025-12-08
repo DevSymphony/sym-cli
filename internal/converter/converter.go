@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 
@@ -20,18 +21,18 @@ const llmValidatorEngine = "llm-validator"
 
 // Converter is the main converter with language-based routing
 type Converter struct {
-	llmClient *llm.Client
-	outputDir string
+	llmProvider llm.Provider
+	outputDir   string
 }
 
 // NewConverter creates a new converter instance
-func NewConverter(llmClient *llm.Client, outputDir string) *Converter {
+func NewConverter(provider llm.Provider, outputDir string) *Converter {
 	if outputDir == "" {
 		outputDir = ".sym"
 	}
 	return &Converter{
-		llmClient: llmClient,
-		outputDir: outputDir,
+		llmProvider: provider,
+		outputDir:   outputDir,
 	}
 }
 
@@ -89,6 +90,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 	}
 
 	// Step 4: Convert rules for each linter in parallel using goroutines
+	// Limit concurrency to CPU count to prevent CPU spike
 	result := &ConvertResult{
 		GeneratedFiles: []string{},
 		CodePolicy:     codePolicy,
@@ -98,6 +100,13 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 
 	var wg sync.WaitGroup
 	var mu sync.Mutex
+
+	// Track failed rules per linter for fallback to llm-validator
+	failedRulesPerLinter := make(map[string][]string)
+
+	// Limit concurrent LLM calls to CPU count
+	maxConcurrent := runtime.NumCPU()
+	sem := make(chan struct{}, maxConcurrent)
 
 	for linterName, rules := range linterRules {
 		if len(rules) == 0 {
@@ -113,46 +122,105 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 		go func(linter string, ruleSet []schema.UserRule) {
 			defer wg.Done()
 
+			// Acquire semaphore
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
 			// Get linter converter
 			converter := c.getLinterConverter(linter)
 			if converter == nil {
 				mu.Lock()
 				result.Errors[linter] = fmt.Errorf("unsupported linter: %s", linter)
+				// Mark all rules as failed for this linter
+				for _, rule := range ruleSet {
+					failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], rule.ID)
+				}
 				mu.Unlock()
 				return
 			}
 
-			// Convert rules using LLM
-			configFile, err := converter.ConvertRules(ctx, ruleSet, c.llmClient)
+			// Convert rules using LLM - now returns ConversionResult with per-rule tracking
+			convResult, err := converter.ConvertRules(ctx, ruleSet, c.llmProvider)
 			if err != nil {
 				mu.Lock()
 				result.Errors[linter] = fmt.Errorf("conversion failed: %w", err)
+				// Total failure - all rules should fallback
+				for _, rule := range ruleSet {
+					failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], rule.ID)
+				}
 				mu.Unlock()
 				return
 			}
 
-			// Write config file to .sym directory
-			outputPath := filepath.Join(c.outputDir, configFile.Filename)
-			if err := os.WriteFile(outputPath, configFile.Content, 0644); err != nil {
+			// Track failed rules from partial conversion
+			if len(convResult.FailedRules) > 0 {
 				mu.Lock()
-				result.Errors[linter] = fmt.Errorf("failed to write file: %w", err)
+				failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], convResult.FailedRules...)
 				mu.Unlock()
-				return
 			}
 
-			mu.Lock()
-			result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
-			mu.Unlock()
+			// Only write config if at least one rule succeeded
+			if convResult.Config != nil && len(convResult.SuccessRules) > 0 {
+				outputPath := filepath.Join(c.outputDir, convResult.Config.Filename)
+				if err := os.WriteFile(outputPath, convResult.Config.Content, 0644); err != nil {
+					mu.Lock()
+					result.Errors[linter] = fmt.Errorf("failed to write file: %w", err)
+					mu.Unlock()
+					return
+				}
 
-			fmt.Fprintf(os.Stderr, "✓ Generated %s configuration: %s\n", linter, outputPath)
+				mu.Lock()
+				result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
+				mu.Unlock()
+
+				fmt.Fprintf(os.Stderr, "✓ Generated %s configuration: %s\n", linter, outputPath)
+			}
 		}(linterName, rules)
 	}
 
 	// Wait for all goroutines to complete
 	wg.Wait()
 
-	// Check if we have any successful conversions
-	if len(result.GeneratedFiles) == 0 && len(result.Errors) > 0 {
+	// Step 4.1: Update ruleToLinters mapping - remove failed linters and add llm-validator fallback
+	for linter, failedRuleIDs := range failedRulesPerLinter {
+		for _, ruleID := range failedRuleIDs {
+			// Remove failed linter from this rule's linters
+			currentLinters := ruleToLinters[ruleID]
+			updatedLinters := []string{}
+			for _, l := range currentLinters {
+				if l != linter {
+					updatedLinters = append(updatedLinters, l)
+				}
+			}
+
+			// Add llm-validator as fallback if not already present
+			hasLLMValidator := false
+			for _, l := range updatedLinters {
+				if l == llmValidatorEngine {
+					hasLLMValidator = true
+					break
+				}
+			}
+			if !hasLLMValidator {
+				updatedLinters = append(updatedLinters, llmValidatorEngine)
+			}
+
+			ruleToLinters[ruleID] = updatedLinters
+		}
+	}
+
+	// Log fallback info
+	totalFallbacks := 0
+	for _, failedRuleIDs := range failedRulesPerLinter {
+		totalFallbacks += len(failedRuleIDs)
+	}
+	if totalFallbacks > 0 {
+		fmt.Fprintf(os.Stderr, "ℹ️  %d rule(s) fell back to llm-validator due to conversion failures\n", totalFallbacks)
+	}
+
+	// Check if we have any successful conversions (excluding llm-validator rules)
+	// Note: We don't fail if all rules went to llm-validator
+	if len(result.GeneratedFiles) == 0 && len(result.Errors) > 0 && totalFallbacks == 0 {
 		return result, fmt.Errorf("all conversions failed")
 	}
 
@@ -250,7 +318,7 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 }
 
 // routeRulesWithLLM uses LLM to determine which linters are appropriate for each rule
-// Rules are processed in parallel for better performance
+// Rules are processed in parallel with concurrency limited to CPU count
 func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.UserPolicy) map[string][]schema.UserRule {
 	type routeResult struct {
 		rule    schema.UserRule
@@ -260,7 +328,18 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 	results := make(chan routeResult, len(userPolicy.Rules))
 	var wg sync.WaitGroup
 
-	// Process rules in parallel
+	// Limit concurrent LLM calls to prevent resource exhaustion
+	// Use CPU/4, minimum 2, maximum 4 to balance performance and stability
+	maxConcurrent := runtime.NumCPU() / 4
+	if maxConcurrent < 2 {
+		maxConcurrent = 2
+	}
+	if maxConcurrent > 4 {
+		maxConcurrent = 4
+	}
+	sem := make(chan struct{}, maxConcurrent)
+
+	// Process rules in parallel with concurrency limit
 	for _, rule := range userPolicy.Rules {
 		// Get languages for this rule
 		languages := rule.Languages
@@ -272,7 +351,11 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 		availableLinters := c.getAvailableLinters(languages)
 		if len(availableLinters) == 0 {
 			// No language-specific linters, use llm-validator
-			results <- routeResult{rule: rule, linters: []string{llmValidatorEngine}}
+			select {
+			case results <- routeResult{rule: rule, linters: []string{llmValidatorEngine}}:
+			case <-ctx.Done():
+				continue
+			}
 			continue
 		}
 
@@ -280,14 +363,31 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 		go func(r schema.UserRule, linters []string) {
 			defer wg.Done()
 
+			// Acquire semaphore with context check
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				return
+			}
+			defer func() { <-sem }()
+
 			// Ask LLM which linters are appropriate for this rule
 			selectedLinters := c.selectLintersForRule(ctx, r, linters)
 
+			// Send result with context check to prevent deadlock
 			if len(selectedLinters) == 0 {
 				// LLM couldn't map to any linter, use llm-validator
-				results <- routeResult{rule: r, linters: []string{llmValidatorEngine}}
+				select {
+				case results <- routeResult{rule: r, linters: []string{llmValidatorEngine}}:
+				case <-ctx.Done():
+					return
+				}
 			} else {
-				results <- routeResult{rule: r, linters: selectedLinters}
+				select {
+				case results <- routeResult{rule: r, linters: selectedLinters}:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}(rule, availableLinters)
 	}
@@ -405,8 +505,9 @@ Reason: Requires knowing which packages are "large"`, linterDescriptions, routin
 
 	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
 
-	// Call LLM with medium complexity (needs some thought for linter selection)
-	response, err := c.llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityLow).Execute(ctx)
+	// Call LLM
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := c.llmProvider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: LLM routing failed for rule %s: %v\n", rule.ID, err)
 		return []string{} // Will fall back to llm-validator

@@ -73,12 +73,12 @@ func TestE2E_FullWorkflow(t *testing.T) {
 	// ========== STEP 2: Convert natural language to structured policy ==========
 	t.Log("STEP 2: Converting user policy using LLM")
 
-	client := llm.NewClient(
-		llm.WithTimeout(30 * time.Second),
-	)
+	cfg := llm.LoadConfig()
+	provider, err := llm.New(cfg)
+	require.NoError(t, err, "LLM provider creation should succeed")
 
 	outputDir := filepath.Join(testDir, ".sym")
-	conv := converter.NewConverter(client, outputDir)
+	conv := converter.NewConverter(provider, outputDir)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
@@ -168,7 +168,7 @@ func ProcessData(data string) error {
 	// ========== STEP 4: Validate generated code ==========
 	t.Log("STEP 4: Validating generated code against conventions")
 
-	llmValidator := validator.NewLLMValidator(client, &convertedPolicy)
+	llmValidator := validator.NewLLMValidator(provider, &convertedPolicy)
 
 	// Validate BAD code
 	t.Log("STEP 4a: Validating BAD code (should find violations)")
@@ -332,8 +332,10 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 		},
 	}
 
-	client := llm.NewClient()
-	v := validator.NewLLMValidator(client, policy)
+	cfg := llm.LoadConfig()
+	provider, err := llm.New(cfg)
+	require.NoError(t, err, "LLM provider creation should succeed")
+	v := validator.NewLLMValidator(provider, policy)
 	ctx := context.Background()
 
 	// Iteration 1: Bad code

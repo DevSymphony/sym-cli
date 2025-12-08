@@ -1,498 +1,354 @@
 package cmd
 
 import (
+	"bufio"
 	"context"
 	"fmt"
 	"os"
 	"strings"
 	"time"
 
+	"github.com/AlecAivazis/survey/v2"
+	"github.com/DevSymphony/sym-cli/internal/config"
+	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm"
-	"github.com/DevSymphony/sym-cli/internal/llm/engine"
-	"github.com/manifoldco/promptui"
+	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/spf13/cobra"
 )
 
 var llmCmd = &cobra.Command{
 	Use:   "llm",
-	Short: "Manage LLM engine configuration",
-	Long: `Configure and manage LLM engines for Symphony.
+	Short: "Manage LLM provider configuration",
+	Long: `Configure and manage LLM providers for Symphony.
 
-Symphony supports multiple LLM engines:
-  - MCP Sampling: Uses the host LLM when running as MCP server
-  - CLI: Uses local CLI tools (claude, gemini)
-  - API: Uses OpenAI API directly
+Symphony supports multiple LLM providers:
+  - claudecode: Claude Code CLI (requires 'claude' in PATH)
+  - geminicli: Gemini CLI (requires 'gemini' in PATH)
+  - openaiapi: OpenAI API (requires OPENAI_API_KEY)
 
-The default mode is 'auto' which tries engines in this order:
-MCP Sampling → CLI → API`,
-}
-
-var llmSetupCmd = &cobra.Command{
-	Use:   "setup",
-	Short: "Interactive LLM engine setup",
-	Long:  `Interactively configure which LLM engine to use.`,
-	Run:   runLLMSetup,
+Configuration is stored in:
+  - .sym/config.json: Provider and model settings (safe to commit)
+  - .sym/.env: API keys (gitignored)`,
 }
 
 var llmStatusCmd = &cobra.Command{
 	Use:   "status",
-	Short: "Show current LLM engine status",
-	Long:  `Display the current LLM engine configuration and availability.`,
+	Short: "Show current LLM provider status",
+	Long:  `Display the current LLM provider configuration and availability.`,
 	Run:   runLLMStatus,
 }
 
 var llmTestCmd = &cobra.Command{
 	Use:   "test",
-	Short: "Test LLM engine connection",
-	Long:  `Send a test request to verify LLM engine is working.`,
+	Short: "Test LLM provider connection",
+	Long:  `Send a test request to verify LLM provider is working.`,
 	Run:   runLLMTest,
+}
+
+var llmSetupCmd = &cobra.Command{
+	Use:   "setup",
+	Short: "Show LLM setup instructions",
+	Long:  `Display instructions for configuring LLM providers.`,
+	Run:   runLLMSetup,
 }
 
 func init() {
 	rootCmd.AddCommand(llmCmd)
-	llmCmd.AddCommand(llmSetupCmd)
 	llmCmd.AddCommand(llmStatusCmd)
 	llmCmd.AddCommand(llmTestCmd)
-}
-
-func runLLMSetup(_ *cobra.Command, _ []string) {
-	fmt.Println("🤖 LLM Engine Configuration")
-	fmt.Println()
-
-	// Load current config
-	cfg := llm.LoadLLMConfig()
-
-	// Show current settings
-	fmt.Println("Current settings:")
-	fmt.Printf("  Engine mode: %s\n", cfg.Backend)
-	if cfg.CLI != "" {
-		fmt.Printf("  CLI: %s\n", cfg.CLI)
-	}
-	if cfg.Model != "" {
-		fmt.Printf("  Model: %s\n", cfg.Model)
-	}
-	if cfg.HasAPIKey() {
-		fmt.Println("  API Key: configured")
-	} else {
-		fmt.Println("  API Key: not set")
-	}
-	fmt.Println()
-
-	// Show menu
-	items := []string{
-		"Configure CLI tool",
-		"Set OpenAI API key",
-		"Change engine mode",
-		"Test current configuration",
-		"Reset to defaults",
-		"Exit",
-	}
-
-	templates := &promptui.SelectTemplates{
-		Label:    "{{ . }}?",
-		Active:   "▸ {{ . | cyan }}",
-		Inactive: "  {{ . }}",
-		Selected: "✓ {{ . | green }}",
-	}
-
-	selectPrompt := promptui.Select{
-		Label:     "What would you like to configure",
-		Items:     items,
-		Templates: templates,
-		Size:      6,
-	}
-
-	index, _, err := selectPrompt.Run()
-	if err != nil {
-		fmt.Println("\nSetup cancelled")
-		return
-	}
-
-	switch index {
-	case 0:
-		configureCLI(cfg)
-	case 1:
-		promptAPIKeySetup()
-	case 2:
-		configureEngineMode(cfg)
-	case 3:
-		runLLMTest(nil, nil)
-	case 4:
-		resetLLMConfig()
-	case 5:
-		fmt.Println("\nExiting setup")
-	}
-}
-
-func configureCLI(cfg *llm.LLMConfig) {
-	fmt.Println("\n🔧 CLI Tool Configuration")
-	fmt.Println()
-
-	// Detect available CLIs
-	clis := engine.DetectAvailableCLIs()
-
-	// Build selection items
-	var items []string
-	var availableCLIs []engine.CLIInfo
-
-	for _, cli := range clis {
-		status := "✗ not found"
-		if cli.Available {
-			status = "✓ available"
-			if cli.Version != "" {
-				status = fmt.Sprintf("✓ %s", cli.Version)
-			}
-		}
-		items = append(items, fmt.Sprintf("%s (%s)", cli.Name, status))
-		availableCLIs = append(availableCLIs, cli)
-	}
-
-	items = append(items, "Skip CLI configuration")
-
-	templates := &promptui.SelectTemplates{
-		Label:    "{{ . }}?",
-		Active:   "▸ {{ . | cyan }}",
-		Inactive: "  {{ . }}",
-		Selected: "✓ {{ . | green }}",
-	}
-
-	selectPrompt := promptui.Select{
-		Label:     "Select CLI tool to use",
-		Items:     items,
-		Templates: templates,
-		Size:      len(items),
-	}
-
-	index, _, err := selectPrompt.Run()
-	if err != nil || index >= len(availableCLIs) {
-		fmt.Println("\nCLI configuration skipped")
-		return
-	}
-
-	selectedCLI := availableCLIs[index]
-
-	if !selectedCLI.Available {
-		fmt.Printf("\n⚠️  %s is not installed or not in PATH\n", selectedCLI.Name)
-		fmt.Println("Please install it first and try again")
-		return
-	}
-
-	// Update config
-	cfg.CLI = string(selectedCLI.Provider)
-
-	// Get provider for default model
-	provider, _ := engine.GetProvider(selectedCLI.Provider)
-	if provider != nil {
-		cfg.Model = provider.DefaultModel
-		cfg.LargeModel = provider.LargeModel
-	}
-
-	// Save config
-	if err := llm.SaveLLMConfig(cfg); err != nil {
-		fmt.Printf("\n❌ Failed to save configuration: %v\n", err)
-		return
-	}
-
-	fmt.Printf("\n✓ CLI engine configured: %s\n", selectedCLI.Name)
-	if cfg.Model != "" {
-		fmt.Printf("  Default model: %s\n", cfg.Model)
-	}
-	if cfg.LargeModel != "" {
-		fmt.Printf("  Large model: %s\n", cfg.LargeModel)
-	}
-	fmt.Println("  Configuration saved to .sym/.env")
-}
-
-func configureEngineMode(cfg *llm.LLMConfig) {
-	fmt.Println("\n⚙️  Engine Mode Configuration")
-	fmt.Println()
-
-	items := []string{
-		"auto - Automatically select best available engine",
-		"mcp - Always use MCP sampling (when available)",
-		"cli - Always use CLI tool",
-		"api - Always use OpenAI API",
-	}
-
-	templates := &promptui.SelectTemplates{
-		Label:    "{{ . }}?",
-		Active:   "▸ {{ . | cyan }}",
-		Inactive: "  {{ . }}",
-		Selected: "✓ {{ . | green }}",
-	}
-
-	selectPrompt := promptui.Select{
-		Label:     "Select engine mode",
-		Items:     items,
-		Templates: templates,
-		Size:      4,
-	}
-
-	index, _, err := selectPrompt.Run()
-	if err != nil {
-		fmt.Println("\nEngine mode configuration cancelled")
-		return
-	}
-
-	modes := []engine.Mode{
-		engine.ModeAuto,
-		engine.ModeMCP,
-		engine.ModeCLI,
-		engine.ModeAPI,
-	}
-
-	cfg.Backend = modes[index]
-
-	// Save config
-	if err := llm.SaveLLMConfig(cfg); err != nil {
-		fmt.Printf("\n❌ Failed to save configuration: %v\n", err)
-		return
-	}
-
-	fmt.Printf("\n✓ Engine mode set to: %s\n", cfg.Backend)
-}
-
-func resetLLMConfig() {
-	fmt.Println("\n🔄 Resetting LLM Configuration")
-
-	// Confirm
-	prompt := promptui.Prompt{
-		Label:     "Are you sure you want to reset LLM configuration",
-		IsConfirm: true,
-	}
-
-	result, err := prompt.Run()
-	if err != nil || strings.ToLower(result) != "y" {
-		fmt.Println("\nReset cancelled")
-		return
-	}
-
-	// Save default config
-	cfg := llm.DefaultLLMConfig()
-	if err := llm.SaveLLMConfig(cfg); err != nil {
-		fmt.Printf("\n❌ Failed to reset configuration: %v\n", err)
-		return
-	}
-
-	fmt.Println("\n✓ LLM configuration reset to defaults")
+	llmCmd.AddCommand(llmSetupCmd)
 }
 
 func runLLMStatus(_ *cobra.Command, _ []string) {
-	fmt.Println("🤖 LLM Engine Status")
+	ui.PrintTitle("LLM", "Provider Status")
 	fmt.Println()
 
 	// Load config
-	cfg := llm.LoadLLMConfig()
-
-	// Create client to check engines
-	client := llm.NewClient(llm.WithConfig(cfg), llm.WithVerbose(false))
+	cfg := llm.LoadConfig()
 
 	fmt.Println("Configuration:")
-	fmt.Printf("  Engine mode: %s\n", cfg.Backend)
-	if cfg.CLI != "" {
-		fmt.Printf("  CLI provider: %s\n", cfg.CLI)
+	if cfg.Provider != "" {
+		fmt.Printf("  Provider: %s\n", cfg.Provider)
+	} else {
+		fmt.Println("  Provider: (not configured)")
 	}
 	if cfg.Model != "" {
 		fmt.Printf("  Model: %s\n", cfg.Model)
 	}
 	fmt.Println()
 
-	// Show engine availability
-	fmt.Println("Engine availability:")
-
-	engines := client.GetEngines()
-	if len(engines) == 0 {
-		fmt.Println("  ⚠️  No engines configured")
-	} else {
-		for _, e := range engines {
-			status := "✗ unavailable"
-			if e.IsAvailable() {
-				status = "✓ available"
+	// Show available providers
+	fmt.Println("Available providers:")
+	providers := llm.ListProviders()
+	for _, p := range providers {
+		status := "not available"
+		if p.Available {
+			status = "available"
+			if p.Path != "" {
+				status = fmt.Sprintf("available (%s)", p.Path)
 			}
-			fmt.Printf("  %s: %s\n", e.Name(), status)
 		}
+		fmt.Printf("  %s: %s\n", p.DisplayName, status)
 	}
-
 	fmt.Println()
 
-	// Show active engine
-	active := client.GetActiveEngine()
-	if active != nil {
-		fmt.Printf("Active engine: %s\n", active.Name())
-
-		caps := active.Capabilities()
-		fmt.Println("Capabilities:")
-		fmt.Printf("  Temperature: %v\n", caps.SupportsTemperature)
-		fmt.Printf("  Max tokens: %v\n", caps.SupportsMaxTokens)
-		fmt.Printf("  Complexity hint: %v\n", caps.SupportsComplexity)
+	// Try to create provider
+	provider, err := llm.New(cfg)
+	if err != nil {
+		ui.PrintWarn(fmt.Sprintf("Configuration error: %v", err))
 	} else {
-		fmt.Println("⚠️  No active engine available")
+		ui.PrintOK(fmt.Sprintf("Active provider: %s", provider.Name()))
 	}
 
 	fmt.Println()
-	fmt.Println("💡 Run 'sym llm setup' to configure engines")
-	fmt.Println("💡 Run 'sym llm test' to verify connection")
+	fmt.Println("Run 'sym llm setup' for configuration instructions")
+	fmt.Println("Run 'sym llm test' to verify connection")
 }
 
 func runLLMTest(_ *cobra.Command, _ []string) {
-	fmt.Println("🧪 Testing LLM Engine Connection")
+	ui.PrintTitle("LLM", "Testing Provider Connection")
 	fmt.Println()
 
 	// Load config
-	cfg := llm.LoadLLMConfig()
+	cfg := llm.LoadConfig()
 
-	// Create client
-	client := llm.NewClient(llm.WithConfig(cfg), llm.WithVerbose(true))
-
-	active := client.GetActiveEngine()
-	if active == nil {
-		fmt.Println("❌ No LLM engine available")
+	// Create provider
+	provider, err := llm.New(cfg)
+	if err != nil {
+		ui.PrintError(fmt.Sprintf("Failed to create provider: %v", err))
 		fmt.Println()
-		fmt.Println("Please configure an engine:")
+		fmt.Println("Please configure a provider:")
 		fmt.Println("  sym llm setup")
 		return
 	}
 
-	fmt.Printf("Testing engine: %s\n\n", active.Name())
+	fmt.Printf("Testing provider: %s\n\n", provider.Name())
 
 	// Create test request
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	response, err := client.Request(
-		"You are a helpful assistant. Respond with exactly one word.",
-		"Say 'OK' to confirm you are working.",
-	).Execute(ctx)
+	prompt := "You are a helpful assistant. Respond with exactly one word.\n\nSay 'OK' to confirm you are working."
+	response, err := provider.Execute(ctx, prompt, llm.Text)
 
 	if err != nil {
-		fmt.Printf("\n❌ Test failed: %v\n", err)
-		os.Exit(1)
+		ui.PrintError(fmt.Sprintf("Test failed: %v", err))
+		return
 	}
 
-	fmt.Printf("\n✓ Test successful!\n")
+	ui.PrintOK("Test successful!")
 	fmt.Printf("  Response: %s\n", strings.TrimSpace(response))
 }
 
-// promptLLMBackendSetup is called from init command to setup LLM engine.
+func runLLMSetup(_ *cobra.Command, _ []string) {
+	ui.PrintTitle("LLM", "Provider Setup Instructions")
+	fmt.Println()
+
+	// Show available providers
+	fmt.Println("Available providers:")
+	providers := llm.ListProviders()
+	for _, p := range providers {
+		status := "not installed"
+		if p.Available {
+			status = "ready"
+		}
+		fmt.Printf("  %s (%s): %s\n", p.Name, p.DisplayName, status)
+	}
+	fmt.Println()
+
+	fmt.Println("Configuration files:")
+	fmt.Println("  .sym/config.json - Provider and model settings (safe to commit)")
+	fmt.Println("  .sym/.env - API keys only (gitignored)")
+	fmt.Println()
+
+	fmt.Println("Example .sym/config.json:")
+	fmt.Println(`  {
+    "llm": {
+      "provider": "claudecode",
+      "model": "sonnet"
+    }
+  }`)
+	fmt.Println()
+
+	// Dynamically generate model aliases from registry
+	fmt.Println("Supported model aliases:")
+	for _, p := range providers {
+		if len(p.Models) > 0 {
+			modelIDs := make([]string, 0, len(p.Models))
+			for _, m := range p.Models {
+				modelIDs = append(modelIDs, m.ID)
+			}
+			fmt.Printf("  %s: %s\n", p.DisplayName, strings.Join(modelIDs, ", "))
+		}
+	}
+	fmt.Println()
+
+	// Show API key instructions for providers that require them
+	for _, p := range providers {
+		if p.APIKey.Required && p.APIKey.EnvVarName != "" {
+			fmt.Printf("For %s, also add to .sym/.env:\n", p.DisplayName)
+			fmt.Printf("  %s=%s...\n", p.APIKey.EnvVarName, p.APIKey.Prefix)
+			fmt.Println()
+		}
+	}
+
+	fmt.Println("After configuration, run 'sym llm test' to verify.")
+}
+
+// promptLLMBackendSetup is called from init command to setup LLM provider.
 func promptLLMBackendSetup() {
-	fmt.Println("\n🤖 LLM Engine Configuration")
-	fmt.Println("  Symphony uses LLM for policy conversion and code validation.")
+	// Use custom template to hide "type to filter" and typed characters
+	restore := useSelectTemplateNoFilter()
+	defer restore()
+
+	fmt.Println()
+	ui.PrintTitle("LLM", "Configure LLM Provider")
+	fmt.Println(ui.Indent("Symphony uses LLM for policy conversion and code validation"))
 	fmt.Println()
 
-	// Detect available CLIs
-	clis := engine.DetectAvailableCLIs()
+	// Get provider options dynamically from registry
+	providerOptions := llm.GetProviderOptions(true) // includes "Skip"
 
-	// Check API key
-	cfg := llm.LoadLLMConfig()
-	hasAPIKey := cfg.HasAPIKey()
-
-	// Show detected tools
-	fmt.Println("  Detected LLM tools:")
-	hasAnyCLI := false
-	for _, cli := range clis {
-		status := "✗"
-		if cli.Available {
-			status = "✓"
-			hasAnyCLI = true
-		}
-		version := ""
-		if cli.Version != "" {
-			version = fmt.Sprintf(" (%s)", cli.Version)
-		}
-		fmt.Printf("    %s %s%s\n", status, cli.Name, version)
+	// Select provider
+	var selectedDisplayName string
+	providerPrompt := &survey.Select{
+		Message: "Select LLM provider:",
+		Options: providerOptions,
 	}
 
-	if hasAPIKey {
-		fmt.Println("    ✓ OpenAI API key (configured)")
+	if err := survey.AskOne(providerPrompt, &selectedDisplayName); err != nil {
+		fmt.Println("Skipped LLM configuration")
+		return
+	}
+
+	if selectedDisplayName == "Skip" {
+		fmt.Println("Skipped LLM configuration")
+		fmt.Println(ui.Indent("Tip: Run 'sym init --setup-llm' to configure later"))
+		return
+	}
+
+	// Get provider info from registry
+	providerInfo := llm.GetProviderByDisplayName(selectedDisplayName)
+	if providerInfo == nil {
+		ui.PrintError(fmt.Sprintf("Unknown provider: %s", selectedDisplayName))
+		return
+	}
+
+	providerName := providerInfo.Name
+	var modelID string
+
+	// Handle API key if required
+	if llm.RequiresAPIKey(providerName) {
+		if err := promptAndSaveAPIKey(providerName); err != nil {
+			ui.PrintError(fmt.Sprintf("Failed to save API key: %v", err))
+			return
+		}
+	}
+
+	// Select model (common for all providers)
+	modelOptions := llm.GetModelOptions(providerName)
+	if len(modelOptions) > 0 {
+		var selectedOption string
+		modelPrompt := &survey.Select{
+			Message: fmt.Sprintf("Select %s model:", providerInfo.DisplayName),
+			Options: modelOptions,
+			Default: llm.GetDefaultModelOption(providerName),
+		}
+		if err := survey.AskOne(modelPrompt, &selectedOption); err != nil {
+			fmt.Println("Skipped model selection, using default")
+			modelID = providerInfo.DefaultModel
+		} else {
+			modelID = llm.GetModelIDFromOption(providerName, selectedOption)
+		}
 	} else {
-		fmt.Println("    ✗ OpenAI API key (not set)")
+		modelID = providerInfo.DefaultModel
 	}
-	fmt.Println()
 
-	// If nothing available, skip
-	if !hasAnyCLI && !hasAPIKey {
-		fmt.Println("  ⚠️  No LLM engine available")
-		fmt.Println("  You can configure one later with: sym llm setup")
+	// Save to config.json
+	if err := config.UpdateProjectConfigLLM(providerName, modelID); err != nil {
+		ui.PrintError(fmt.Sprintf("Failed to save config: %v", err))
 		return
 	}
 
-	// Build selection items
-	var items []string
-	var modes []engine.Mode
+	ui.PrintOK(fmt.Sprintf("LLM provider saved: %s (%s)", selectedDisplayName, modelID))
+}
 
-	items = append(items, "Auto (recommended) - Use best available engine")
-	modes = append(modes, engine.ModeAuto)
+// promptAndSaveAPIKey prompts for API key and saves to .env
+func promptAndSaveAPIKey(providerName string) error {
+	envVarName := llm.GetAPIKeyEnvVar(providerName)
+	if envVarName == "" {
+		return fmt.Errorf("provider %s does not have API key configuration", providerName)
+	}
 
-	for _, cli := range clis {
-		if cli.Available {
-			items = append(items, fmt.Sprintf("%s CLI", cli.Name))
-			modes = append(modes, engine.ModeCLI)
+	var apiKey string
+	prompt := &survey.Password{
+		Message: fmt.Sprintf("Enter your %s:", envVarName),
+	}
+
+	if err := survey.AskOne(prompt, &apiKey); err != nil {
+		return err
+	}
+
+	// Validate API key using registry
+	if err := llm.ValidateAPIKey(providerName, apiKey); err != nil {
+		ui.PrintWarn(err.Error())
+		// Continue anyway - it's a warning, not a blocking error
+		// But if the key is empty, we should return the error
+		if apiKey == "" {
+			return err
 		}
 	}
 
-	if hasAPIKey {
-		items = append(items, "OpenAI API")
-		modes = append(modes, engine.ModeAPI)
+	// Save to .env file
+	envPath := config.GetProjectEnvPath()
+	if err := saveAPIKeyToEnv(envPath, envVarName, apiKey); err != nil {
+		return err
 	}
 
-	items = append(items, "Skip (configure later)")
-	modes = append(modes, "")
+	ui.PrintOK("API key saved to .sym/.env (gitignored)")
 
-	templates := &promptui.SelectTemplates{
-		Label:    "{{ . }}?",
-		Active:   "▸ {{ . | cyan }}",
-		Inactive: "  {{ . }}",
-		Selected: "✓ {{ . | green }}",
+	// Ensure .env is in .gitignore
+	if err := ensureGitignore(".sym/.env"); err != nil {
+		ui.PrintWarn(fmt.Sprintf("Failed to update .gitignore: %v", err))
 	}
 
-	selectPrompt := promptui.Select{
-		Label:     "Select your preferred LLM engine",
-		Items:     items,
-		Templates: templates,
-		Size:      len(items),
-		Stdout:    &bellSkipper{},
-	}
+	return nil
+}
 
-	index, _, err := selectPrompt.Run()
-	if err != nil || modes[index] == "" {
-		fmt.Println("\n  LLM engine configuration skipped")
-		fmt.Println("  Run 'sym llm setup' to configure later")
-		return
-	}
+// saveAPIKeyToEnv saves the API key to the .env file
+func saveAPIKeyToEnv(envPath, envVarName, apiKey string) error {
+	return envutil.SaveKeyToEnvFile(envPath, envVarName, apiKey)
+}
 
-	// Update config
-	cfg.Backend = modes[index]
+// ensureGitignore ensures that the given path is in .gitignore
+func ensureGitignore(path string) error {
+	gitignorePath := ".gitignore"
 
-	// If CLI selected, set the specific CLI provider
-	if modes[index] == engine.ModeCLI {
-		// Find which CLI was selected
-		cliIndex := index - 1 // Account for "Auto" option
-		cliCount := 0
-		for _, cli := range clis {
-			if cli.Available {
-				if cliCount == cliIndex {
-					cfg.CLI = string(cli.Provider)
-					provider, _ := engine.GetProvider(cli.Provider)
-					if provider != nil {
-						cfg.Model = provider.DefaultModel
-						cfg.LargeModel = provider.LargeModel
-					}
-					break
-				}
-				cliCount++
+	// Read existing .gitignore
+	var lines []string
+	existingFile, err := os.Open(gitignorePath)
+	if err == nil {
+		scanner := bufio.NewScanner(existingFile)
+		for scanner.Scan() {
+			line := scanner.Text()
+			lines = append(lines, line)
+			// Check if already exists
+			if strings.TrimSpace(line) == path {
+				_ = existingFile.Close()
+				return nil // Already in .gitignore
 			}
 		}
+		_ = existingFile.Close()
 	}
 
-	// Save config
-	if err := llm.SaveLLMConfig(cfg); err != nil {
-		fmt.Printf("\n  ⚠️  Failed to save LLM configuration: %v\n", err)
-		return
+	// Add to .gitignore
+	lines = append(lines, "", "# Symphony API key configuration", path)
+	content := strings.Join(lines, "\n") + "\n"
+
+	if err := os.WriteFile(gitignorePath, []byte(content), 0644); err != nil {
+		return fmt.Errorf("failed to update .gitignore: %w", err)
 	}
 
-	fmt.Printf("\n  ✓ LLM engine set to: %s\n", cfg.Backend)
-	if cfg.CLI != "" {
-		fmt.Printf("    CLI: %s\n", cfg.CLI)
-	}
-	fmt.Println("    Configuration saved to .sym/.env")
+	return nil
 }
+

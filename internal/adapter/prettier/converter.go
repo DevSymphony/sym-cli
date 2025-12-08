@@ -43,10 +43,11 @@ func (c *Converter) GetRoutingHints() []string {
 	}
 }
 
-// ConvertRules converts formatting rules to Prettier config using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
-	if llmClient == nil {
-		return nil, fmt.Errorf("LLM client is required")
+// ConvertRules converts formatting rules to Prettier config using LLM.
+// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.ConversionResult, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("LLM provider is required")
 	}
 
 	// Start with default Prettier configuration
@@ -60,33 +61,56 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 		"arrowParens":   "always",
 	}
 
+	// Track rule conversion results
+	successRuleIDs := make([]string, 0)
+	failedRuleIDs := make([]string, 0)
+
 	// Use LLM to infer settings from rules
 	for _, rule := range rules {
-		config, err := c.convertSingleRule(ctx, rule, llmClient)
+		config, err := c.convertSingleRule(ctx, rule, provider)
 		if err != nil {
-			continue // Skip rules that cannot be converted
+			failedRuleIDs = append(failedRuleIDs, rule.ID)
+			continue
+		}
+
+		// Check if LLM returned empty config (rule cannot be enforced by Prettier)
+		if len(config) == 0 {
+			failedRuleIDs = append(failedRuleIDs, rule.ID)
+			continue
 		}
 
 		// Merge LLM-generated config
 		for key, value := range config {
 			prettierConfig[key] = value
 		}
+		successRuleIDs = append(successRuleIDs, rule.ID)
 	}
 
-	content, err := json.MarshalIndent(prettierConfig, "", "  ")
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal config: %w", err)
+	// Build result with tracking info
+	convResult := &adapter.ConversionResult{
+		SuccessRules: successRuleIDs,
+		FailedRules:  failedRuleIDs,
 	}
 
-	return &adapter.LinterConfig{
-		Filename: ".prettierrc",
-		Content:  content,
-		Format:   "json",
-	}, nil
+	// Generate config only if at least one rule succeeded
+	if len(successRuleIDs) > 0 {
+		content, err := json.MarshalIndent(prettierConfig, "", "  ")
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal config: %w", err)
+		}
+
+		convResult.Config = &adapter.LinterConfig{
+			Filename: ".prettierrc",
+			Content:  content,
+			Format:   "json",
+		}
+	}
+
+	return convResult, nil
 }
 
 // convertSingleRule converts a single user rule to Prettier config using LLM
-func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (map[string]interface{}, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, provider llm.Provider) (map[string]interface{}, error) {
 	systemPrompt := `You are a Prettier configuration expert. Convert natural language formatting rules to Prettier configuration options.
 
 Return ONLY a JSON object (no markdown fences) with Prettier options.
@@ -134,7 +158,8 @@ Output:
 	userPrompt := fmt.Sprintf("Convert this rule to Prettier configuration:\n\n%s", rule.Say)
 
 	// Call LLM
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		return nil, fmt.Errorf("LLM call failed: %w", err)
 	}

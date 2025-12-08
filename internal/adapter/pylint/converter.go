@@ -49,15 +49,17 @@ func (c *Converter) GetRoutingHints() []string {
 	}
 }
 
-// ConvertRules converts user rules to Pylint configuration using LLM
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, llmClient *llm.Client) (*adapter.LinterConfig, error) {
-	if llmClient == nil {
-		return nil, fmt.Errorf("LLM client is required")
+// ConvertRules converts user rules to Pylint configuration using LLM.
+// Returns ConversionResult with per-rule success/failure tracking for fallback support.
+func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*adapter.ConversionResult, error) {
+	if provider == nil {
+		return nil, fmt.Errorf("LLM provider is required")
 	}
 
 	// Convert rules in parallel using goroutines
 	type ruleResult struct {
 		index   int
+		ruleID  string
 		symbol  string
 		options map[string]interface{}
 		err     error
@@ -72,9 +74,10 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 		go func(idx int, r schema.UserRule) {
 			defer wg.Done()
 
-			symbol, options, err := c.convertSingleRule(ctx, r, llmClient)
+			symbol, options, err := c.convertSingleRule(ctx, r, provider)
 			results <- ruleResult{
 				index:   idx,
+				ruleID:  r.ID,
 				symbol:  symbol,
 				options: options,
 				err:     err,
@@ -88,21 +91,22 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 		close(results)
 	}()
 
-	// Collect results
+	// Collect results with per-rule tracking
 	enabledRules := make([]string, 0)
 	options := make(map[string]map[string]interface{})
-	var errors []string
-	skippedCount := 0
+	successRuleIDs := make([]string, 0)
+	failedRuleIDs := make([]string, 0)
 
 	for result := range results {
 		if result.err != nil {
-			errors = append(errors, fmt.Sprintf("Rule %d: %v", result.index+1, result.err))
-			fmt.Fprintf(os.Stderr, "⚠️  Pylint rule %d conversion error: %v\n", result.index+1, result.err)
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
+			fmt.Fprintf(os.Stderr, "⚠️  Pylint rule %s conversion error: %v\n", result.ruleID, result.err)
 			continue
 		}
 
 		if result.symbol != "" {
 			enabledRules = append(enabledRules, result.symbol)
+			successRuleIDs = append(successRuleIDs, result.ruleID)
 			if len(result.options) > 0 {
 				// Group options by section
 				for key, value := range result.options {
@@ -113,33 +117,35 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, l
 					options[section][key] = value
 				}
 			}
-			fmt.Fprintf(os.Stderr, "✓ Pylint rule %d → %s\n", result.index+1, result.symbol)
+			fmt.Fprintf(os.Stderr, "✓ Pylint rule %s → %s\n", result.ruleID, result.symbol)
 		} else {
-			skippedCount++
-			fmt.Fprintf(os.Stderr, "⊘ Pylint rule %d skipped (cannot be enforced by Pylint)\n", result.index+1)
+			// Skipped = cannot be enforced by this linter, fallback to llm-validator
+			failedRuleIDs = append(failedRuleIDs, result.ruleID)
+			fmt.Fprintf(os.Stderr, "⊘ Pylint rule %s skipped (cannot be enforced by Pylint)\n", result.ruleID)
 		}
 	}
 
-	if skippedCount > 0 {
-		fmt.Fprintf(os.Stderr, "ℹ️  %d rule(s) skipped for Pylint (will use llm-validator)\n", skippedCount)
+	// Build result with tracking info
+	convResult := &adapter.ConversionResult{
+		SuccessRules: successRuleIDs,
+		FailedRules:  failedRuleIDs,
 	}
 
-	if len(enabledRules) == 0 {
-		return nil, fmt.Errorf("no rules converted successfully: %v", errors)
+	// Generate config only if at least one rule succeeded
+	if len(enabledRules) > 0 {
+		content := c.generatePylintRC(enabledRules, options)
+		convResult.Config = &adapter.LinterConfig{
+			Filename: ".pylintrc",
+			Content:  []byte(content),
+			Format:   "ini",
+		}
 	}
 
-	// Generate .pylintrc content (INI format)
-	content := c.generatePylintRC(enabledRules, options)
-
-	return &adapter.LinterConfig{
-		Filename: ".pylintrc",
-		Content:  []byte(content),
-		Format:   "ini",
-	}, nil
+	return convResult, nil
 }
 
 // convertSingleRule converts a single user rule to Pylint rule using LLM
-func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, llmClient *llm.Client) (string, map[string]interface{}, error) {
+func (c *Converter) convertSingleRule(ctx context.Context, rule schema.UserRule, provider llm.Provider) (string, map[string]interface{}, error) {
 	systemPrompt := `You are a Pylint configuration expert. Convert natural language Python coding rules to Pylint rule configurations.
 
 Return ONLY a JSON object (no markdown fences) with this structure:
@@ -210,7 +216,8 @@ Output:
 	}
 
 	// Call LLM
-	response, err := llmClient.Request(systemPrompt, userPrompt).WithComplexity(llm.ComplexityMinimal).Execute(ctx)
+	prompt := systemPrompt + "\n\n" + userPrompt
+	response, err := provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
 		return "", nil, fmt.Errorf("LLM call failed: %w", err)
 	}

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/validator"
@@ -140,13 +139,13 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 	policy, err := loadPolicy(policyPath)
 	require.NoError(t, err)
 
-	// Create LLM client
-	client := llm.NewClient(
-		llm.WithTimeout(30 * time.Second),
-	)
+	// Create LLM provider
+	cfg := llm.LoadConfig()
+	provider, err := llm.New(cfg)
+	require.NoError(t, err, "LLM provider creation should succeed")
 
 	// Create validator
-	v := validator.NewLLMValidator(client, policy)
+	v := validator.NewLLMValidator(provider, policy)
 	ctx := context.Background()
 
 	// Test 1: Validate BAD code (should find multiple violations)
@@ -257,7 +256,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 			Rules:   filterRulesByCategory(policy.Rules, "security"),
 		}
 
-		securityValidator := validator.NewLLMValidator(client, securityPolicy)
+		securityValidator := validator.NewLLMValidator(provider, securityPolicy)
 
 		// Code with security violation (format as git diff with + prefix)
 		codeWithSecurityIssue := `+const apiKey = "sk-1234567890abcdef"; // Hardcoded secret
@@ -378,8 +377,10 @@ func TestMCP_EndToEndWorkflow(t *testing.T) {
 
 	// Step 4: Validate generated code
 	t.Log("STEP 4: Validating AI-generated code")
-	client := llm.NewClient()
-	v := validator.NewLLMValidator(client, policy)
+	llmCfg := llm.LoadConfig()
+	llmProvider, err := llm.New(llmCfg)
+	require.NoError(t, err, "LLM provider creation should succeed")
+	v := validator.NewLLMValidator(llmProvider, policy)
 
 	result, err := v.Validate(context.Background(), []validator.GitChange{
 		{FilePath: "auth.js", Diff: generatedCode},
