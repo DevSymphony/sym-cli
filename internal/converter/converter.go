@@ -10,8 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/DevSymphony/sym-cli/internal/adapter"
-	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
@@ -89,8 +88,8 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 		}
 	}
 
-	// Step 4: Convert rules for each linter in parallel using goroutines
-	// Limit concurrency to CPU count to prevent CPU spike
+	// Step 4: Convert all (linter, rule) pairs in parallel with single semaphore
+	// This is a flat parallelization - no nested goroutines
 	result := &ConvertResult{
 		GeneratedFiles: []string{},
 		CodePolicy:     codePolicy,
@@ -98,88 +97,55 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 		Warnings:       []string{},
 	}
 
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
 	// Track failed rules per linter for fallback to llm-validator
 	failedRulesPerLinter := make(map[string][]string)
 
-	// Limit concurrent LLM calls to CPU count
-	maxConcurrent := runtime.NumCPU()
-	sem := make(chan struct{}, maxConcurrent)
-
+	// Collect all (linter, rule) pairs as tasks
+	var tasks []conversionTask
 	for linterName, rules := range linterRules {
-		if len(rules) == 0 {
-			continue
-		}
-
-		// Skip llm-validator - it will be handled in CodePolicy only
 		if linterName == llmValidatorEngine {
-			continue
+			continue // Skip llm-validator - handled in CodePolicy only
 		}
-
-		wg.Add(1)
-		go func(linter string, ruleSet []schema.UserRule) {
-			defer wg.Done()
-
-			// Acquire semaphore
-			sem <- struct{}{}
-			defer func() { <-sem }()
-
-			// Get linter converter
-			converter := c.getLinterConverter(linter)
-			if converter == nil {
-				mu.Lock()
-				result.Errors[linter] = fmt.Errorf("unsupported linter: %s", linter)
-				// Mark all rules as failed for this linter
-				for _, rule := range ruleSet {
-					failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], rule.ID)
-				}
-				mu.Unlock()
-				return
-			}
-
-			// Convert rules using LLM - now returns ConversionResult with per-rule tracking
-			convResult, err := converter.ConvertRules(ctx, ruleSet, c.llmProvider)
-			if err != nil {
-				mu.Lock()
-				result.Errors[linter] = fmt.Errorf("conversion failed: %w", err)
-				// Total failure - all rules should fallback
-				for _, rule := range ruleSet {
-					failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], rule.ID)
-				}
-				mu.Unlock()
-				return
-			}
-
-			// Track failed rules from partial conversion
-			if len(convResult.FailedRules) > 0 {
-				mu.Lock()
-				failedRulesPerLinter[linter] = append(failedRulesPerLinter[linter], convResult.FailedRules...)
-				mu.Unlock()
-			}
-
-			// Only write config if at least one rule succeeded
-			if convResult.Config != nil && len(convResult.SuccessRules) > 0 {
-				outputPath := filepath.Join(c.outputDir, convResult.Config.Filename)
-				if err := os.WriteFile(outputPath, convResult.Config.Content, 0644); err != nil {
-					mu.Lock()
-					result.Errors[linter] = fmt.Errorf("failed to write file: %w", err)
-					mu.Unlock()
-					return
-				}
-
-				mu.Lock()
-				result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
-				mu.Unlock()
-
-				fmt.Fprintf(os.Stderr, "✓ Generated %s configuration: %s\n", linter, outputPath)
-			}
-		}(linterName, rules)
+		for _, rule := range rules {
+			tasks = append(tasks, conversionTask{linterName: linterName, rule: rule})
+		}
 	}
 
-	// Wait for all goroutines to complete
-	wg.Wait()
+	// Convert all tasks in parallel with single semaphore
+	successResults, failedResults := c.convertAllTasks(ctx, tasks)
+
+	// Update failedRulesPerLinter from conversion results
+	for linterName, ruleIDs := range failedResults {
+		failedRulesPerLinter[linterName] = append(failedRulesPerLinter[linterName], ruleIDs...)
+	}
+
+	// Build configs and write files for each linter (sequential - no LLM calls)
+	for linterName, linterResults := range successResults {
+		converter := c.getLinterConverter(linterName)
+		if converter == nil {
+			result.Errors[linterName] = fmt.Errorf("unsupported linter: %s", linterName)
+			continue
+		}
+
+		config, err := converter.BuildConfig(linterResults)
+		if err != nil {
+			result.Errors[linterName] = fmt.Errorf("failed to build config: %w", err)
+			continue
+		}
+
+		if config == nil {
+			continue
+		}
+
+		outputPath := filepath.Join(c.outputDir, config.Filename)
+		if err := os.WriteFile(outputPath, config.Content, 0644); err != nil {
+			result.Errors[linterName] = fmt.Errorf("failed to write file: %w", err)
+			continue
+		}
+
+		result.GeneratedFiles = append(result.GeneratedFiles, outputPath)
+		fmt.Fprintf(os.Stderr, "✓ Generated %s configuration: %s\n", linterName, outputPath)
+	}
 
 	// Step 4.1: Update ruleToLinters mapping - remove failed linters and add llm-validator fallback
 	for linter, failedRuleIDs := range failedRulesPerLinter {
@@ -328,14 +294,10 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 	results := make(chan routeResult, len(userPolicy.Rules))
 	var wg sync.WaitGroup
 
-	// Limit concurrent LLM calls to prevent resource exhaustion
-	// Use CPU/4, minimum 2, maximum 4 to balance performance and stability
-	maxConcurrent := runtime.NumCPU() / 4
-	if maxConcurrent < 2 {
-		maxConcurrent = 2
-	}
-	if maxConcurrent > 4 {
-		maxConcurrent = 4
+	// Limit concurrent LLM calls: CPU/2 (minimum 1)
+	maxConcurrent := runtime.NumCPU() / 2
+	if maxConcurrent < 1 {
+		maxConcurrent = 1
 	}
 	sem := make(chan struct{}, maxConcurrent)
 
@@ -412,11 +374,11 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 // getAvailableLinters returns available linters for given languages
 func (c *Converter) getAvailableLinters(languages []string) []string {
 	// Build language mapping dynamically from registry
-	languageLinterMapping := registry.Global().BuildLanguageMapping()
+	languageLinterMapping := linter.Global().BuildLanguageMapping()
 
 	if len(languages) == 0 {
 		// If no languages specified, return all registered tools
-		return registry.Global().GetAllToolNames()
+		return linter.Global().GetAllToolNames()
 	}
 
 	linterSet := make(map[string]bool)
@@ -530,9 +492,9 @@ Reason: Requires knowing which packages are "large"`, linterDescriptions, routin
 }
 
 // getLinterConverter returns the appropriate converter for a linter
-func (c *Converter) getLinterConverter(linterName string) adapter.LinterConverter {
+func (c *Converter) getLinterConverter(linterName string) linter.Converter {
 	// Use registry to get converter (no hardcoding)
-	converter, ok := registry.Global().GetConverter(linterName)
+	converter, ok := linter.Global().GetConverter(linterName)
 	if !ok {
 		return nil
 	}
@@ -544,7 +506,7 @@ func (c *Converter) buildLinterDescriptions(availableLinters []string) string {
 	var descriptions []string
 
 	for _, linterName := range availableLinters {
-		converter, ok := registry.Global().GetConverter(linterName)
+		converter, ok := linter.Global().GetConverter(linterName)
 		if !ok || converter == nil {
 			continue
 		}
@@ -568,7 +530,7 @@ func (c *Converter) buildRoutingHints(availableLinters []string) string {
 	hintNumber := 7 // Start after the base rules (1-6)
 
 	for _, linterName := range availableLinters {
-		converter, ok := registry.Global().GetConverter(linterName)
+		converter, ok := linter.Global().GetConverter(linterName)
 		if !ok || converter == nil {
 			continue
 		}
@@ -585,6 +547,89 @@ func (c *Converter) buildRoutingHints(availableLinters []string) string {
 	}
 
 	return strings.Join(hints, "\n")
+}
+
+// conversionTask represents a single (linter, rule) pair to be converted
+type conversionTask struct {
+	linterName string
+	rule       schema.UserRule
+}
+
+// convertAllTasks converts all (linter, rule) pairs in parallel with a single semaphore.
+// Returns results grouped by linter name, and failed rule IDs grouped by linter name.
+func (c *Converter) convertAllTasks(ctx context.Context, tasks []conversionTask) (map[string][]*linter.SingleRuleResult, map[string][]string) {
+	if len(tasks) == 0 {
+		return make(map[string][]*linter.SingleRuleResult), make(map[string][]string)
+	}
+
+	type taskResult struct {
+		linterName string
+		result     *linter.SingleRuleResult
+		ruleID     string
+		err        error
+	}
+
+	results := make(chan taskResult, len(tasks))
+	var wg sync.WaitGroup
+
+	// Single semaphore for all conversions: CPU/2 (minimum 1)
+	maxConcurrent := runtime.NumCPU() / 2
+	if maxConcurrent < 1 {
+		maxConcurrent = 1
+	}
+	sem := make(chan struct{}, maxConcurrent)
+
+	// Process all tasks in parallel
+	for _, task := range tasks {
+		wg.Add(1)
+		go func(t conversionTask) {
+			defer wg.Done()
+
+			// Acquire semaphore with context check
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				results <- taskResult{linterName: t.linterName, ruleID: t.rule.ID, err: ctx.Err()}
+				return
+			}
+			defer func() { <-sem }()
+
+			// Get converter and convert single rule
+			converter := c.getLinterConverter(t.linterName)
+			if converter == nil {
+				results <- taskResult{linterName: t.linterName, ruleID: t.rule.ID, err: fmt.Errorf("unsupported linter: %s", t.linterName)}
+				return
+			}
+
+			res, err := converter.ConvertSingleRule(ctx, t.rule, c.llmProvider)
+			results <- taskResult{linterName: t.linterName, result: res, ruleID: t.rule.ID, err: err}
+		}(task)
+	}
+
+	// Close results channel after all goroutines complete
+	go func() {
+		wg.Wait()
+		close(results)
+	}()
+
+	// Collect and group results by linter
+	successByLinter := make(map[string][]*linter.SingleRuleResult)
+	failedByLinter := make(map[string][]string)
+
+	for res := range results {
+		if res.err != nil {
+			failedByLinter[res.linterName] = append(failedByLinter[res.linterName], res.ruleID)
+			continue
+		}
+		if res.result == nil {
+			// Skip = cannot be enforced by this linter, fallback to llm-validator
+			failedByLinter[res.linterName] = append(failedByLinter[res.linterName], res.ruleID)
+			continue
+		}
+		successByLinter[res.linterName] = append(successByLinter[res.linterName], res.result)
+	}
+
+	return successByLinter, failedByLinter
 }
 
 // convertRBAC converts UserRBAC to PolicyRBAC

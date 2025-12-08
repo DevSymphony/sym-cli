@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	adapterRegistry "github.com/DevSymphony/sym-cli/internal/adapter/registry"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +42,7 @@ func TestTSC_ValidateChanges(t *testing.T) {
 	defer v.Close()
 
 	// 4. Check tool availability
-	adp, err := adapterRegistry.Global().GetAdapter("tsc")
+	adp, err := linter.Global().GetLinter("tsc")
 	if err != nil {
 		t.Skipf("TSC adapter not found: %v", err)
 	}
@@ -109,7 +109,7 @@ func TestTSC_StrictNullChecks(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("tsc")
+	adp, err := linter.Global().GetLinter("tsc")
 	if err != nil {
 		t.Skipf("TSC adapter not found: %v", err)
 	}
@@ -167,7 +167,7 @@ func TestTSC_TypeErrors(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("tsc")
+	adp, err := linter.Global().GetLinter("tsc")
 	if err != nil {
 		t.Skipf("TSC adapter not found: %v", err)
 	}
@@ -220,7 +220,7 @@ func TestTSC_ToolNameAndRuleID(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("tsc")
+	adp, err := linter.Global().GetLinter("tsc")
 	if err != nil {
 		t.Skipf("TSC adapter not found: %v", err)
 	}

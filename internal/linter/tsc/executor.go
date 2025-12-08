@@ -1,0 +1,87 @@
+package tsc
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+
+	"github.com/DevSymphony/sym-cli/internal/linter"
+)
+
+// execute runs tsc with the given configuration.
+func (l *Linter) execute(ctx context.Context, config []byte, files []string) (*linter.ToolOutput, error) {
+	// Parse config and add files to check
+	var tsconfig map[string]interface{}
+	if err := json.Unmarshal(config, &tsconfig); err != nil {
+		return nil, fmt.Errorf("failed to parse tsconfig: %w", err)
+	}
+
+	// Add files to tsconfig if specific files are provided
+	// Convert to absolute paths since tsconfig will be in temp directory
+	if len(files) > 0 {
+		absFiles := make([]string, len(files))
+		cwd, _ := os.Getwd()
+		for i, f := range files {
+			if filepath.IsAbs(f) {
+				absFiles[i] = f
+			} else {
+				absFiles[i] = filepath.Join(cwd, f)
+			}
+		}
+		tsconfig["files"] = absFiles
+	}
+
+	// Marshal updated config
+	updatedConfig, err := json.MarshalIndent(tsconfig, "", "  ")
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal updated tsconfig: %w", err)
+	}
+
+	// Write tsconfig.json to a temporary location with unique filename
+	// Use ToolsDir/.tmp to avoid conflicts with project files
+	tmpDir := filepath.Join(l.ToolsDir, ".tmp")
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create temp dir: %w", err)
+	}
+
+	// Create unique temp file for concurrent execution safety
+	tmpFile, err := os.CreateTemp(tmpDir, "tsconfig-*.json")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create temp tsconfig: %w", err)
+	}
+	configPath := tmpFile.Name()
+	tmpFile.Close() // Close for WriteFile to reopen
+
+	if err := os.WriteFile(configPath, updatedConfig, 0644); err != nil {
+		return nil, fmt.Errorf("failed to write tsconfig: %w", err)
+	}
+	defer func() { _ = os.Remove(configPath) }()
+
+	// Determine tsc binary path
+	tscPath := l.getTSCPath()
+	if _, err := os.Stat(tscPath); os.IsNotExist(err) {
+		// Try global tsc
+		tscPath = "tsc"
+	}
+
+	// Build tsc command
+	// Use --project to read config, --noEmit to only check types, --pretty false for machine-readable output
+	args := []string{
+		"--project", configPath,
+		"--noEmit",
+		"--pretty", "false",
+	}
+
+	// Execute tsc (uses CWD by default)
+	output, err := l.executor.Execute(ctx, tscPath, args...)
+
+	// TSC returns non-zero exit code when there are type errors
+	// This is expected, so we don't treat it as an error
+	if output != nil {
+		return output, nil
+	}
+
+	return nil, err
+}

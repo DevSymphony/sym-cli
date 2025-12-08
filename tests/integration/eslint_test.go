@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	adapterRegistry "github.com/DevSymphony/sym-cli/internal/adapter/registry"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +42,7 @@ func TestESLint_ValidateChanges(t *testing.T) {
 	defer v.Close()
 
 	// 4. Check tool availability
-	adp, err := adapterRegistry.Global().GetAdapter("eslint")
+	adp, err := linter.Global().GetLinter("eslint")
 	if err != nil {
 		t.Skipf("ESLint adapter not found: %v", err)
 	}
@@ -113,7 +113,7 @@ func TestESLint_NamingConventions(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("eslint")
+	adp, err := linter.Global().GetLinter("eslint")
 	if err != nil {
 		t.Skipf("ESLint adapter not found: %v", err)
 	}
@@ -170,7 +170,7 @@ func TestESLint_MaxLineLength(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("eslint")
+	adp, err := linter.Global().GetLinter("eslint")
 	if err != nil {
 		t.Skipf("ESLint adapter not found: %v", err)
 	}
@@ -225,7 +225,7 @@ func TestESLint_ToolNameAndRuleID(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("eslint")
+	adp, err := linter.Global().GetLinter("eslint")
 	if err != nil {
 		t.Skipf("ESLint adapter not found: %v", err)
 	}

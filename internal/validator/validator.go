@@ -10,8 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/adapter"
-	adapterRegistry "github.com/DevSymphony/sym-cli/internal/adapter/registry"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/roles"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -37,7 +36,7 @@ type Violation struct {
 type Validator struct {
 	policy          *schema.CodePolicy
 	verbose         bool
-	adapterRegistry *adapterRegistry.Registry
+	linterRegistry *linter.Registry
 	workDir         string
 	symDir          string // .sym directory for config files
 	selector        *FileSelector
@@ -59,7 +58,7 @@ func NewValidator(policy *schema.CodePolicy, verbose bool) *Validator {
 	return &Validator{
 		policy:          policy,
 		verbose:         verbose,
-		adapterRegistry: adapterRegistry.Global(),
+		linterRegistry: linter.Global(),
 		workDir:         workDir,
 		symDir:          symDir,
 		selector:        NewFileSelector(workDir),
@@ -78,7 +77,7 @@ func NewValidatorWithWorkDir(policy *schema.CodePolicy, verbose bool, workDir st
 	return &Validator{
 		policy:          policy,
 		verbose:         verbose,
-		adapterRegistry: adapterRegistry.Global(),
+		linterRegistry: linter.Global(),
 		workDir:         workDir,
 		symDir:          symDir,
 		selector:        NewFileSelector(workDir),
@@ -100,8 +99,8 @@ func (v *Validator) executeRule(engineName string, rule schema.PolicyRule, files
 		return v.executeLLMRule(rule, files)
 	}
 
-	// Get adapter directly by tool name (e.g., "eslint", "prettier", "tsc")
-	adp, err := v.adapterRegistry.GetAdapter(engineName)
+	// Get linter directly by tool name (e.g., "eslint", "prettier", "tsc")
+	adp, err := v.linterRegistry.GetLinter(engineName)
 	if err != nil {
 		return nil, fmt.Errorf("adapter not found: %s: %w", engineName, err)
 	}
@@ -111,7 +110,7 @@ func (v *Validator) executeRule(engineName string, rule schema.PolicyRule, files
 		if v.verbose {
 			fmt.Printf("   📦 Installing %s...\n", adp.Name())
 		}
-		if err := adp.Install(v.ctx, adapter.InstallConfig{
+		if err := adp.Install(v.ctx, linter.InstallConfig{
 			ToolsDir: filepath.Join(os.Getenv("HOME"), ".sym", "tools"),
 		}); err != nil {
 			return nil, fmt.Errorf("failed to install %s: %w", adp.Name(), err)
@@ -308,7 +307,7 @@ Does this code violate the convention?`, file, rule.Desc, string(content))
 // First checks .sym directory for existing config files, then generates from rule
 func (v *Validator) getAdapterConfig(adapterName string, rule schema.PolicyRule) ([]byte, error) {
 	// Check for existing config in .sym directory (using registry)
-	configFile := v.adapterRegistry.GetConfigFile(adapterName)
+	configFile := v.linterRegistry.GetConfigFile(adapterName)
 	if configFile != "" {
 		configPath := filepath.Join(v.symDir, configFile)
 		if data, err := os.ReadFile(configPath); err == nil {

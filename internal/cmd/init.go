@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
 	"github.com/DevSymphony/sym-cli/internal/config"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
 	"github.com/DevSymphony/sym-cli/internal/ui"
@@ -206,7 +206,7 @@ func initializeConfigFile() error {
 func removeExistingCodePolicy() error {
 	// Get list of generated files from registry
 	convertGeneratedFiles := []string{"code-policy.json"}
-	convertGeneratedFiles = append(convertGeneratedFiles, registry.Global().GetAllConfigFiles()...)
+	convertGeneratedFiles = append(convertGeneratedFiles, linter.Global().GetAllConfigFiles()...)
 
 	// Check and remove from .sym directory
 	symDir, err := getSymDir()
