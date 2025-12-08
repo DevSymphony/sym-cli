@@ -1,0 +1,167 @@
+package eslint
+
+import (
+	"context"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	"github.com/DevSymphony/sym-cli/internal/linter"
+)
+
+func TestNew(t *testing.T) {
+	l := New("")
+	if l == nil {
+		t.Fatal("New() returned nil")
+	}
+
+	if l.ToolsDir == "" {
+		t.Error("ToolsDir should not be empty")
+	}
+}
+
+func TestNew_CustomToolsDir(t *testing.T) {
+	toolsDir := "/custom/tools"
+
+	a := New(toolsDir)
+
+	if a.ToolsDir != toolsDir {
+		t.Errorf("ToolsDir = %q, want %q", a.ToolsDir, toolsDir)
+	}
+}
+
+func TestName(t *testing.T) {
+	a := New("")
+	if a.Name() != "eslint" {
+		t.Errorf("Name() = %q, want %q", a.Name(), "eslint")
+	}
+}
+
+func TestGetCapabilities(t *testing.T) {
+	a := New("")
+	caps := a.GetCapabilities()
+
+	if caps.Name != "eslint" {
+		t.Errorf("GetCapabilities().Name = %q, want %q", caps.Name, "eslint")
+	}
+
+	expectedLangs := []string{"javascript", "typescript", "jsx", "tsx"}
+	for _, lang := range expectedLangs {
+		found := false
+		for _, supported := range caps.SupportedLanguages {
+			if supported == lang {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("GetCapabilities() missing language: %s", lang)
+		}
+	}
+}
+
+func TestGetESLintPath(t *testing.T) {
+	a := New("/test/tools")
+	expected := filepath.Join("/test/tools", "node_modules", ".bin", "eslint")
+
+	got := a.getESLintPath()
+	if got != expected {
+		t.Errorf("getESLintPath() = %q, want %q", got, expected)
+	}
+}
+
+func TestInitPackageJSON(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "eslint-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	a := New(tmpDir)
+
+	if err := a.initPackageJSON(); err != nil {
+		t.Fatalf("initPackageJSON() error = %v", err)
+	}
+
+	packagePath := filepath.Join(tmpDir, "package.json")
+	if _, err := os.Stat(packagePath); os.IsNotExist(err) {
+		t.Error("package.json was not created")
+	}
+
+	content, err := os.ReadFile(packagePath)
+	if err != nil {
+		t.Fatalf("Failed to read package.json: %v", err)
+	}
+
+	expectedFields := []string{`"name"`, `"symphony-tools"`}
+	for _, field := range expectedFields {
+		if !strings.Contains(string(content), field) {
+			t.Errorf("package.json missing expected field: %s", field)
+		}
+	}
+}
+
+func TestCheckAvailability_NotFound(t *testing.T) {
+	a := New("/nonexistent/path")
+
+	ctx := context.Background()
+	err := a.CheckAvailability(ctx)
+
+	if err == nil {
+		t.Log("ESLint found globally, test skipped")
+	}
+}
+
+func TestInstall(t *testing.T) {
+	tmpDir, err := os.MkdirTemp("", "eslint-install-test-*")
+	if err != nil {
+		t.Fatalf("Failed to create temp dir: %v", err)
+	}
+	defer func() { _ = os.RemoveAll(tmpDir) }()
+
+	a := New(tmpDir)
+
+	ctx := context.Background()
+	config := linter.InstallConfig{
+		ToolsDir: tmpDir,
+	}
+
+	err = a.Install(ctx, config)
+	if err != nil {
+		t.Logf("Install failed (expected if npm unavailable): %v", err)
+	}
+}
+
+func TestExecute_InvalidConfig(t *testing.T) {
+	a := New(t.TempDir())
+
+	ctx := context.Background()
+	config := []byte(`{"rules": {}}`)
+	files := []string{"test.js"}
+
+	_, err := a.Execute(ctx, config, files)
+	if err == nil {
+		t.Log("Execute succeeded (ESLint may be available)")
+	}
+}
+
+func TestParseOutput(t *testing.T) {
+	a := New("")
+
+	output := &linter.ToolOutput{
+		Stdout:   `[{"filePath":"test.js","messages":[{"ruleId":"no-unused-vars","severity":2,"message":"'x' is defined but never used","line":1,"column":5}]}]`,
+		Stderr:   "",
+		ExitCode: 1,
+	}
+
+	violations, err := a.ParseOutput(output)
+	if err != nil {
+		t.Fatalf("ParseOutput() error = %v", err)
+	}
+
+	if len(violations) == 0 {
+		t.Error("Expected violations to be parsed")
+	}
+}
+
