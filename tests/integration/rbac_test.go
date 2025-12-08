@@ -14,14 +14,14 @@ func TestComplexRBACPatterns(t *testing.T) {
 
 	tests := []struct {
 		name         string
-		username     string
+		role         string
 		files        []string
 		expectAllow  bool
 		expectDenied []string
 	}{
 		{
-			name:     "Admin can modify all files",
-			username: "alice", // alice is admin
+			name: "Admin can modify all files",
+			role: "admin",
 			files: []string{
 				"src/components/Button.js",
 				"src/core/engine.js",
@@ -32,8 +32,8 @@ func TestComplexRBACPatterns(t *testing.T) {
 			expectDenied: []string{},
 		},
 		{
-			name:     "Developer can modify source files",
-			username: "charlie", // charlie is developer
+			name: "Developer can modify source files",
+			role: "developer",
 			files: []string{
 				"src/components/Button.js",
 				"src/components/ui/Modal.js",
@@ -43,8 +43,8 @@ func TestComplexRBACPatterns(t *testing.T) {
 			expectDenied: []string{},
 		},
 		{
-			name:     "Developer cannot modify core/api files",
-			username: "david", // david is developer
+			name: "Developer cannot modify core/api files",
+			role: "developer",
 			files: []string{
 				"src/components/Button.js",
 				"src/core/engine.js",
@@ -57,8 +57,8 @@ func TestComplexRBACPatterns(t *testing.T) {
 			},
 		},
 		{
-			name:     "Viewer cannot modify any files",
-			username: "frank", // frank is viewer
+			name: "Viewer cannot modify any files",
+			role: "viewer",
 			files: []string{
 				"src/components/Button.js",
 				"README.md",
@@ -77,9 +77,9 @@ func TestComplexRBACPatterns(t *testing.T) {
 			// For now, we'll skip it as it needs the full integration setup
 			t.Skip("Requires .sym/roles.json and .sym/user-policy.json setup")
 
-			result, err := roles.ValidateFilePermissions(tt.username, tt.files)
+			result, err := roles.ValidateFilePermissionsForRole(tt.role, tt.files)
 			if err != nil {
-				t.Fatalf("ValidateFilePermissions failed: %v", err)
+				t.Fatalf("ValidateFilePermissionsForRole failed: %v", err)
 			}
 
 			if result.Allowed != tt.expectAllow {

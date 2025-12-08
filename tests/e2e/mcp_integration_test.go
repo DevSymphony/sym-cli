@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -145,7 +146,9 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 	require.NoError(t, err, "LLM provider creation should succeed")
 
 	// Create validator
-	v := validator.NewLLMValidator(provider, policy)
+	v := validator.NewValidator(policy, false)
+	v.SetLLMProvider(provider)
+	defer v.Close()
 	ctx := context.Background()
 
 	// Test 1: Validate BAD code (should find multiple violations)
@@ -162,7 +165,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 		}
 		formattedDiff := strings.Join(diffLines, "\n")
 
-		changes := []validator.GitChange{
+		changes := []git.Change{
 			{
 				FilePath: "examples/bad-example.js",
 				Diff:     formattedDiff,
@@ -170,7 +173,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 		}
 
 		t.Log("Validating bad code against conventions...")
-		result, err := v.Validate(ctx, changes)
+		result, err := v.ValidateChanges(ctx, changes)
 		require.NoError(t, err, "Validation should not error")
 
 		t.Logf("Validation completed: checked=%d, violations=%d",
@@ -218,7 +221,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 		}
 		formattedDiff := strings.Join(diffLines, "\n")
 
-		changes := []validator.GitChange{
+		changes := []git.Change{
 			{
 				FilePath: "examples/good-example.js",
 				Diff:     formattedDiff,
@@ -226,7 +229,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 		}
 
 		t.Log("Validating good code against conventions...")
-		result, err := v.Validate(ctx, changes)
+		result, err := v.ValidateChanges(ctx, changes)
 		require.NoError(t, err)
 
 		t.Logf("Validation completed: checked=%d, violations=%d",
@@ -256,7 +259,9 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 			Rules:   filterRulesByCategory(policy.Rules, "security"),
 		}
 
-		securityValidator := validator.NewLLMValidator(provider, securityPolicy)
+		securityValidator := validator.NewValidator(securityPolicy, false)
+		securityValidator.SetLLMProvider(provider)
+		defer securityValidator.Close()
 
 		// Code with security violation (format as git diff with + prefix)
 		codeWithSecurityIssue := `+const apiKey = "sk-1234567890abcdef"; // Hardcoded secret
@@ -264,14 +269,14 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 +  headers: { 'Authorization': 'Bearer ' + apiKey }
 +});`
 
-		changes := []validator.GitChange{
+		changes := []git.Change{
 			{
 				FilePath: "test-security.js",
 				Diff:     codeWithSecurityIssue,
 			},
 		}
 
-		result, err := securityValidator.Validate(ctx, changes)
+		result, err := securityValidator.ValidateChanges(ctx, changes)
 		require.NoError(t, err)
 
 		t.Logf("Security validation: checked=%d, violations=%d",
@@ -295,7 +300,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 		// Iteration 1: Code with hardcoded secret (format with + prefix)
 		iteration1 := `+const apiKey = "sk-test123";`
 
-		result1, err := v.Validate(ctx, []validator.GitChange{
+		result1, err := v.ValidateChanges(ctx, []git.Change{
 			{FilePath: "test.js", Diff: iteration1},
 		})
 		require.NoError(t, err)
@@ -305,7 +310,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 		// Iteration 2: AI fixes the issue (format with + prefix)
 		iteration2 := `+const apiKey = process.env.API_KEY;`
 
-		result2, err := v.Validate(ctx, []validator.GitChange{
+		result2, err := v.ValidateChanges(ctx, []git.Change{
 			{FilePath: "test.js", Diff: iteration2},
 		})
 		require.NoError(t, err)
@@ -380,9 +385,11 @@ func TestMCP_EndToEndWorkflow(t *testing.T) {
 	llmCfg := llm.LoadConfig()
 	llmProvider, err := llm.New(llmCfg)
 	require.NoError(t, err, "LLM provider creation should succeed")
-	v := validator.NewLLMValidator(llmProvider, policy)
+	v := validator.NewValidator(policy, false)
+	v.SetLLMProvider(llmProvider)
+	defer v.Close()
 
-	result, err := v.Validate(context.Background(), []validator.GitChange{
+	result, err := v.ValidateChanges(context.Background(), []git.Change{
 		{FilePath: "auth.js", Diff: generatedCode},
 	})
 	require.NoError(t, err)

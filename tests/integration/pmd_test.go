@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -54,7 +55,7 @@ func TestPMD_ValidateChanges(t *testing.T) {
 	testFile := filepath.Join(testdataDir, "Test.java")
 	require.FileExists(t, testFile, "Test.java should exist")
 
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -123,7 +124,7 @@ func TestPMD_EmptyCatchBlock(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.java")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -178,7 +179,7 @@ func TestPMD_UnusedPrivateMethod(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.java")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -233,7 +234,7 @@ func TestPMD_ToolNameAndRuleID(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.java")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
