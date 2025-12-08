@@ -6,11 +6,11 @@ Unified interface for static linting tools.
 
 ```
 internal/linter/
-├── linter.go        # Linter interface + Capabilities, InstallConfig, ToolOutput, Violation
-├── converter.go     # Converter interface + LinterConfig, ConversionResult
-├── registry.go      # Registry, Global(), RegisterTool(), GetLinter()
-├── helpers.go       # DefaultToolsDir, WriteTempConfig, MapSeverity, FindTool
-├── executor.go      # SubprocessExecutor
+├── linter.go        # Linter interface (execution)
+├── converter.go     # Converter interface (rule conversion)
+├── registry.go      # Global registry, RegisterTool(), GetLinter()
+├── helpers.go       # CleanJSONResponse, DefaultToolsDir, WriteTempConfig
+├── subprocess.go    # SubprocessExecutor
 ├── eslint/          # JavaScript/TypeScript
 ├── prettier/        # Code formatting
 ├── pylint/          # Python
@@ -22,43 +22,56 @@ internal/linter/
 ## Usage
 
 ```go
-import (
-    "github.com/DevSymphony/sym-cli/internal/linter"
-)
+import "github.com/DevSymphony/sym-cli/internal/linter"
 
-// Get linter by name
+// 1. Get linter by name
 l, err := linter.Global().GetLinter("eslint")
 if err != nil {
     return err
 }
 
-// Check availability and install if needed
+// 2. Check availability and install if needed
 if err := l.CheckAvailability(ctx); err != nil {
     if err := l.Install(ctx, linter.InstallConfig{}); err != nil {
         return err
     }
 }
 
-// Execute linter
+// 3. Execute linter
 output, err := l.Execute(ctx, config, files)
 if err != nil {
     return err
 }
 
-// Parse output
+// 4. Parse output to violations
 violations, err := l.ParseOutput(output)
+```
+
+### Getting Converter
+
+```go
+converter, ok := linter.Global().GetConverter("eslint")
+if !ok {
+    return fmt.Errorf("converter not found")
+}
+
+// Convert single rule (called by main converter in parallel)
+result, err := converter.ConvertSingleRule(ctx, rule, llmProvider)
+
+// Build config from results
+config, err := converter.BuildConfig(results)
 ```
 
 ## Linter List
 
-| Name | Languages | Categories | Config File |
-|------|-----------|------------|-------------|
-| `eslint` | JavaScript, TypeScript, JSX, TSX | pattern, length, style, ast | `.eslintrc.json` |
-| `prettier` | JS, TS, JSON, CSS, HTML, Markdown | style | `.prettierrc.json` |
-| `pylint` | Python | naming, style, docs, error_handling | `pylintrc` |
-| `tsc` | TypeScript | typechecker | `tsconfig.json` |
-| `checkstyle` | Java | naming, pattern, length, style | `checkstyle.xml` |
-| `pmd` | Java | pattern, complexity, security, performance | `pmd-ruleset.xml` |
+| Name | Languages | Config File |
+|------|-----------|-------------|
+| `eslint` | JavaScript, TypeScript, JSX, TSX | `.eslintrc.json` |
+| `prettier` | JS, TS, JSON, CSS, HTML, Markdown | `.prettierrc` |
+| `pylint` | Python | `.pylintrc` |
+| `tsc` | TypeScript | `tsconfig.json` |
+| `checkstyle` | Java | `checkstyle.xml` |
+| `pmd` | Java | `pmd.xml` |
 
 ## Adding New Linter
 
@@ -66,11 +79,11 @@ violations, err := l.ParseOutput(output)
 
 ```
 internal/linter/<name>/
-├── linter.go      # Main struct + interface implementation
-├── register.go    # init() registration
-├── converter.go   # LLM rule conversion
-├── executor.go    # Tool execution
-└── parser.go      # Output parsing
+├── linter.go      # Linter implementation
+├── converter.go   # Converter implementation
+├── executor.go    # Tool execution logic
+├── parser.go      # Output parsing
+└── register.go    # init() registration
 ```
 
 ### Step 2: Implement Linter Interface
@@ -83,7 +96,7 @@ import (
     "github.com/DevSymphony/sym-cli/internal/linter"
 )
 
-// Compile-time interface check
+// Compile-time check
 var _ linter.Linter = (*Linter)(nil)
 
 type Linter struct {
@@ -101,32 +114,27 @@ func New(toolsDir string) *Linter {
     }
 }
 
-func (l *Linter) Name() string {
-    return "mylinter"
-}
+func (l *Linter) Name() string { return "mylinter" }
 
 func (l *Linter) GetCapabilities() linter.Capabilities {
     return linter.Capabilities{
         Name:                "mylinter",
         SupportedLanguages:  []string{"ruby"},
         SupportedCategories: []string{"pattern", "style"},
-        Version:             "^1.0.0",
+        Version:             "1.0.0",
     }
 }
 
 func (l *Linter) CheckAvailability(ctx context.Context) error {
-    if path := linter.FindTool(l.localPath(), "mylinter"); path != "" {
-        return nil
-    }
-    return fmt.Errorf("mylinter not found")
+    // Check if tool binary exists
 }
 
 func (l *Linter) Install(ctx context.Context, cfg linter.InstallConfig) error {
-    // Install logic (gem install, pip install, etc.)
+    // Install tool (gem install, pip install, npm install, etc.)
 }
 
 func (l *Linter) Execute(ctx context.Context, config []byte, files []string) (*linter.ToolOutput, error) {
-    // Execution logic
+    // Run tool and return output
 }
 
 func (l *Linter) ParseOutput(output *linter.ToolOutput) ([]linter.Violation, error) {
@@ -137,7 +145,16 @@ func (l *Linter) ParseOutput(output *linter.ToolOutput) ([]linter.Violation, err
 ### Step 3: Implement Converter Interface
 
 ```go
-// Compile-time interface check
+package mylinter
+
+import (
+    "context"
+    "github.com/DevSymphony/sym-cli/internal/linter"
+    "github.com/DevSymphony/sym-cli/internal/llm"
+    "github.com/DevSymphony/sym-cli/pkg/schema"
+)
+
+// Compile-time check
 var _ linter.Converter = (*Converter)(nil)
 
 type Converter struct{}
@@ -151,24 +168,56 @@ func (c *Converter) SupportedLanguages() []string {
 }
 
 func (c *Converter) GetLLMDescription() string {
-    return "Ruby linter for style and quality"
+    return `Ruby code quality (style, naming, complexity)
+  - CAN: Naming conventions, line length, cyclomatic complexity
+  - CANNOT: Business logic, runtime behavior`
 }
 
 func (c *Converter) GetRoutingHints() []string {
-    return []string{"For Ruby code style → use mylinter"}
+    return []string{
+        "For Ruby code style → use mylinter",
+        "For Ruby naming conventions → use mylinter",
+    }
 }
 
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*linter.ConversionResult, error) {
-    // Use helper for parallel conversion
-    results, successIDs, failedIDs := linter.ConvertRulesParallel(ctx, rules, c.convertSingle)
+// ConvertSingleRule converts ONE user rule to linter-specific data.
+// Concurrency is handled by main converter, not here.
+func (c *Converter) ConvertSingleRule(ctx context.Context, rule schema.UserRule, provider llm.Provider) (*linter.SingleRuleResult, error) {
+    // Call LLM to convert rule
+    config, err := c.callLLM(ctx, rule, provider)
+    if err != nil {
+        return nil, err
+    }
+
+    // Return nil, nil if rule cannot be enforced by this linter
+    if config == nil {
+        return nil, nil
+    }
+
+    return &linter.SingleRuleResult{
+        RuleID: rule.ID,
+        Data:   config,  // Linter-specific data
+    }, nil
+}
+
+// BuildConfig assembles final config from all successful conversions.
+func (c *Converter) BuildConfig(results []*linter.SingleRuleResult) (*linter.LinterConfig, error) {
+    if len(results) == 0 {
+        return nil, nil
+    }
 
     // Build config from results
-    config := buildConfig(results)
+    config := buildMyLinterConfig(results)
 
-    return &linter.ConversionResult{
-        Config:       config,
-        SuccessRules: successIDs,
-        FailedRules:  failedIDs,
+    content, err := json.MarshalIndent(config, "", "  ")
+    if err != nil {
+        return nil, err
+    }
+
+    return &linter.LinterConfig{
+        Filename: ".mylinter.yml",
+        Content:  content,
+        Format:   "yaml",
     }, nil
 }
 ```
@@ -178,9 +227,7 @@ func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, p
 ```go
 package mylinter
 
-import (
-    "github.com/DevSymphony/sym-cli/internal/linter"
-)
+import "github.com/DevSymphony/sym-cli/internal/linter"
 
 func init() {
     _ = linter.Global().RegisterTool(
@@ -200,53 +247,15 @@ import (
 )
 ```
 
-## Key Patterns
+## Key Rules
 
-### Compile-Time Interface Checks
-
-Every linter should include:
-```go
-var _ linter.Linter = (*Linter)(nil)
-var _ linter.Converter = (*Converter)(nil)
-```
-
-### Helper Functions
-
-Use the provided helpers from `base.go`:
-
-```go
-// Default tools directory (~/.sym/tools)
-toolsDir := linter.DefaultToolsDir()
-
-// Write temp config file
-configPath, err := linter.WriteTempConfig(toolsDir, "mylinter", configBytes)
-
-// Normalize severity
-severity := linter.MapSeverity("warn")  // returns "warning"
-
-// Find tool binary (local first, then PATH)
-path := linter.FindTool(localPath, "mylinter")
-```
-
-### Parallel Rule Conversion
-
-Use `ConvertRulesParallel` for efficient parallel processing:
-
-```go
-func (c *Converter) ConvertRules(ctx context.Context, rules []schema.UserRule, provider llm.Provider) (*linter.ConversionResult, error) {
-    results, successIDs, failedIDs := linter.ConvertRulesParallel(ctx, rules,
-        func(ctx context.Context, rule schema.UserRule) (*MyConfig, error) {
-            return c.convertSingleRule(ctx, rule, provider)
-        },
-    )
-
-    // Build final config from successful conversions
-    // ...
-}
-```
-
-## Error Handling
-
+- Add compile-time checks for both interfaces:
+  ```go
+  var _ linter.Linter = (*Linter)(nil)
+  var _ linter.Converter = (*Converter)(nil)
+  ```
+- `ConvertSingleRule()` handles ONE rule only - concurrency is managed by main converter
+- Return `(nil, nil)` from `ConvertSingleRule()` if rule cannot be enforced (falls back to llm-validator)
+- Use `linter.CleanJSONResponse()` to strip markdown fences from LLM responses
 - Return clear error messages if tool not installed
-- Track per-rule success/failure in ConversionResult
-- Failed rules automatically fall back to llm-validator
+- Refer to existing linters (eslint, pylint) for patterns
