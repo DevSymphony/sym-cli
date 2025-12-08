@@ -2,14 +2,15 @@ package validator
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/roles"
@@ -34,15 +35,14 @@ type Violation struct {
 // Validator validates code against policy using adapters directly
 // This replaces the old engine-based architecture
 type Validator struct {
-	policy          *schema.CodePolicy
-	verbose         bool
+	policy         *schema.CodePolicy
+	verbose        bool
 	linterRegistry *linter.Registry
-	workDir         string
-	symDir          string // .sym directory for config files
-	selector        *FileSelector
-	ctx             context.Context
-	ctxCancel       context.CancelFunc
-	llmProvider     llm.Provider
+	workDir        string
+	symDir         string // .sym directory for config files
+	ctx            context.Context
+	ctxCancel      context.CancelFunc
+	llmProvider    llm.Provider
 }
 
 // NewValidator creates a new adapter-based validator
@@ -56,15 +56,14 @@ func NewValidator(policy *schema.CodePolicy, verbose bool) *Validator {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 
 	return &Validator{
-		policy:          policy,
-		verbose:         verbose,
+		policy:         policy,
+		verbose:        verbose,
 		linterRegistry: linter.Global(),
-		workDir:         workDir,
-		symDir:          symDir,
-		selector:        NewFileSelector(workDir),
-		ctx:             ctx,
-		ctxCancel:       cancel,
-		llmProvider:     nil,
+		workDir:        workDir,
+		symDir:         symDir,
+		ctx:            ctx,
+		ctxCancel:      cancel,
+		llmProvider:    nil,
 	}
 }
 
@@ -75,265 +74,20 @@ func NewValidatorWithWorkDir(policy *schema.CodePolicy, verbose bool, workDir st
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 
 	return &Validator{
-		policy:          policy,
-		verbose:         verbose,
+		policy:         policy,
+		verbose:        verbose,
 		linterRegistry: linter.Global(),
-		workDir:         workDir,
-		symDir:          symDir,
-		selector:        NewFileSelector(workDir),
-		ctx:             ctx,
-		ctxCancel:       cancel,
-		llmProvider:     nil,
+		workDir:        workDir,
+		symDir:         symDir,
+		ctx:            ctx,
+		ctxCancel:      cancel,
+		llmProvider:    nil,
 	}
 }
 
 // SetLLMProvider sets the LLM provider for this validator
 func (v *Validator) SetLLMProvider(provider llm.Provider) {
 	v.llmProvider = provider
-}
-
-// executeRule executes a rule using the appropriate adapter
-func (v *Validator) executeRule(engineName string, rule schema.PolicyRule, files []string) ([]Violation, error) {
-	// Special case: LLM validator
-	if engineName == "llm-validator" {
-		return v.executeLLMRule(rule, files)
-	}
-
-	// Get linter directly by tool name (e.g., "eslint", "prettier", "tsc")
-	adp, err := v.linterRegistry.GetLinter(engineName)
-	if err != nil {
-		return nil, fmt.Errorf("adapter not found: %s: %w", engineName, err)
-	}
-
-	// Check if adapter is available
-	if err := adp.CheckAvailability(v.ctx); err != nil {
-		if v.verbose {
-			fmt.Printf("   📦 Installing %s...\n", adp.Name())
-		}
-		if err := adp.Install(v.ctx, linter.InstallConfig{
-			ToolsDir: filepath.Join(os.Getenv("HOME"), ".sym", "tools"),
-		}); err != nil {
-			return nil, fmt.Errorf("failed to install %s: %w", adp.Name(), err)
-		}
-	}
-
-	// Generate config from rule or use existing .sym config
-	config, err := v.getAdapterConfig(adp.Name(), rule)
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate config: %w", err)
-	}
-
-	// Execute adapter
-	output, err := adp.Execute(v.ctx, config, files)
-	if err != nil {
-		return nil, fmt.Errorf("adapter execution failed: %w", err)
-	}
-
-	// Parse execution duration
-	var execMs int64
-	if output.Duration != "" {
-		if duration, parseErr := time.ParseDuration(output.Duration); parseErr == nil {
-			execMs = duration.Milliseconds()
-		}
-	}
-
-	// Parse output to violations
-	adapterViolations, err := adp.ParseOutput(output)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse output: %w", err)
-	}
-
-	// Convert adapter violations to validator violations
-	violations := make([]Violation, 0, len(adapterViolations))
-	for _, av := range adapterViolations {
-		violations = append(violations, Violation{
-			RuleID:      rule.ID,
-			Severity:    rule.Severity,
-			Message:     av.Message,
-			File:        av.File,
-			Line:        av.Line,
-			Column:      av.Column,
-			RawOutput:   output.Stdout,
-			RawError:    output.Stderr,
-			ToolName:    adp.Name(),
-			ExecutionMs: execMs,
-		})
-	}
-
-	// If verbose, log the raw output
-	if v.verbose && output.Stdout != "" {
-		fmt.Printf("   📋 Raw output (%dms):\n", execMs)
-		if len(output.Stdout) > 500 {
-			fmt.Printf("   %s...\n", output.Stdout[:500])
-		} else {
-			fmt.Printf("   %s\n", output.Stdout)
-		}
-	}
-
-	return violations, nil
-}
-
-// executeLLMRule executes an LLM-based rule
-func (v *Validator) executeLLMRule(rule schema.PolicyRule, files []string) ([]Violation, error) {
-	if v.llmProvider == nil {
-		return nil, fmt.Errorf("LLM provider not configured")
-	}
-
-	// Validate required fields for LLM validator
-	if rule.Desc == "" {
-		return nil, fmt.Errorf("LLM validator requires 'desc' field in rule %s", rule.ID)
-	}
-
-	// Check if When selector exists for file filtering
-	if rule.When == nil && len(files) == 0 {
-		if v.verbose {
-			fmt.Printf("⚠️  LLM rule %s has no 'when' selector and no files provided\n", rule.ID)
-		}
-	}
-
-	// Create a consolidated ToolOutput for all files
-	var allResponses strings.Builder
-	var allErrors strings.Builder
-	startTime := time.Now()
-	totalViolations := 0
-
-	violations := make([]Violation, 0)
-
-	for fileIdx, file := range files {
-		// Read file content
-		content, err := os.ReadFile(file)
-		if err != nil {
-			allErrors.WriteString(fmt.Sprintf("[File %d/%d] %s: %v\n", fileIdx+1, len(files), file, err))
-			continue
-		}
-
-		// Build LLM prompt
-		systemPrompt := `You are a code reviewer. Check if the code violates the given coding convention.
-
-Respond with JSON only:
-{
-  "violates": true/false,
-  "description": "explanation of violation if any",
-  "suggestion": "how to fix it if violated"
-}`
-
-		userPrompt := fmt.Sprintf(`File: %s
-
-Coding Convention:
-%s
-
-Code:
-%s
-
-Does this code violate the convention?`, file, rule.Desc, string(content))
-
-		// Call LLM
-		fileStartTime := time.Now()
-		prompt := systemPrompt + "\n\n" + userPrompt
-		response, err := v.llmProvider.Execute(v.ctx, prompt, llm.Text)
-		fileExecMs := time.Since(fileStartTime).Milliseconds()
-
-		// Record response in consolidated output
-		allResponses.WriteString(fmt.Sprintf("=== File %d/%d: %s (%dms) ===\n", fileIdx+1, len(files), file, fileExecMs))
-		if err != nil {
-			allErrors.WriteString(fmt.Sprintf("[File %d/%d] LLM error: %v\n", fileIdx+1, len(files), err))
-			allResponses.WriteString(fmt.Sprintf("Error: %v\n\n", err))
-			continue
-		}
-
-		allResponses.WriteString(response)
-		allResponses.WriteString("\n\n")
-
-		// Parse response
-		result := parseValidationResponse(response)
-		if result.Violates {
-			totalViolations++
-			message := result.Description
-			if result.Suggestion != "" {
-				message += fmt.Sprintf(" | Suggestion: %s", result.Suggestion)
-			}
-
-			// Store violation (will update with consolidated output later)
-			violations = append(violations, Violation{
-				RuleID:      rule.ID,
-				Severity:    rule.Severity,
-				Message:     message,
-				File:        file,
-				RawOutput:   response, // Individual LLM response for this file
-				ToolName:    "llm-validator",
-				ExecutionMs: fileExecMs,
-			})
-		}
-	}
-
-	// Calculate total execution time
-	totalExecMs := time.Since(startTime).Milliseconds()
-
-	// Create consolidated ToolOutput in linter format
-	consolidatedStdout := allResponses.String()
-	consolidatedStderr := allErrors.String()
-
-	// Update all violations with consolidated output (like how linters include full output)
-	// Each violation gets the full stdout/stderr, just like ESLint violations all share the same JSON output
-	for i := range violations {
-		// Keep individual response in RawOutput, but add consolidated info
-		violations[i].RawOutput = fmt.Sprintf("=== Individual Response ===\n%s\n\n=== Consolidated Output ===\n%s",
-			violations[i].RawOutput, consolidatedStdout)
-		if consolidatedStderr != "" {
-			violations[i].RawError = consolidatedStderr
-		}
-	}
-
-	// If verbose, log the consolidated output (like adapter verbose output)
-	if v.verbose && consolidatedStdout != "" {
-		fmt.Printf("   📋 LLM consolidated output (%dms):\n", totalExecMs)
-		fmt.Printf("   - Checked: %d file(s)\n", len(files))
-		fmt.Printf("   - Violations: %d\n", totalViolations)
-		// Show first 500 chars of consolidated output
-		if len(consolidatedStdout) > 500 {
-			fmt.Printf("   %s...\n", consolidatedStdout[:500])
-		} else {
-			fmt.Printf("   %s\n", consolidatedStdout)
-		}
-		if consolidatedStderr != "" {
-			fmt.Printf("   ⚠️  Errors: %s\n", consolidatedStderr)
-		}
-	}
-
-	return violations, nil
-}
-
-// getAdapterConfig gets config for an adapter
-// First checks .sym directory for existing config files, then generates from rule
-func (v *Validator) getAdapterConfig(adapterName string, rule schema.PolicyRule) ([]byte, error) {
-	// Check for existing config in .sym directory (using registry)
-	configFile := v.linterRegistry.GetConfigFile(adapterName)
-	if configFile != "" {
-		configPath := filepath.Join(v.symDir, configFile)
-		if data, err := os.ReadFile(configPath); err == nil {
-			if v.verbose {
-				fmt.Printf("   📄 Using config from %s\n", configPath)
-			}
-			return data, nil
-		}
-	}
-
-	// Otherwise, generate config from rule
-	config := make(map[string]interface{})
-
-	// Copy rule.Check to config
-	for k, val := range rule.Check {
-		if k != "engine" && k != "desc" {
-			config[k] = val
-		}
-	}
-
-	// Add rule description
-	if rule.Desc != "" {
-		config["description"] = rule.Desc
-	}
-
-	return json.Marshal(config)
 }
 
 // getEngineName extracts the engine name from a rule
@@ -344,8 +98,186 @@ func getEngineName(rule schema.PolicyRule) string {
 	return ""
 }
 
+// ruleGroup groups rules by engine for batch execution
+type ruleGroup struct {
+	engineName string
+	rules      []schema.PolicyRule
+	files      map[string]bool // Use set for deduplication
+	changes    []git.Change    // Original changes for LLM rules
+}
+
+// getDefaultConcurrency returns the default concurrency level (CPU/2, min 1, max 8)
+func getDefaultConcurrency() int {
+	concurrency := runtime.NumCPU() / 2
+	if concurrency < 1 {
+		concurrency = 1
+	}
+	if concurrency > 8 {
+		concurrency = 8
+	}
+	return concurrency
+}
+
+// groupRulesByEngine groups rules by their engine name
+func (v *Validator) groupRulesByEngine(rules []schema.PolicyRule, changes []git.Change) map[string]*ruleGroup {
+	groups := make(map[string]*ruleGroup)
+
+	for _, rule := range rules {
+		if !rule.Enabled {
+			continue
+		}
+
+		engineName := getEngineName(rule)
+		if engineName == "" {
+			continue
+		}
+
+		// Filter changes relevant to this rule
+		relevantChanges := v.filterChangesForRule(changes, &rule)
+		if len(relevantChanges) == 0 {
+			continue
+		}
+
+		if groups[engineName] == nil {
+			groups[engineName] = &ruleGroup{
+				engineName: engineName,
+				rules:      []schema.PolicyRule{},
+				files:      make(map[string]bool),
+				changes:    []git.Change{},
+			}
+		}
+
+		groups[engineName].rules = append(groups[engineName].rules, rule)
+
+		// Collect unique files and changes
+		for _, change := range relevantChanges {
+			if change.Status != "D" {
+				groups[engineName].files[change.FilePath] = true
+				// Track changes for LLM rules (they need the diff)
+				if engineName == "llm-validator" {
+					// Check if this change is already added
+					found := false
+					for _, existing := range groups[engineName].changes {
+						if existing.FilePath == change.FilePath {
+							found = true
+							break
+						}
+					}
+					if !found {
+						groups[engineName].changes = append(groups[engineName].changes, change)
+					}
+				}
+			}
+		}
+	}
+
+	return groups
+}
+
+// createExecutionUnits creates execution units from rule groups
+// - Linter: {모든 파일, 모든 규칙} = 1개 단위
+// - LLM: {파일 1개, 규칙 1개} = 파일수 × 규칙수 단위
+func (v *Validator) createExecutionUnits(groups map[string]*ruleGroup, changes []git.Change) []executionUnit {
+	var units []executionUnit
+
+	for engineName, group := range groups {
+		if engineName == "llm-validator" {
+			// LLM: 각 (파일, 규칙) 쌍이 별도 실행 단위
+			for _, rule := range group.rules {
+				ruleChanges := v.filterChangesForRule(group.changes, &rule)
+				for _, change := range ruleChanges {
+					if change.Status == "D" {
+						continue
+					}
+					units = append(units, &llmExecutionUnit{
+						rule:     rule,
+						change:   change,
+						provider: v.llmProvider,
+						policy:   v.policy,
+						verbose:  v.verbose,
+					})
+				}
+			}
+		} else {
+			// Linter: 모든 파일, 모든 규칙 = 1개 실행 단위
+			files := make([]string, 0, len(group.files))
+			for f := range group.files {
+				files = append(files, f)
+			}
+			units = append(units, &linterExecutionUnit{
+				engineName: engineName,
+				rules:      group.rules,
+				files:      files,
+				registry:   v.linterRegistry,
+				symDir:     v.symDir,
+				verbose:    v.verbose,
+			})
+		}
+	}
+
+	return units
+}
+
+// executeUnitsParallel executes units in parallel with semaphore-based concurrency
+func (v *Validator) executeUnitsParallel(ctx context.Context, units []executionUnit) ([]Violation, []ValidationError) {
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+
+	concurrency := getDefaultConcurrency()
+	sem := make(chan struct{}, concurrency)
+
+	var allViolations []Violation
+	var allErrors []ValidationError
+
+	for _, unit := range units {
+		wg.Add(1)
+		go func(u executionUnit) {
+			defer wg.Done()
+
+			// Acquire semaphore
+			select {
+			case sem <- struct{}{}:
+			case <-ctx.Done():
+				mu.Lock()
+				allErrors = append(allErrors, ValidationError{
+					RuleID:  strings.Join(u.GetRuleIDs(), ","),
+					Engine:  u.GetEngineName(),
+					Message: ctx.Err().Error(),
+				})
+				mu.Unlock()
+				return
+			}
+			defer func() { <-sem }()
+
+			violations, err := u.Execute(ctx)
+
+			mu.Lock()
+			defer mu.Unlock()
+
+			if err != nil {
+				allErrors = append(allErrors, ValidationError{
+					RuleID:  strings.Join(u.GetRuleIDs(), ","),
+					Engine:  u.GetEngineName(),
+					Message: err.Error(),
+				})
+				return
+			}
+
+			allViolations = append(allViolations, violations...)
+		}(unit)
+	}
+
+	wg.Wait()
+
+	return allViolations, allErrors
+}
+
 // ValidateChanges validates git changes using adapters directly
-func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*ValidationResult, error) {
+// Rules are grouped by engine for efficient batch execution:
+// - Linter rules (eslint, pylint, etc.) are batched into single executions per linter
+// - LLM rules are executed as individual units
+// Execution units run in parallel with CPU/2 concurrency (min 1, max 8)
+func (v *Validator) ValidateChanges(ctx context.Context, changes []git.Change) (*ValidationResult, error) {
 	if v.policy == nil {
 		return nil, fmt.Errorf("policy is not loaded")
 	}
@@ -357,7 +289,7 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 		Failed:     0,
 	}
 
-	// Check RBAC permissions first
+	// Phase 1: Check RBAC permissions first
 	if v.policy.Enforce.RBACConfig != nil && v.policy.Enforce.RBACConfig.Enabled {
 		currentRole, err := roles.GetCurrentRole()
 		if err == nil && currentRole != "" {
@@ -391,65 +323,52 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 		}
 	}
 
+	// Phase 2: Group rules by engine
+	groups := v.groupRulesByEngine(v.policy.Rules, changes)
+
+	// Phase 3: Create execution units
+	units := v.createExecutionUnits(groups, changes)
+
 	if v.verbose {
-		fmt.Printf("🔍 Validating %d change(s) against %d rule(s)...\n", len(changes), len(v.policy.Rules))
-	}
-
-	// Validate each enabled rule
-	for _, rule := range v.policy.Rules {
-		if !rule.Enabled {
-			continue
-		}
-
-		engineName := getEngineName(rule)
-		if engineName == "" {
-			continue
-		}
-
-		// Filter changes that match this rule's selector
-		relevantChanges := v.filterChangesForRule(changes, &rule)
-		if len(relevantChanges) == 0 {
-			continue
-		}
-
-		if v.verbose {
-			fmt.Printf("   Rule %s (%s): checking %d change(s)...\n", rule.ID, engineName, len(relevantChanges))
-		}
-
-		// For LLM engine, use parallel processing
-		if engineName == "llm-validator" {
-			v.validateLLMChanges(ctx, relevantChanges, rule, result)
-		} else {
-			// For adapter-based engines, validate files
-			for _, change := range relevantChanges {
-				if change.Status == "D" {
-					continue
-				}
-
-				result.Checked++
-
-				violations, err := v.executeRule(engineName, rule, []string{change.FilePath})
-				if err != nil {
-					// Always log errors to stderr (not just in verbose mode)
-					fmt.Fprintf(os.Stderr, "⚠️  Validation failed for rule %s (%s): %v\n", rule.ID, engineName, err)
-					// Track error in result for MCP response
-					result.Errors = append(result.Errors, ValidationError{
-						RuleID:  rule.ID,
-						Engine:  engineName,
-						Message: err.Error(),
-					})
-					continue
-				}
-
-				if len(violations) > 0 {
-					result.Failed++
-					result.Violations = append(result.Violations, violations...)
-				} else {
-					result.Passed++
-				}
+		// Count files to check
+		totalFiles := 0
+		for _, change := range changes {
+			if change.Status != "D" {
+				totalFiles++
 			}
 		}
+		fmt.Printf("🔍 Validating %d file(s) against %d rule(s) in %d execution unit(s) (concurrency: %d)...\n",
+			totalFiles, len(v.policy.Rules), len(units), getDefaultConcurrency())
+		for _, unit := range units {
+			fmt.Printf("   - %s: %d rule(s), %d file(s)\n",
+				unit.GetEngineName(), len(unit.GetRuleIDs()), len(unit.GetFiles()))
+		}
 	}
+
+	// Phase 4: Execute units in parallel
+	violations, errors := v.executeUnitsParallel(ctx, units)
+
+	// Aggregate results
+	result.Violations = append(result.Violations, violations...)
+	result.Errors = append(result.Errors, errors...)
+
+	// Calculate statistics
+	// Count unique files that were checked
+	checkedFiles := make(map[string]bool)
+	for _, unit := range units {
+		for _, file := range unit.GetFiles() {
+			checkedFiles[file] = true
+		}
+	}
+	result.Checked = len(checkedFiles)
+
+	// Count failures based on violations
+	failedFiles := make(map[string]bool)
+	for _, v := range result.Violations {
+		failedFiles[v.File] = true
+	}
+	result.Failed = len(failedFiles)
+	result.Passed = result.Checked - result.Failed
 
 	if v.verbose {
 		if len(result.Violations) == 0 {
@@ -462,79 +381,16 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 	return result, nil
 }
 
-// validateLLMChanges validates changes using LLM in parallel
-func (v *Validator) validateLLMChanges(ctx context.Context, changes []GitChange, rule schema.PolicyRule, result *ValidationResult) {
-	if v.llmProvider == nil {
-		fmt.Fprintf(os.Stderr, "⚠️  LLM provider not configured, skipping LLM validation for rule %s\n", rule.ID)
-		return
-	}
-
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-	llmValidator := NewLLMValidator(v.llmProvider, v.policy)
-
-	for _, change := range changes {
-		if change.Status == "D" {
-			continue
-		}
-
-		addedLines := ExtractAddedLines(change.Diff)
-		if len(addedLines) == 0 && strings.TrimSpace(change.Diff) != "" {
-			addedLines = strings.Split(change.Diff, "\n")
-		}
-
-		if len(addedLines) == 0 {
-			mu.Lock()
-			result.Checked++
-			result.Passed++
-			mu.Unlock()
-			continue
-		}
-
-		mu.Lock()
-		result.Checked++
-		mu.Unlock()
-
-		wg.Add(1)
-		go func(ch GitChange, lines []string, r schema.PolicyRule) {
-			defer wg.Done()
-
-			violation, err := llmValidator.CheckRule(ctx, ch, lines, r)
-			if err != nil {
-				mu.Lock()
-				result.Errors = append(result.Errors, ValidationError{
-					RuleID:  r.ID,
-					Engine:  "llm-validator",
-					Message: fmt.Sprintf("failed to check rule: %v", err),
-				})
-				mu.Unlock()
-				return
-			}
-
-			mu.Lock()
-			defer mu.Unlock()
-			if violation != nil {
-				result.Failed++
-				result.Violations = append(result.Violations, *violation)
-			} else {
-				result.Passed++
-			}
-		}(change, addedLines, rule)
-	}
-
-	wg.Wait()
-}
-
 // filterChangesForRule filters git changes that match the rule's selector
-func (v *Validator) filterChangesForRule(changes []GitChange, rule *schema.PolicyRule) []GitChange {
+func (v *Validator) filterChangesForRule(changes []git.Change, rule *schema.PolicyRule) []git.Change {
 	if rule.When == nil {
 		return changes
 	}
 
-	var filtered []GitChange
+	var filtered []git.Change
 	for _, change := range changes {
 		if len(rule.When.Languages) > 0 {
-			lang := GetLanguageFromFile(change.FilePath)
+			lang := getLanguageFromFile(change.FilePath)
 			matched := false
 			for _, ruleLang := range rule.When.Languages {
 				if ruleLang == lang {
@@ -559,4 +415,40 @@ func (v *Validator) Close() error {
 		v.ctxCancel()
 	}
 	return nil
+}
+
+// getLanguageFromFile determines the programming language from a file path
+func getLanguageFromFile(filePath string) string {
+	ext := filepath.Ext(filePath)
+
+	switch ext {
+	case ".js", ".mjs", ".cjs":
+		return "javascript"
+	case ".ts", ".mts", ".cts":
+		return "typescript"
+	case ".jsx":
+		return "jsx"
+	case ".tsx":
+		return "tsx"
+	case ".go":
+		return "go"
+	case ".py":
+		return "python"
+	case ".java":
+		return "java"
+	case ".c", ".h":
+		return "c"
+	case ".cpp", ".cc", ".cxx", ".hpp", ".hh", ".hxx":
+		return "cpp"
+	case ".rs":
+		return "rust"
+	case ".rb":
+		return "ruby"
+	case ".php":
+		return "php"
+	case ".sh", ".bash":
+		return "shell"
+	default:
+		return ""
+	}
 }

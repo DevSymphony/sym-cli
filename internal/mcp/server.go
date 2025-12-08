@@ -448,8 +448,8 @@ func (s *Server) handleValidateCode(ctx context.Context, session *sdkmcp.ServerS
 	var hasErrors bool
 
 	// Get all git changes (staged + unstaged + untracked)
-	// GetGitChanges already includes all types of changes
-	changes, err := validator.GetGitChanges()
+	// GetChanges already includes all types of changes
+	changes, err := git.GetChanges()
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "Warning: failed to get git changes: %v\n", err)
 		return map[string]interface{}{

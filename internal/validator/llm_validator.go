@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
@@ -28,18 +29,18 @@ type ValidationResult struct {
 	Failed     int
 }
 
-// LLMValidator validates code changes against LLM-based rules.
+// llmValidator validates code changes against LLM-based rules.
 // This validator is specifically for Git diff validation.
 // For regular file validation, use Validator which orchestrates all engines including LLM.
-type LLMValidator struct {
+type llmValidator struct {
 	provider  llm.Provider
 	policy    *schema.CodePolicy
 	validator *Validator
 }
 
-// NewLLMValidator creates a new LLM validator
-func NewLLMValidator(provider llm.Provider, policy *schema.CodePolicy) *LLMValidator {
-	return &LLMValidator{
+// newLLMValidator creates a new LLM validator
+func newLLMValidator(provider llm.Provider, policy *schema.CodePolicy) *llmValidator {
+	return &llmValidator{
 		provider:  provider,
 		policy:    policy,
 		validator: NewValidator(policy, false), // Use main validator for orchestration
@@ -50,7 +51,7 @@ func NewLLMValidator(provider llm.Provider, policy *schema.CodePolicy) *LLMValid
 // This method is for diff-based validation (pre-commit hooks, PR validation).
 // For regular file validation, use validator.Validate() which orchestrates all engines.
 // Concurrency is limited to CPU count to prevent CPU spike.
-func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*ValidationResult, error) {
+func (v *llmValidator) Validate(ctx context.Context, changes []git.Change) (*ValidationResult, error) {
 	result := &ValidationResult{
 		Violations: make([]Violation, 0),
 	}
@@ -81,7 +82,7 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 			continue // Skip deleted files
 		}
 
-		addedLines := ExtractAddedLines(change.Diff)
+		addedLines := git.ExtractAddedLines(change.Diff)
 		// If no git diff format detected, treat entire diff as code to validate
 		if len(addedLines) == 0 && strings.TrimSpace(change.Diff) != "" {
 			addedLines = strings.Split(change.Diff, "\n")
@@ -98,14 +99,14 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 			mu.Unlock()
 
 			wg.Add(1)
-			go func(ch GitChange, lines []string, r schema.PolicyRule) {
+			go func(ch git.Change, lines []string, r schema.PolicyRule) {
 				defer wg.Done()
 
 				// Acquire semaphore
 				sem <- struct{}{}
 				defer func() { <-sem }()
 
-				violation, err := v.CheckRule(ctx, ch, lines, r)
+				violation, err := v.checkRule(ctx, ch, lines, r)
 				if err != nil {
 					// Log error but continue
 					fmt.Printf("Warning: failed to check rule %s: %v\n", r.ID, err)
@@ -131,7 +132,7 @@ func (v *LLMValidator) Validate(ctx context.Context, changes []GitChange) (*Vali
 }
 
 // filterLLMRules filters rules that use llm-validator engine
-func (v *LLMValidator) filterLLMRules() []schema.PolicyRule {
+func (v *llmValidator) filterLLMRules() []schema.PolicyRule {
 	llmRules := make([]schema.PolicyRule, 0)
 
 	for _, rule := range v.policy.Rules {
@@ -148,9 +149,9 @@ func (v *LLMValidator) filterLLMRules() []schema.PolicyRule {
 	return llmRules
 }
 
-// CheckRule checks if code violates a specific rule using LLM
+// checkRule checks if code violates a specific rule using LLM
 // This is the single source of truth for LLM-based validation logic
-func (v *LLMValidator) CheckRule(ctx context.Context, change GitChange, addedLines []string, rule schema.PolicyRule) (*Violation, error) {
+func (v *llmValidator) checkRule(ctx context.Context, change git.Change, addedLines []string, rule schema.PolicyRule) (*Violation, error) {
 	// Build improved prompt for LLM with clear instructions
 	systemPrompt := `You are a strict code reviewer. Your job is to check if code changes violate a specific coding convention.
 

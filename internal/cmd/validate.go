@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/DevSymphony/sym-cli/internal/validator"
@@ -80,15 +81,15 @@ func runValidate(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("no available LLM backend for validate: %w\nTip: configure provider in .sym/config.json", err)
 	}
 
-	var changes []validator.GitChange
+	var changes []git.Change
 	if validateStaged {
-		changes, err = validator.GetStagedChanges()
+		changes, err = git.GetStagedChanges()
 		if err != nil {
 			return fmt.Errorf("failed to get staged changes: %w", err)
 		}
 		fmt.Println("Validating staged changes...")
 	} else {
-		changes, err = validator.GetGitChanges()
+		changes, err = git.GetChanges()
 		if err != nil {
 			return fmt.Errorf("failed to get git changes: %w", err)
 		}

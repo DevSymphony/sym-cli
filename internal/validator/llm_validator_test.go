@@ -6,27 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestExtractAddedLines(t *testing.T) {
-	diff := `diff --git a/test.go b/test.go
-index 1234567..abcdefg 100644
---- a/test.go
-+++ b/test.go
-@@ -1,3 +1,5 @@
- package main
-
-+import "fmt"
-+
- func main() {
-+	fmt.Println("hello")
- }`
-
-	lines := ExtractAddedLines(diff)
-
-	assert.Len(t, lines, 3)
-	assert.Contains(t, lines, `import "fmt"`)
-	assert.Contains(t, lines, ``)
-	assert.Contains(t, lines, `	fmt.Println("hello")`)
-}
+// TestExtractAddedLines is now tested in internal/git/changes_test.go
 
 func TestParseValidationResponse_NoViolation(t *testing.T) {
 	tests := []struct {

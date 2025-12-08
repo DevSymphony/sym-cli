@@ -1,4 +1,4 @@
-package validator
+package git
 
 import (
 	"fmt"
@@ -6,17 +6,17 @@ import (
 	"strings"
 )
 
-// GitChange represents a file change in git
-type GitChange struct {
+// Change represents a file change in git
+type Change struct {
 	FilePath string
 	Status   string // A(dded), M(odified), D(eleted)
 	Diff     string
 }
 
-// GetGitChanges returns all uncommitted changes in the current git repository
+// GetChanges returns all uncommitted changes in the current git repository
 // This includes: staged changes, unstaged changes, and untracked files
-func GetGitChanges() ([]GitChange, error) {
-	changes := make([]GitChange, 0)
+func GetChanges() ([]Change, error) {
+	changes := make([]Change, 0)
 	seenFiles := make(map[string]bool) // Track files we've already processed
 
 	// 1. Get staged changes (index vs HEAD)
@@ -55,7 +55,7 @@ func GetGitChanges() ([]GitChange, error) {
 				diffOutput, _ = diffCmd.Output()
 			}
 
-			changes = append(changes, GitChange{
+			changes = append(changes, Change{
 				FilePath: filePath,
 				Status:   status,
 				Diff:     string(diffOutput),
@@ -97,7 +97,7 @@ func GetGitChanges() ([]GitChange, error) {
 				continue
 			}
 
-			changes = append(changes, GitChange{
+			changes = append(changes, Change{
 				FilePath: filePath,
 				Status:   status,
 				Diff:     string(diffOutput),
@@ -131,7 +131,7 @@ func GetGitChanges() ([]GitChange, error) {
 			// We still get the output in diffOutput regardless of error
 			_ = err // Ignore error since exit code 1 is expected for diffs
 
-			changes = append(changes, GitChange{
+			changes = append(changes, Change{
 				FilePath: filePath,
 				Status:   "A", // Treat untracked files as Added
 				Diff:     string(diffOutput),
@@ -143,7 +143,7 @@ func GetGitChanges() ([]GitChange, error) {
 }
 
 // GetStagedChanges returns staged changes
-func GetStagedChanges() ([]GitChange, error) {
+func GetStagedChanges() ([]Change, error) {
 	cmd := exec.Command("git", "diff", "--cached", "--name-status")
 	output, err := cmd.Output()
 	if err != nil {
@@ -152,10 +152,10 @@ func GetStagedChanges() ([]GitChange, error) {
 
 	lines := strings.Split(strings.TrimSpace(string(output)), "\n")
 	if len(lines) == 0 || lines[0] == "" {
-		return []GitChange{}, nil
+		return []Change{}, nil
 	}
 
-	changes := make([]GitChange, 0, len(lines))
+	changes := make([]Change, 0, len(lines))
 	for _, line := range lines {
 		parts := strings.Fields(line)
 		if len(parts) < 2 {
@@ -171,7 +171,7 @@ func GetStagedChanges() ([]GitChange, error) {
 			continue
 		}
 
-		changes = append(changes, GitChange{
+		changes = append(changes, Change{
 			FilePath: filePath,
 			Status:   status,
 			Diff:     string(diffOutput),
