@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	adapterRegistry "github.com/DevSymphony/sym-cli/internal/adapter/registry"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +42,7 @@ func TestCheckstyle_ValidateChanges(t *testing.T) {
 	defer v.Close()
 
 	// 4. Check tool availability
-	adp, err := adapterRegistry.Global().GetAdapter("checkstyle")
+	adp, err := linter.Global().GetLinter("checkstyle")
 	if err != nil {
 		t.Skipf("Checkstyle adapter not found: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestCheckstyle_NamingRules(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("checkstyle")
+	adp, err := linter.Global().GetLinter("checkstyle")
 	if err != nil {
 		t.Skipf("Checkstyle adapter not found: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestCheckstyle_ToolNameAndRuleID(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("checkstyle")
+	adp, err := linter.Global().GetLinter("checkstyle")
 	if err != nil {
 		t.Skipf("Checkstyle adapter not found: %v", err)
 	}

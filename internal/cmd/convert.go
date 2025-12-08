@@ -8,8 +8,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
 	"github.com/DevSymphony/sym-cli/internal/config"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/ui"
@@ -54,7 +54,7 @@ func init() {
 
 // buildTargetsDescription dynamically builds the --targets flag description
 func buildTargetsDescription() string {
-	tools := registry.Global().GetAllToolNames()
+	tools := linter.Global().GetAllToolNames()
 	if len(tools) == 0 {
 		return "target linters (or 'all')"
 	}

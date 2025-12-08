@@ -6,8 +6,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DevSymphony/sym-cli/internal/adapter"
-	"github.com/DevSymphony/sym-cli/internal/adapter/eslint"
+	"github.com/DevSymphony/sym-cli/internal/linter"
+	"github.com/DevSymphony/sym-cli/internal/linter/eslint"
 )
 
 func main() {
@@ -19,7 +19,7 @@ func main() {
 	toolsDir := filepath.Join(homeDir, ".sym", "tools")
 	workDir, _ := os.Getwd()
 
-	adp := eslint.NewAdapter(toolsDir)
+	adp := eslint.New(toolsDir)
 	fmt.Printf("✓ Created ESLint adapter\n")
 	fmt.Printf("  Tools directory: %s\n", adp.ToolsDir)
 
@@ -31,7 +31,7 @@ func main() {
 		fmt.Printf("⚠️  ESLint not available: %v\n", err)
 		fmt.Println("\nInstalling ESLint...")
 		// Try to install
-		installConfig := adapter.InstallConfig{
+		installConfig := linter.InstallConfig{
 			ToolsDir: toolsDir,
 		}
 		installErr := adp.Install(ctx, installConfig)

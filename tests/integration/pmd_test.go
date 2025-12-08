@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	adapterRegistry "github.com/DevSymphony/sym-cli/internal/adapter/registry"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +42,7 @@ func TestPMD_ValidateChanges(t *testing.T) {
 	defer v.Close()
 
 	// 4. Check tool availability
-	adp, err := adapterRegistry.Global().GetAdapter("pmd")
+	adp, err := linter.Global().GetLinter("pmd")
 	if err != nil {
 		t.Skipf("PMD adapter not found: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestPMD_EmptyCatchBlock(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("pmd")
+	adp, err := linter.Global().GetLinter("pmd")
 	if err != nil {
 		t.Skipf("PMD adapter not found: %v", err)
 	}
@@ -169,7 +169,7 @@ func TestPMD_UnusedPrivateMethod(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("pmd")
+	adp, err := linter.Global().GetLinter("pmd")
 	if err != nil {
 		t.Skipf("PMD adapter not found: %v", err)
 	}
@@ -224,7 +224,7 @@ func TestPMD_ToolNameAndRuleID(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("pmd")
+	adp, err := linter.Global().GetLinter("pmd")
 	if err != nil {
 		t.Skipf("PMD adapter not found: %v", err)
 	}

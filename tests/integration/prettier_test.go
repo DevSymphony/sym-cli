@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	adapterRegistry "github.com/DevSymphony/sym-cli/internal/adapter/registry"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -42,7 +42,7 @@ func TestPrettier_ValidateChanges(t *testing.T) {
 	defer v.Close()
 
 	// 4. Check tool availability
-	adp, err := adapterRegistry.Global().GetAdapter("prettier")
+	adp, err := linter.Global().GetLinter("prettier")
 	if err != nil {
 		t.Skipf("Prettier adapter not found: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestPrettier_FormattingCheck(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("prettier")
+	adp, err := linter.Global().GetLinter("prettier")
 	if err != nil {
 		t.Skipf("Prettier adapter not found: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestPrettier_QuotesAndIndent(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("prettier")
+	adp, err := linter.Global().GetLinter("prettier")
 	if err != nil {
 		t.Skipf("Prettier adapter not found: %v", err)
 	}
@@ -227,7 +227,7 @@ func TestPrettier_ToolNameAndRuleID(t *testing.T) {
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
 	defer v.Close()
 
-	adp, err := adapterRegistry.Global().GetAdapter("prettier")
+	adp, err := linter.Global().GetLinter("prettier")
 	if err != nil {
 		t.Skipf("Prettier adapter not found: %v", err)
 	}
