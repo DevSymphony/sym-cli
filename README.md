@@ -2,8 +2,6 @@
 
 자연어 기반 코딩 컨벤션 관리 및 검증 도구
 
-[![Test Coverage](https://img.shields.io/badge/coverage-view%20report-blue)](https://devsymphony.github.io/sym-cli/coverage.html)
-
 ## 빠른 시작
 
 ### 1. 설치
@@ -15,14 +13,9 @@ npm i -g @dev-symphony/sym
 ### 2. 초기화
 
 ```bash
-# GitHub OAuth 로그인
-sym login
-
 # 프로젝트 초기화 (.sym/ 폴더 생성, MCP 자동 설정)
 sym init
 ```
-
-> **참고**: LLM 기반 컨벤션 변환을 사용하려면 `OPENAI_API_KEY` 환경변수가 필요합니다.
 
 ### 3. 사용
 
@@ -61,7 +54,6 @@ sym dashboard
 
 | 명령어 | 설명 |
 |--------|------|
-| `sym login` | GitHub OAuth 로그인 |
 | `sym init` | 프로젝트 초기화 (.sym/ 생성) |
 | `sym dashboard` | 웹 대시보드 실행 (포트 8787) |
 | `sym my-role` | 내 역할 확인 |
@@ -108,12 +100,6 @@ make lint       # 린트
 ```
 
 **필수 도구:** Go 1.21+, Node.js 18+
-
-## 문서
-
-- [Convert 기능 가이드](docs/CONVERT_FEATURE.md)
-- [Convert 사용법](docs/CONVERT_USAGE.md)
-- [Linter 검증](docs/LINTER_VALIDATION.md)
 
 ## 라이선스
 
