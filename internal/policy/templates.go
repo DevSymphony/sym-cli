@@ -8,7 +8,7 @@ import (
 	"path"
 	"strings"
 
-	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration
+	"github.com/DevSymphony/sym-cli/pkg/schema"
 )
 
 //go:embed templates/*.json

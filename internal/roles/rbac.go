@@ -135,10 +135,18 @@ func ValidateFilePermissions(username string, files []string) (*ValidationResult
 		return nil, fmt.Errorf("failed to get user role: %w", err)
 	}
 
-	if userRole == "none" {
+	return ValidateFilePermissionsForRole(userRole, files)
+}
+
+// ValidateFilePermissionsForRole validates if a role can modify the given files
+// This is the local role-based version that takes a role name directly
+// Returns ValidationResult with Allowed=true if all files are permitted,
+// or Allowed=false with a list of denied files
+func ValidateFilePermissionsForRole(role string, files []string) (*ValidationResult, error) {
+	if role == "" || role == "none" {
 		return &ValidationResult{
 			Allowed:     false,
-			DeniedFiles: files, // All files denied if user has no role
+			DeniedFiles: files, // All files denied if no role selected
 		}, nil
 	}
 
@@ -158,7 +166,7 @@ func ValidateFilePermissions(username string, files []string) (*ValidationResult
 	}
 
 	// Get role configuration from policy
-	roleConfig, exists := userPolicy.RBAC.Roles[userRole]
+	roleConfig, exists := userPolicy.RBAC.Roles[role]
 	if !exists {
 		// Role not defined in policy, deny all
 		return &ValidationResult{

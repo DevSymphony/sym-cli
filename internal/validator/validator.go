@@ -12,7 +12,6 @@ import (
 
 	"github.com/DevSymphony/sym-cli/internal/adapter"
 	adapterRegistry "github.com/DevSymphony/sym-cli/internal/adapter/registry"
-	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/roles"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -360,10 +359,10 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 
 	// Check RBAC permissions first
 	if v.policy.Enforce.RBACConfig != nil && v.policy.Enforce.RBACConfig.Enabled {
-		username, err := git.GetCurrentUser()
-		if err == nil {
+		currentRole, err := roles.GetCurrentRole()
+		if err == nil && currentRole != "" {
 			if v.verbose {
-				fmt.Printf("🔐 Checking RBAC permissions for user: %s\n", username)
+				fmt.Printf("🔐 Checking RBAC permissions for role: %s\n", currentRole)
 			}
 
 			changedFiles := make([]string, 0, len(changes))
@@ -374,13 +373,13 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []GitChange) (*
 			}
 
 			if len(changedFiles) > 0 {
-				rbacResult, err := roles.ValidateFilePermissions(username, changedFiles)
+				rbacResult, err := roles.ValidateFilePermissionsForRole(currentRole, changedFiles)
 				if err == nil && !rbacResult.Allowed {
 					for _, deniedFile := range rbacResult.DeniedFiles {
 						result.Violations = append(result.Violations, Violation{
 							RuleID:   "rbac-permission-denied",
 							Severity: "error",
-							Message:  fmt.Sprintf("User '%s' does not have permission to modify this file", username),
+							Message:  fmt.Sprintf("Role '%s' does not have permission to modify this file", currentRole),
 							File:     deniedFile,
 							Line:     0,
 							Column:   0,

@@ -6,29 +6,24 @@ import (
 	"path/filepath"
 
 	"github.com/DevSymphony/sym-cli/internal/adapter/registry"
-	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/envutil"
-	"github.com/DevSymphony/sym-cli/internal/git"
-	"github.com/DevSymphony/sym-cli/internal/github"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
-	"github.com/DevSymphony/sym-cli/pkg/schema" // symphonyclient integration
+	"github.com/DevSymphony/sym-cli/pkg/schema"
 
 	"github.com/spf13/cobra"
 )
 
 var initCmd = &cobra.Command{
 	Use:   "init",
-	Short: "Initialize roles.json for the current repository",
-	Long: `Create a .sym/roles.json file in the current repository and
-automatically set the current user as the first admin.
+	Short: "Initialize Symphony for the current directory",
+	Long: `Create a .sym directory with roles.json and user-policy.json files.
 
 This command:
-  1. Checks if you're logged in
-  2. Gets your GitHub username
-  3. Verifies the current directory is a git repository
-  4. Creates .sym/roles.json with you as admin
-  5. Prompts you to commit and push the changes`,
+  1. Creates .sym/roles.json with default roles (admin, developer, viewer)
+  2. Creates .sym/user-policy.json with default RBAC configuration
+  3. Sets your role to admin (can be changed later via dashboard)
+  4. Optionally registers MCP server for AI tools`,
 	Run: runInit,
 }
 
@@ -74,40 +69,6 @@ func runInit(cmd *cobra.Command, args []string) {
 		return
 	}
 
-	// Check if logged in
-	if !config.IsLoggedIn() {
-		fmt.Println("❌ Not logged in")
-		fmt.Println("Run 'sym login' first")
-		os.Exit(1)
-	}
-
-	// Check if in git repository
-	if !git.IsGitRepo() {
-		fmt.Println("❌ Not a git repository")
-		fmt.Println("Navigate to a git repository before running this command")
-		os.Exit(1)
-	}
-
-	// Get current user
-	cfg, err := config.LoadConfig()
-	if err != nil {
-		fmt.Printf("❌ Failed to load config: %v\n", err)
-		os.Exit(1)
-	}
-
-	token, err := config.LoadToken()
-	if err != nil {
-		fmt.Printf("❌ Failed to load token: %v\n", err)
-		os.Exit(1)
-	}
-
-	client := github.NewClient(cfg.GetGitHubHost(), token.AccessToken)
-	user, err := client.GetCurrentUser()
-	if err != nil {
-		fmt.Printf("❌ Failed to get current user: %v\n", err)
-		os.Exit(1)
-	}
-
 	// Check if roles.json already exists
 	exists, err := roles.RolesExists()
 	if err != nil {
@@ -128,9 +89,9 @@ func runInit(cmd *cobra.Command, args []string) {
 		}
 	}
 
-	// Create roles with current user as admin
+	// Create default roles (empty user lists - users select their own role)
 	newRoles := roles.Roles{
-		"admin":     []string{user.Login},
+		"admin":     []string{},
 		"developer": []string{},
 		"viewer":    []string{},
 	}
@@ -143,11 +104,10 @@ func runInit(cmd *cobra.Command, args []string) {
 	rolesPath, _ := roles.GetRolesPath()
 	fmt.Println("✓ roles.json created successfully!")
 	fmt.Printf("  Location: %s\n", rolesPath)
-	fmt.Printf("  You (%s) have been set as admin\n", user.Login)
 
 	// Create default policy file with RBAC roles
 	fmt.Println("\nCreating default policy file...")
-	if err := createDefaultPolicy(cfg); err != nil {
+	if err := createDefaultPolicy(); err != nil {
 		fmt.Printf("⚠ Warning: Failed to create policy file: %v\n", err)
 		fmt.Println("You can manually create it later using the dashboard")
 	} else {
@@ -160,6 +120,13 @@ func runInit(cmd *cobra.Command, args []string) {
 		fmt.Printf("⚠ Warning: Failed to create .sym/.env: %v\n", err)
 	} else {
 		fmt.Println("✓ .sym/.env created with default policy path")
+	}
+
+	// Set default role to admin during initialization
+	if err := roles.SetCurrentRole("admin"); err != nil {
+		fmt.Printf("⚠ Warning: Failed to save role selection: %v\n", err)
+	} else {
+		fmt.Println("✓ Your role has been set to: admin (default for initialization)")
 	}
 
 	// MCP registration prompt
@@ -179,17 +146,20 @@ func runInit(cmd *cobra.Command, args []string) {
 	fmt.Println("  sym dashboard")
 	fmt.Println()
 	fmt.Println("Dashboard features:")
-	fmt.Println("  📋 Manage roles - Add/remove team members, configure permissions")
+	fmt.Println("  📋 Manage roles - Configure permissions for each role")
 	fmt.Println("  📝 Edit policies - Create and modify coding conventions")
+	fmt.Println("  🎭 Change role - Select a different role anytime")
 	fmt.Println("  ✅ Test validation - Check rules against your code in real-time")
 	fmt.Println()
-	fmt.Println("After setup, commit and push .sym/ folder to share with your team.")
+	fmt.Println("After setup, commit and push .sym/roles.json and .sym/user-policy.json to share with your team.")
 }
 
 // createDefaultPolicy creates a default policy file with RBAC roles
-func createDefaultPolicy(cfg *config.Config) error {
+func createDefaultPolicy() error {
+	defaultPolicyPath := ".sym/user-policy.json"
+
 	// Check if policy file already exists
-	exists, err := policy.PolicyExists(cfg.PolicyPath)
+	exists, err := policy.PolicyExists(defaultPolicyPath)
 	if err != nil {
 		return err
 	}
@@ -232,12 +202,10 @@ func createDefaultPolicy(cfg *config.Config) error {
 		Rules: []schema.UserRule{},
 	}
 
-	return policy.SavePolicy(defaultPolicy, cfg.PolicyPath)
+	return policy.SavePolicy(defaultPolicy, defaultPolicyPath)
 }
 
-// removeExistingCodePolicy removes all files generated by convert command
-// including linter configurations and code-policy.json
-// initializeEnvFile creates .sym/.env with default POLICY_PATH if not exists
+// initializeEnvFile creates .sym/.env with default configuration
 func initializeEnvFile() error {
 	envPath := filepath.Join(".sym", ".env")
 	defaultPolicyPath := ".sym/user-policy.json"
@@ -254,13 +222,14 @@ func initializeEnvFile() error {
 		return envutil.SaveKeyToEnvFile(envPath, "POLICY_PATH", defaultPolicyPath)
 	}
 
-	// .env doesn't exist, create it with default POLICY_PATH
-	content := fmt.Sprintf("# Policy configuration\nPOLICY_PATH=%s\n", defaultPolicyPath)
+	// .env doesn't exist, create it with default settings
+	content := fmt.Sprintf("# Symphony local configuration\nPOLICY_PATH=%s\nCURRENT_ROLE=admin\n", defaultPolicyPath)
 	return os.WriteFile(envPath, []byte(content), 0644)
 }
 
+// removeExistingCodePolicy removes generated linter config files when --force flag is used
 func removeExistingCodePolicy() error {
-	// Files generated by convert command (dynamically retrieved from registry)
+	// Get list of generated files from registry
 	convertGeneratedFiles := []string{"code-policy.json"}
 	convertGeneratedFiles = append(convertGeneratedFiles, registry.Global().GetAllConfigFiles()...)
 

@@ -13,7 +13,7 @@ import (
 )
 
 // MCPRegistrationConfig represents the MCP configuration structure
-// Used for Claude Code, Cursor
+// Used for Claude Desktop, Claude Code, Cursor, Cline (mcpServers format)
 type MCPRegistrationConfig struct {
 	MCPServers map[string]MCPServerConfig `json:"mcpServers"`
 }
@@ -25,7 +25,7 @@ type VSCodeMCPConfig struct {
 }
 
 // MCPServerConfig represents a single MCP server configuration
-// Used for Claude Code, Cursor
+// Used for Claude Desktop, Claude Code, Cursor, Cline (mcpServers format)
 type MCPServerConfig struct {
 	Type    string            `json:"type,omitempty"` // Optional for Claude Code, recommended for Cursor
 	Command string            `json:"command"`
@@ -39,6 +39,34 @@ type VSCodeServerConfig struct {
 	Command string            `json:"command"`
 	Args    []string          `json:"args"`
 	Env     map[string]string `json:"env,omitempty"`
+}
+
+// editorItem represents an editor option with selection state
+type editorItem struct {
+	Name     string
+	AppID    string
+	Selected bool
+	IsSubmit bool
+	IsSkip   bool
+}
+
+// bellSkipper wraps os.Stdout to skip bell characters (prevents alert sound)
+type bellSkipper struct{}
+
+func (bs *bellSkipper) Write(b []byte) (int, error) {
+	const bell = '\a'
+	// Filter out bell characters
+	filtered := make([]byte, 0, len(b))
+	for _, c := range b {
+		if c != bell {
+			filtered = append(filtered, c)
+		}
+	}
+	return os.Stdout.Write(filtered)
+}
+
+func (bs *bellSkipper) Close() error {
+	return nil
 }
 
 // promptMCPRegistration prompts user to register Symphony as MCP server
@@ -62,79 +90,110 @@ func promptMCPRegistration() {
 
 	fmt.Println("\n📡 Would you like to register Symphony as an MCP server?")
 	fmt.Println("   (Symphony MCP provides code convention tools for AI assistants)")
+	fmt.Println("   Press Enter to toggle selection, then select Submit to apply")
 	fmt.Println()
 
-	// Create selection prompt
-	items := []string{
-		"Claude Desktop (global)",
-		"Claude Code (project)",
-		"Cursor (project)",
-		"VS Code Copilot (project)",
-		"Cline (project)",
-		"All",
-		"Skip",
+	// Initialize editor items
+	items := []editorItem{
+		{Name: "Claude Desktop (global)", AppID: "claude-desktop"},
+		{Name: "Claude Code (project)", AppID: "claude-code"},
+		{Name: "Cursor (project)", AppID: "cursor"},
+		{Name: "VS Code Copilot (project)", AppID: "vscode"},
+		{Name: "Cline (global)", AppID: "cline"},
+		{Name: "Submit", IsSubmit: true},
 	}
 
-	templates := &promptui.SelectTemplates{
-		Label:    "{{ . }}?",
-		Active:   "▸ {{ . | cyan }}",
-		Inactive: "  {{ . }}",
-		Selected: "✓ {{ . | green }}",
-	}
+	// Track cursor position across loop iterations
+	cursorPos := 0
 
-	prompt := promptui.Select{
-		Label:     "Select option",
-		Items:     items,
-		Templates: templates,
-		Size:      6,
-	}
-
-	index, _, err := prompt.Run()
-	if err != nil {
-		fmt.Println("\nSkipped MCP registration")
-		return
-	}
-
-	switch index {
-	case 0: // Claude Desktop (global)
-		if err := registerMCP("claude-desktop"); err != nil {
-			fmt.Printf("❌ Failed to register Claude Desktop: %v\n", err)
-		} else {
-			fmt.Println("\n✅ MCP registration complete! Restart Claude Desktop to use Symphony.")
-		}
-	case 1: // Claude Code (project)
-		if err := registerMCP("claude-code"); err != nil {
-			fmt.Printf("❌ Failed to register Claude Code: %v\n", err)
-		} else {
-			fmt.Println("\n✅ MCP registration complete! Reload Claude Code to use Symphony.")
-		}
-	case 2: // Cursor (project)
-		if err := registerMCP("cursor"); err != nil {
-			fmt.Printf("❌ Failed to register Cursor: %v\n", err)
-		} else {
-			fmt.Println("\n✅ MCP registration complete! Reload Cursor to use Symphony.")
-		}
-	case 3: // VS Code/Cline (project)
-		if err := registerMCP("vscode"); err != nil {
-			fmt.Printf("❌ Failed to register VS Code: %v\n", err)
-		} else {
-			fmt.Println("\n✅ MCP registration complete! Reload VS Code to use Symphony.")
-		}
-	case 4: // All
-		apps := []string{"claude-desktop", "claude-code", "cursor", "vscode"}
-		successCount := 0
-		for _, app := range apps {
-			if registerMCP(app) == nil {
-				successCount++
+	// Multi-select loop
+	for {
+		// Count selected items first
+		selectedCount := 0
+		for _, item := range items {
+			if item.Selected {
+				selectedCount++
 			}
 		}
-		if successCount > 0 {
-			fmt.Printf("\n✅ MCP registration complete! Registered to %d app(s).\n", successCount)
-			fmt.Println("   Restart/reload the apps to use Symphony.")
+
+		// Build display items with checkboxes
+		displayItems := make([]string, len(items))
+		for i, item := range items {
+			if item.IsSubmit {
+				if selectedCount == 0 {
+					displayItems[i] = "⏭  Skip"
+				} else {
+					displayItems[i] = fmt.Sprintf("✅ Submit (%d selected)", selectedCount)
+				}
+			} else {
+				checkbox := "☐"
+				if item.Selected {
+					checkbox = "☑"
+				}
+				displayItems[i] = fmt.Sprintf("%s %s", checkbox, item.Name)
+			}
 		}
-	case 5: // Skip
-		fmt.Println("Skipped MCP registration")
-		fmt.Println("\n💡 Tip: Run 'sym init --register-mcp' to register MCP later")
+
+		templates := &promptui.SelectTemplates{
+			Label:    "{{ . }}",
+			Active:   "▸ {{ . | cyan }}",
+			Inactive: "  {{ . }}",
+			Selected: "{{ . }}",
+		}
+
+		prompt := promptui.Select{
+			Label:        "Select editors (Enter to toggle)",
+			Items:        displayItems,
+			Templates:    templates,
+			Size:         6,
+			HideSelected: true,
+			CursorPos:    cursorPos,
+			Stdout:       &bellSkipper{},
+		}
+
+		index, _, err := prompt.Run()
+		if err != nil {
+			fmt.Println("\nSkipped MCP registration")
+			return
+		}
+
+		selectedItem := &items[index]
+
+		if selectedItem.IsSubmit {
+			// Collect selected apps
+			var selectedApps []string
+			for _, item := range items {
+				if item.Selected && item.AppID != "" {
+					selectedApps = append(selectedApps, item.AppID)
+				}
+			}
+
+			// If no editors selected, act as Skip
+			if len(selectedApps) == 0 {
+				fmt.Println("Skipped MCP registration")
+				fmt.Println("\n💡 Tip: Run 'sym init --register-mcp' to register MCP later")
+				return
+			}
+
+			// Register all selected apps
+			successCount := 0
+			for _, appID := range selectedApps {
+				if registerMCP(appID) == nil {
+					successCount++
+				}
+			}
+
+			if successCount > 0 {
+				fmt.Printf("\n✅ MCP registration complete! Registered to %d app(s).\n", successCount)
+				fmt.Println("   Restart/reload the apps to use Symphony.")
+			}
+			return
+		}
+
+		// Toggle selection for editor items
+		selectedItem.Selected = !selectedItem.Selected
+		// Preserve cursor position for next iteration
+		cursorPos = index
 	}
 }
 
@@ -148,7 +207,7 @@ func registerMCP(app string) error {
 	}
 
 	// Check if this is a project-specific config
-	isProjectConfig := app != "claude-desktop"
+	isProjectConfig := app != "claude-desktop" && app != "cline"
 
 	if isProjectConfig {
 		fmt.Printf("\n✓ Configuring %s (project-specific)\n", getAppDisplayName(app))
@@ -170,7 +229,7 @@ func registerMCP(app string) error {
 	var data []byte
 
 	if app == "vscode" {
-		// VS Code uses different format
+		// VS Code Copilot uses different MCP config format
 		var vscodeConfig VSCodeMCPConfig
 
 		if fileExists {
@@ -214,7 +273,7 @@ func registerMCP(app string) error {
 			return fmt.Errorf("failed to marshal config: %w", err)
 		}
 	} else {
-		// Claude Code, Cursor use standard format
+		// Claude Desktop, Claude Code, Cursor, Cline use mcpServers format
 		var config MCPRegistrationConfig
 
 		if fileExists {
@@ -273,7 +332,8 @@ func registerMCP(app string) error {
 	fmt.Printf("  ✓ Symphony MCP server registered\n")
 
 	// Create instructions file for project-specific configs
-	if isProjectConfig {
+	// Note: Cline has global MCP config but project-specific .clinerules
+	if isProjectConfig || app == "cline" {
 		if err := createInstructionsFile(app); err != nil {
 			fmt.Printf("  ⚠ Failed to create instructions file: %v\n", err)
 		}
@@ -311,6 +371,16 @@ func getMCPConfigPath(app string) string {
 	case "vscode":
 		// Project-specific configuration
 		path = filepath.Join(cwd, ".vscode", "mcp.json")
+	case "cline":
+		// Global configuration (VS Code extension storage)
+		switch runtime.GOOS {
+		case "windows":
+			path = filepath.Join(os.Getenv("APPDATA"), "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")
+		case "darwin":
+			path = filepath.Join(homeDir, "Library", "Application Support", "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")
+		case "linux":
+			path = filepath.Join(homeDir, ".config", "Code", "User", "globalStorage", "saoudrizwan.claude-dev", "settings", "cline_mcp_settings.json")
+		}
 	}
 
 	return path
@@ -326,7 +396,9 @@ func getAppDisplayName(app string) string {
 	case "cursor":
 		return "Cursor"
 	case "vscode":
-		return "VS Code/Cline"
+		return "VS Code Copilot"
+	case "cline":
+		return "Cline"
 	default:
 		return app
 	}
@@ -359,6 +431,11 @@ func createInstructionsFile(app string) error {
 		instructionsPath = filepath.Join(".github", "instructions", "symphony.instructions.md")
 		content = getVSCodeInstructions()
 		appendMode = false
+	case "cline":
+		// Use .clinerules for Cline (Markdown format in project root)
+		instructionsPath = ".clinerules"
+		content = getClineInstructions()
+		appendMode = true
 	default:
 		return nil // No instructions file for this app
 	}
@@ -403,6 +480,16 @@ func createInstructionsFile(app string) error {
 	// Write file
 	if err := os.WriteFile(instructionsPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
+	}
+
+	// Add VS Code instructions directory to .gitignore
+	if app == "vscode" {
+		gitignorePath := ".github/instructions/"
+		if err := ensureGitignore(gitignorePath); err != nil {
+			fmt.Printf("  ⚠ Warning: Failed to update .gitignore: %v\n", err)
+		} else {
+			fmt.Printf("  ✓ Added %s to .gitignore\n", gitignorePath)
+		}
 	}
 
 	return nil
@@ -510,6 +597,33 @@ This project uses Symphony MCP for automated code convention management.
 
 ## Workflow
 Check MCP → Query Conventions → Write Code → Validate → Fix → Commit
+
+---
+Auto-generated by Symphony
+`
+}
+
+// getClineInstructions returns instructions for Cline (.clinerules)
+func getClineInstructions() string {
+	return `# Symphony Code Conventions
+
+This project uses Symphony MCP for automated code convention management.
+
+## Required Workflow
+
+### Before Writing Code
+1. **Verify Symphony MCP is active** - Check that the Symphony MCP server is available
+2. **Query conventions** - Use the symphony/query_conventions tool
+   - Select appropriate category: security, style, documentation, error_handling, architecture, performance, testing
+   - Filter by programming language as needed
+
+### After Writing Code
+1. **Validate all changes** - Use the symphony/validate_code tool to check against project conventions
+2. **Fix any violations** - Address all issues before proceeding
+3. **Only commit after validation passes**
+
+## Summary
+Always: Check MCP → Query Conventions → Write Code → Validate → Fix → Commit
 
 ---
 Auto-generated by Symphony

@@ -450,6 +450,7 @@ func promptLLMBackendSetup() {
 		Items:     items,
 		Templates: templates,
 		Size:      len(items),
+		Stdout:    &bellSkipper{},
 	}
 
 	index, _, err := selectPrompt.Run()

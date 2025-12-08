@@ -89,9 +89,8 @@ func SaveKeyToEnvFile(envPath, key, value string) error {
 	// If key not found, add it at the end
 	if !keyFound {
 		if len(lines) > 0 && lines[len(lines)-1] != "" {
-			lines = append(lines, "") // Add blank line before new section
+			lines = append(lines, "") // Add blank line before new key
 		}
-		lines = append(lines, "# Policy configuration")
 		lines = append(lines, key+"="+value)
 	}
 
