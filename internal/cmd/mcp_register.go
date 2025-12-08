@@ -44,20 +44,16 @@ type VSCodeServerConfig struct {
 
 // MCP tool options for multi-select
 var mcpToolOptions = []string{
-	"Claude Desktop (global)",
-	"Claude Code (project)",
-	"Cursor (project)",
-	"VS Code Copilot (project)",
-	"Cline (global)",
+	"Claude Code",
+	"Cursor",
+	"VS Code Copilot",
 }
 
 // mcpToolToApp maps display name to internal app identifier
 var mcpToolToApp = map[string]string{
-	"Claude Desktop (global)":   "claude-desktop",
-	"Claude Code (project)":     "claude-code",
-	"Cursor (project)":          "cursor",
-	"VS Code Copilot (project)": "vscode",
-	"Cline (global)":            "cline",
+	"Claude Code":     "claude-code",
+	"Cursor":          "cursor",
+	"VS Code Copilot": "vscode",
 }
 
 // promptMCPRegistration prompts user to register Symphony as MCP server
@@ -85,6 +81,7 @@ func promptMCPRegistration() {
 	fmt.Println()
 	ui.PrintTitle("MCP", "Register Symphony as an MCP server")
 	fmt.Println(ui.Indent("Symphony MCP provides code convention tools for AI assistants"))
+	fmt.Println(ui.Indent("(Use arrows to move, space to select, enter to submit)"))
 	fmt.Println()
 
 	// Multi-select prompt for tools
@@ -139,14 +136,8 @@ func registerMCP(app string) error {
 		return fmt.Errorf("config path not determined")
 	}
 
-	// Check if this is a project-specific config
-	isProjectConfig := app != "claude-desktop" && app != "cline"
-
-	if isProjectConfig {
-		fmt.Println(ui.Indent(fmt.Sprintf("Configuring %s (project-specific)", getAppDisplayName(app))))
-	} else {
-		fmt.Println(ui.Indent(fmt.Sprintf("Configuring %s (global)", getAppDisplayName(app))))
-	}
+	// All supported apps are now project-specific
+	fmt.Println(ui.Indent(fmt.Sprintf("Configuring %s", getAppDisplayName(app))))
 	fmt.Println(ui.Indent(fmt.Sprintf("Location: %s", configPath)))
 
 	// Create config directory if it doesn't exist
@@ -264,12 +255,9 @@ func registerMCP(app string) error {
 
 	fmt.Println(ui.Indent("Symphony MCP server registered"))
 
-	// Create instructions file for project-specific configs
-	// Note: Cline has global MCP config but project-specific .clinerules
-	if isProjectConfig || app == "cline" {
-		if err := createInstructionsFile(app); err != nil {
-			fmt.Println(ui.Indent(fmt.Sprintf("Failed to create instructions file: %v", err)))
-		}
+	// Create instructions file for all supported apps
+	if err := createInstructionsFile(app); err != nil {
+		fmt.Println(ui.Indent(fmt.Sprintf("Failed to create instructions file: %v", err)))
 	}
 
 	return nil
@@ -419,9 +407,9 @@ func createInstructionsFile(app string) error {
 	if app == "vscode" {
 		gitignorePath := ".github/instructions/"
 		if err := ensureGitignore(gitignorePath); err != nil {
-			fmt.Printf("  ⚠ Warning: Failed to update .gitignore: %v\n", err)
+			fmt.Println(ui.Indent(fmt.Sprintf("Warning: Failed to update .gitignore: %v", err)))
 		} else {
-			fmt.Printf("  ✓ Added %s to .gitignore\n", gitignorePath)
+			fmt.Println(ui.Indent(fmt.Sprintf("Added %s to .gitignore", gitignorePath)))
 		}
 	}
 

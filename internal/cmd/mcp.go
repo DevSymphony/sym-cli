@@ -8,6 +8,7 @@ import (
 
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/mcp"
+	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )
@@ -60,15 +61,16 @@ func runMCP(cmd *cobra.Command, args []string) error {
 
 	// If no user-policy.json → Launch dashboard
 	if !userPolicyExists {
-		fmt.Println("❌ User policy not found at:", userPolicyPath)
-		fmt.Println("📝 Opening dashboard to create policy...")
+		ui.PrintError(fmt.Sprintf("User policy not found at: %s", userPolicyPath))
+		fmt.Println("Opening dashboard to create policy...")
 
 		// Launch dashboard
 		if err := launchDashboard(); err != nil {
 			return fmt.Errorf("failed to launch dashboard: %w", err)
 		}
 
-		fmt.Println("\n✓ Dashboard launched at http://localhost:8787")
+		fmt.Println()
+		ui.PrintOK("Dashboard launched at http://localhost:8787")
 		fmt.Println("Please create your policy in the dashboard, then restart MCP server.")
 		return nil
 	}

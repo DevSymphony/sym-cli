@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/DevSymphony/sym-cli/internal/roles"
+	"github.com/DevSymphony/sym-cli/internal/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -41,8 +42,8 @@ func runMyRole(cmd *cobra.Command, args []string) {
 			output := map[string]string{"error": "roles.json not found"}
 			_ = json.NewEncoder(os.Stdout).Encode(output)
 		} else {
-			fmt.Println("❌ roles.json not found")
-			fmt.Println("Run 'sym init' first")
+			ui.PrintError("roles.json not found")
+			fmt.Println(ui.Indent("Run 'sym init' first"))
 		}
 		os.Exit(1)
 	}
@@ -67,13 +68,11 @@ func runMyRole(cmd *cobra.Command, args []string) {
 		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
 		if role == "" {
-			fmt.Println("⚠ No role selected")
-			fmt.Println("Run 'sym my-role --select' to select a role")
-			fmt.Println("Or use the dashboard: 'sym dashboard'")
+			ui.PrintWarn("No role selected")
+			fmt.Println(ui.Indent("Run 'sym my-role --select' to select a role"))
 		} else {
 			fmt.Printf("Current role: %s\n", role)
-			fmt.Println("\nTo change your role:")
-			fmt.Println("  sym my-role --select")
+			fmt.Println(ui.Indent("Run 'sym my-role --select' to change"))
 		}
 	}
 }
@@ -81,18 +80,18 @@ func runMyRole(cmd *cobra.Command, args []string) {
 func selectNewRole() {
 	availableRoles, err := roles.GetAvailableRoles()
 	if err != nil {
-		fmt.Printf("❌ Failed to get available roles: %v\n", err)
+		ui.PrintError(fmt.Sprintf("Failed to get available roles: %v", err))
 		os.Exit(1)
 	}
 
 	if len(availableRoles) == 0 {
-		fmt.Println("❌ No roles defined in roles.json")
+		ui.PrintError("No roles defined in roles.json")
 		os.Exit(1)
 	}
 
 	currentRole, _ := roles.GetCurrentRole()
 
-	fmt.Println("🎭 Select your role:")
+	ui.PrintTitle("Role", "Select your role")
 	fmt.Println()
 	for i, role := range availableRoles {
 		marker := "  "
@@ -109,23 +108,23 @@ func selectNewRole() {
 	input = strings.TrimSpace(input)
 
 	if input == "" {
-		fmt.Println("⚠ No selection made")
+		ui.PrintWarn("No selection made")
 		return
 	}
 
 	num, err := strconv.Atoi(input)
 	if err != nil || num < 1 || num > len(availableRoles) {
-		fmt.Println("❌ Invalid selection")
+		ui.PrintError("Invalid selection")
 		os.Exit(1)
 	}
 
 	selectedRole := availableRoles[num-1]
 	if err := roles.SetCurrentRole(selectedRole); err != nil {
-		fmt.Printf("❌ Failed to save role: %v\n", err)
+		ui.PrintError(fmt.Sprintf("Failed to save role: %v", err))
 		os.Exit(1)
 	}
 
-	fmt.Printf("✓ Your role has been changed to: %s\n", selectedRole)
+	ui.PrintOK(fmt.Sprintf("Your role has been changed to: %s", selectedRole))
 }
 
 func handleError(msg string, err error, jsonMode bool) {
@@ -133,6 +132,6 @@ func handleError(msg string, err error, jsonMode bool) {
 		output := map[string]string{"error": fmt.Sprintf("%s: %v", msg, err)}
 		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
-		fmt.Printf("❌ %s: %v\n", msg, err)
+		ui.PrintError(fmt.Sprintf("%s: %v", msg, err))
 	}
 }

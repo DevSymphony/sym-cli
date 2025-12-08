@@ -92,14 +92,13 @@ func runInit(cmd *cobra.Command, args []string) {
 	}
 
 	rolesPath, _ := roles.GetRolesPath()
-	fmt.Println("✓ roles.json created successfully!")
-	fmt.Printf("  Location: %s\n", rolesPath)
+	ui.PrintOK("roles.json created")
+	fmt.Println(ui.Indent(fmt.Sprintf("Location: %s", rolesPath)))
 
 	// Create default policy file with RBAC roles
-	fmt.Println("\nCreating default policy file...")
 	if err := createDefaultPolicy(); err != nil {
-		fmt.Printf("⚠ Warning: Failed to create policy file: %v\n", err)
-		fmt.Println("You can manually create it later using the dashboard")
+		ui.PrintWarn(fmt.Sprintf("Failed to create policy file: %v", err))
+		fmt.Println(ui.Indent("You can manually create it later using the dashboard"))
 	} else {
 		ui.PrintOK("user-policy.json created with default RBAC roles")
 	}
@@ -113,9 +112,9 @@ func runInit(cmd *cobra.Command, args []string) {
 
 	// Set default role to admin during initialization
 	if err := roles.SetCurrentRole("admin"); err != nil {
-		fmt.Printf("⚠ Warning: Failed to save role selection: %v\n", err)
+		ui.PrintWarn(fmt.Sprintf("Failed to save role selection: %v", err))
 	} else {
-		fmt.Println("✓ Your role has been set to: admin (default for initialization)")
+		ui.PrintOK("Your role has been set to: admin")
 	}
 
 	// MCP registration prompt
@@ -132,13 +131,9 @@ func runInit(cmd *cobra.Command, args []string) {
 	fmt.Println()
 	ui.PrintDone("Initialization complete")
 	fmt.Println()
-	fmt.Println("Dashboard features:")
-	fmt.Println("  📋 Manage roles - Configure permissions for each role")
-	fmt.Println("  📝 Edit policies - Create and modify coding conventions")
-	fmt.Println("  🎭 Change role - Select a different role anytime")
-	fmt.Println("  ✅ Test validation - Check rules against your code in real-time")
-	fmt.Println()
-	fmt.Println("After setup, commit and push .sym/roles.json and .sym/user-policy.json to share with your team.")
+	fmt.Println("Next steps:")
+	fmt.Println(ui.Indent("Run 'sym dashboard' to manage roles and policies"))
+	fmt.Println(ui.Indent("Commit .sym/ folder to share with your team"))
 }
 
 // createDefaultPolicy creates a default policy file with RBAC roles
