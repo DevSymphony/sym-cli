@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -54,7 +55,7 @@ func TestPrettier_ValidateChanges(t *testing.T) {
 	testFile := filepath.Join(testdataDir, "Test.ts")
 	require.FileExists(t, testFile, "Test.ts should exist")
 
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -123,7 +124,7 @@ func TestPrettier_FormattingCheck(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.ts")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -190,7 +191,7 @@ func TestPrettier_QuotesAndIndent(t *testing.T) {
 	// Verify the file contains double quotes (which should be single)
 	assert.Contains(t, string(content), `"https://`, "Test file should contain double quotes")
 
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -236,7 +237,7 @@ func TestPrettier_ToolNameAndRuleID(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.ts")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",

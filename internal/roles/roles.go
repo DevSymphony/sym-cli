@@ -146,15 +146,6 @@ func SetCurrentRole(role string) error {
 	return envutil.SaveKeyToEnvFile(envPath, currentRoleKey, role)
 }
 
-// CurrentRoleExists checks if CURRENT_ROLE is set in .sym/.env
-func CurrentRoleExists() (bool, error) {
-	role, err := GetCurrentRole()
-	if err != nil {
-		return false, err
-	}
-	return role != "", nil
-}
-
 // GetAvailableRoles returns all role names defined in roles.json
 // Returns roles sorted alphabetically for consistent ordering
 func GetAvailableRoles() ([]string, error) {

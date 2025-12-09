@@ -17,8 +17,8 @@ type ValidationResult struct {
 	DeniedFiles []string // list of files that are denied (empty if Allowed is true)
 }
 
-// GetUserPolicyPath returns the path to user-policy.json in the current repo
-func GetUserPolicyPath() (string, error) {
+// getUserPolicyPath returns the path to user-policy.json in the current repo
+func getUserPolicyPath() (string, error) {
 	repoRoot, err := git.GetRepoRoot()
 	if err != nil {
 		return "", err
@@ -28,7 +28,7 @@ func GetUserPolicyPath() (string, error) {
 
 // LoadUserPolicyFromRepo loads user-policy.json from the current repository
 func LoadUserPolicyFromRepo() (*schema.UserPolicy, error) {
-	policyPath, err := GetUserPolicyPath()
+	policyPath, err := getUserPolicyPath()
 	if err != nil {
 		return nil, err
 	}
@@ -123,19 +123,6 @@ func checkFilePermission(filePath string, role *schema.UserRole) bool {
 
 	// Not explicitly allowed
 	return false
-}
-
-// ValidateFilePermissions validates if a user can modify the given files
-// Returns ValidationResult with Allowed=true if all files are permitted,
-// or Allowed=false with a list of denied files
-func ValidateFilePermissions(username string, files []string) (*ValidationResult, error) {
-	// Get user's role (this internally loads roles.json)
-	userRole, err := GetUserRole(username)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get user role: %w", err)
-	}
-
-	return ValidateFilePermissionsForRole(userRole, files)
 }
 
 // ValidateFilePermissionsForRole validates if a role can modify the given files

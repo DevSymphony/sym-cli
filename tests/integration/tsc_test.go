@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -54,7 +55,7 @@ func TestTSC_ValidateChanges(t *testing.T) {
 	testFile := filepath.Join(testdataDir, "Test.ts")
 	require.FileExists(t, testFile, "Test.ts should exist")
 
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -124,7 +125,7 @@ func TestTSC_StrictNullChecks(t *testing.T) {
 	assert.Contains(t, string(configData), `"strictNullChecks": true`, "Config should have strictNullChecks enabled")
 
 	testFile := filepath.Join(testdataDir, "Test.ts")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -176,7 +177,7 @@ func TestTSC_TypeErrors(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.ts")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -229,7 +230,7 @@ func TestTSC_ToolNameAndRuleID(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.ts")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",

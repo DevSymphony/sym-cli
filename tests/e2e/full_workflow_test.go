@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/converter"
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -168,18 +169,20 @@ func ProcessData(data string) error {
 	// ========== STEP 4: Validate generated code ==========
 	t.Log("STEP 4: Validating generated code against conventions")
 
-	llmValidator := validator.NewLLMValidator(provider, &convertedPolicy)
+	llmValidator := validator.NewValidator(&convertedPolicy, false)
+	llmValidator.SetLLMProvider(provider)
+	defer llmValidator.Close()
 
 	// Validate BAD code
 	t.Log("STEP 4a: Validating BAD code (should find violations)")
-	badChanges := []validator.GitChange{
+	badChanges := []git.Change{
 		{
 			FilePath: badCodePath,
 			Diff:     badGeneratedCode,
 		},
 	}
 
-	badResult, err := llmValidator.Validate(ctx, badChanges)
+	badResult, err := llmValidator.ValidateChanges(ctx, badChanges)
 	require.NoError(t, err, "Validation should not error")
 
 	t.Logf("✓ Validation completed: checked=%d, violations=%d",
@@ -204,14 +207,14 @@ func ProcessData(data string) error {
 
 	// Validate GOOD code
 	t.Log("STEP 4b: Validating GOOD code (should pass or have fewer violations)")
-	goodChanges := []validator.GitChange{
+	goodChanges := []git.Change{
 		{
 			FilePath: goodCodePath,
 			Diff:     goodGeneratedCode,
 		},
 	}
 
-	goodResult, err := llmValidator.Validate(ctx, goodChanges)
+	goodResult, err := llmValidator.ValidateChanges(ctx, goodChanges)
 	require.NoError(t, err)
 
 	t.Logf("✓ Validation completed: checked=%d, violations=%d",
@@ -335,14 +338,16 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 	cfg := llm.LoadConfig()
 	provider, err := llm.New(cfg)
 	require.NoError(t, err, "LLM provider creation should succeed")
-	v := validator.NewLLMValidator(provider, policy)
+	v := validator.NewValidator(policy, false)
+	v.SetLLMProvider(provider)
+	defer v.Close()
 	ctx := context.Background()
 
 	// Iteration 1: Bad code
 	t.Log("Iteration 1: Validating initial code with violations")
 	iteration1 := `+const APIKey = "sk-test123"`
 
-	result1, err := v.Validate(ctx, []validator.GitChange{
+	result1, err := v.ValidateChanges(ctx, []git.Change{
 		{FilePath: "test.go", Diff: iteration1},
 	})
 	require.NoError(t, err)
@@ -355,7 +360,7 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 	t.Log("Iteration 2: Validating fixed code")
 	iteration2 := `+apiKey := os.Getenv("API_KEY")`
 
-	result2, err := v.Validate(ctx, []validator.GitChange{
+	result2, err := v.ValidateChanges(ctx, []git.Change{
 		{FilePath: "test.go", Diff: iteration2},
 	})
 	require.NoError(t, err)

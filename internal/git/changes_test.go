@@ -1,4 +1,4 @@
-package validator
+package git
 
 import (
 	"testing"

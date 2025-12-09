@@ -139,6 +139,8 @@ Return ONLY a JSON object (no markdown fences) with this structure:
   "options": {"key": "value", ...}
 }
 
+For string options (indent-string, good-names, bad-names, regex patterns), wrap values in single quotes: e.g. {"indent-string": "'    '"}
+
 Common Pylint rules:
 - Naming: invalid-name (C0103), disallowed-name (C0104)
   Options: variable-rgx, function-rgx, class-rgx, const-rgx, argument-rgx

@@ -43,56 +43,9 @@ func TestUnit_PolicyParsing(t *testing.T) {
 }
 
 // TestUnit_GitDiffExtraction tests extracting added lines from git diff
+// Note: extractAddedLines is now internal to the validator package
 func TestUnit_GitDiffExtraction(t *testing.T) {
-	tests := []struct {
-		name		string
-		diff		string
-		expected	[]string
-	}{
-		{
-			name:	"simple addition",
-			diff: `diff --git a/test.go b/test.go
-@@ -1,2 +1,3 @@
- package main
-+const APIKey = "secret"
- func main() {}`,
-			expected:	[]string{`const APIKey = "secret"`},
-		},
-		{
-			name:	"multiple additions",
-			diff: `diff --git a/test.go b/test.go
-@@ -1,2 +1,5 @@
- package main
-+import "os"
-+
-+const APIKey = "secret"
- func main() {}`,
-			expected:	[]string{`import "os"`, ``, `const APIKey = "secret"`},
-		},
-		{
-			name:	"no additions",
-			diff: `diff --git a/test.go b/test.go
-@@ -1,3 +1,2 @@
- package main
--const APIKey = "secret"
- func main() {}`,
-			expected:	[]string{},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			lines := validator.ExtractAddedLines(tt.diff)
-
-			assert.Equal(t, len(tt.expected), len(lines),
-				"Should extract correct number of lines")
-
-			for _, expectedLine := range tt.expected {
-				assert.Contains(t, lines, expectedLine,
-					"Should contain: %s", expectedLine)
-			}
-		})
-	}
+	t.Skip("extractAddedLines is now internal - tested via internal/validator/git_test.go")
 }
 
 // TestUnit_RuleFiltering tests filtering rules by category and severity

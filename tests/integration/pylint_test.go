@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
@@ -54,7 +55,7 @@ func TestPylint_ValidateChanges(t *testing.T) {
 	testFile := filepath.Join(testdataDir, "Test.py")
 	require.FileExists(t, testFile, "Test.py should exist")
 
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M", // Modified
 		Diff:     "",  // Diff not needed for adapter-based rules
@@ -124,7 +125,7 @@ func TestPylint_NamingConventions(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.py")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
@@ -210,7 +211,7 @@ func TestPylint_ToolNameAndRuleID(t *testing.T) {
 	}
 
 	testFile := filepath.Join(testdataDir, "Test.py")
-	changes := []validator.GitChange{{
+	changes := []git.Change{{
 		FilePath: testFile,
 		Status:   "M",
 		Diff:     "",
