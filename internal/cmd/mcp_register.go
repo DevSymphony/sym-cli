@@ -13,6 +13,12 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/ui"
 )
 
+// Section markers for Symphony instructions in append-mode files (CLAUDE.md, .clinerules)
+const (
+	symphonySectionStart = "<!-- SYMPHONY:START -->"
+	symphonySectionEnd   = "<!-- SYMPHONY:END -->"
+)
+
 // MCPRegistrationConfig represents the MCP configuration structure
 // Used for Claude Desktop, Claude Code, Cursor, Cline (mcpServers format)
 type MCPRegistrationConfig struct {
@@ -99,7 +105,7 @@ func promptMCPRegistration() {
 	// If no tools selected, skip
 	if len(selectedTools) == 0 {
 		fmt.Println("Skipped MCP registration")
-		fmt.Println(ui.Indent("Tip: Run 'sym init --register-mcp' to register MCP later"))
+		fmt.Println(ui.Indent("Tip: Run 'sym mcp register' to register MCP later"))
 		return
 	}
 
@@ -158,7 +164,7 @@ func registerMCP(app string) error {
 
 		if fileExists {
 			if err := json.Unmarshal(existingData, &vscodeConfig); err != nil {
-				// Invalid JSON, create backup
+				// Invalid JSON, create backup and start fresh
 				backupPath := configPath + ".bak"
 				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
 					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
@@ -166,15 +172,8 @@ func registerMCP(app string) error {
 					fmt.Println(ui.Indent(fmt.Sprintf("Invalid JSON, backup created: %s", filepath.Base(backupPath))))
 				}
 				vscodeConfig = VSCodeMCPConfig{}
-			} else {
-				// Valid JSON, create backup
-				backupPath := configPath + ".bak"
-				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
-					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
-				} else {
-					fmt.Println(ui.Indent(fmt.Sprintf("Backup: %s", filepath.Base(backupPath))))
-				}
 			}
+			// Valid JSON: no backup needed, just update symphony entry
 		} else {
 			fmt.Println(ui.Indent("Creating new configuration file"))
 		}
@@ -202,7 +201,7 @@ func registerMCP(app string) error {
 
 		if fileExists {
 			if err := json.Unmarshal(existingData, &config); err != nil {
-				// Invalid JSON, create backup
+				// Invalid JSON, create backup and start fresh
 				backupPath := configPath + ".bak"
 				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
 					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
@@ -210,15 +209,8 @@ func registerMCP(app string) error {
 					fmt.Println(ui.Indent(fmt.Sprintf("Invalid JSON, backup created: %s", filepath.Base(backupPath))))
 				}
 				config = MCPRegistrationConfig{}
-			} else {
-				// Valid JSON, create backup
-				backupPath := configPath + ".bak"
-				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
-					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
-				} else {
-					fmt.Println(ui.Indent(fmt.Sprintf("Backup: %s", filepath.Base(backupPath))))
-				}
 			}
+			// Valid JSON: no backup needed, just update symphony entry
 		} else {
 			fmt.Println(ui.Indent("Creating new configuration file"))
 		}
@@ -331,6 +323,33 @@ func checkNpxAvailable() bool {
 	return err == nil
 }
 
+// updateSymphonySection updates or appends the Symphony section in content
+func updateSymphonySection(existingContent, symphonyContent string) string {
+	startIdx := strings.Index(existingContent, symphonySectionStart)
+	endIdx := strings.Index(existingContent, symphonySectionEnd)
+
+	// Case 1: Symphony section exists → replace
+	if startIdx != -1 && endIdx != -1 && endIdx > startIdx {
+		endIdx += len(symphonySectionEnd)
+		return existingContent[:startIdx] + symphonyContent + existingContent[endIdx:]
+	}
+
+	// Case 2: No Symphony section → append at end
+	if existingContent == "" {
+		return symphonyContent
+	}
+
+	// Ensure proper spacing
+	separator := "\n\n"
+	if strings.HasSuffix(existingContent, "\n\n") {
+		separator = ""
+	} else if strings.HasSuffix(existingContent, "\n") {
+		separator = "\n"
+	}
+
+	return existingContent + separator + symphonyContent
+}
+
 // createInstructionsFile creates or updates the instructions file for the specified app
 func createInstructionsFile(app string) error {
 	var instructionsPath string
@@ -339,7 +358,7 @@ func createInstructionsFile(app string) error {
 
 	switch app {
 	case "claude-code":
-		instructionsPath = "claude.md"
+		instructionsPath = "CLAUDE.md"
 		content = getClaudeCodeInstructions()
 		appendMode = true
 	case "cursor":
@@ -367,14 +386,16 @@ func createInstructionsFile(app string) error {
 
 	if fileExists {
 		if appendMode {
-			// Check if Symphony instructions already exist
-			if strings.Contains(string(existingContent), "# Symphony Code Conventions") {
-				fmt.Println(ui.Indent(fmt.Sprintf("Instructions already exist in %s", instructionsPath)))
-				return nil
+			// Update Symphony section (replace if exists, append if not)
+			existingStr := string(existingContent)
+			content = updateSymphonySection(existingStr, content)
+
+			// Determine message based on whether section was replaced or appended
+			if strings.Contains(existingStr, symphonySectionStart) {
+				fmt.Println(ui.Indent(fmt.Sprintf("Updated Symphony section in %s", instructionsPath)))
+			} else {
+				fmt.Println(ui.Indent(fmt.Sprintf("Appended Symphony section to %s", instructionsPath)))
 			}
-			// Append to existing file
-			content = string(existingContent) + "\n\n" + content
-			fmt.Println(ui.Indent(fmt.Sprintf("Appended Symphony instructions to %s", instructionsPath)))
 		} else {
 			// Create backup
 			backupPath := instructionsPath + ".bak"
@@ -416,9 +437,10 @@ func createInstructionsFile(app string) error {
 	return nil
 }
 
-// getClaudeCodeInstructions returns instructions for Claude Code (claude.md)
+// getClaudeCodeInstructions returns instructions for Claude Code (CLAUDE.md)
 func getClaudeCodeInstructions() string {
-	return `# Symphony Code Conventions
+	return symphonySectionStart + `
+# Symphony Code Conventions
 
 **This project uses Symphony MCP for automated code convention management.**
 
@@ -428,13 +450,13 @@ func getClaudeCodeInstructions() string {
 
 **Check MCP Status**: Verify Symphony MCP server is active. If unavailable, warn the user and do not proceed.
 
-**Query Conventions**: Use ` + "`symphony/query_conventions`" + ` to retrieve relevant rules.
+**Query Conventions**: Use ` + "`mcp__symphony__query_conventions`" + ` to retrieve relevant rules.
 - Select appropriate category: security, style, documentation, error_handling, architecture, performance, testing
 - Filter by languages as needed
 
 ### 2. After Writing Code
 
-**Validate Changes**: Always run ` + "`symphony/validate_code`" + ` to check all changes against project conventions.
+**Validate Changes**: Always run ` + "`mcp__symphony__validate_code`" + ` to check all changes against project conventions.
 
 **Fix Violations**: Address any issues found before committing.
 
@@ -446,11 +468,7 @@ func getClaudeCodeInstructions() string {
 4. Validate with Symphony
 5. Fix violations
 6. Commit
-
----
-
-*Auto-generated by Symphony*
-`
+` + symphonySectionEnd + "\n"
 }
 
 // getCursorInstructions returns instructions for Cursor (.cursor/rules/symphony.mdc)
@@ -526,7 +544,8 @@ Auto-generated by Symphony
 
 // getClineInstructions returns instructions for Cline (.clinerules)
 func getClineInstructions() string {
-	return `# Symphony Code Conventions
+	return symphonySectionStart + `
+# Symphony Code Conventions
 
 This project uses Symphony MCP for automated code convention management.
 
@@ -545,8 +564,5 @@ This project uses Symphony MCP for automated code convention management.
 
 ## Summary
 Always: Check MCP → Query Conventions → Write Code → Validate → Fix → Commit
-
----
-Auto-generated by Symphony
-`
+` + symphonySectionEnd + "\n"
 }
