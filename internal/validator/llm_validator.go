@@ -4,9 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"runtime"
 	"strings"
-	"sync"
 
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
@@ -33,102 +31,16 @@ type ValidationResult struct {
 // This validator is specifically for Git diff validation.
 // For regular file validation, use Validator which orchestrates all engines including LLM.
 type llmValidator struct {
-	provider  llm.Provider
-	policy    *schema.CodePolicy
-	validator *Validator
+	provider llm.Provider
+	policy   *schema.CodePolicy
 }
 
 // newLLMValidator creates a new LLM validator
 func newLLMValidator(provider llm.Provider, policy *schema.CodePolicy) *llmValidator {
 	return &llmValidator{
-		provider:  provider,
-		policy:    policy,
-		validator: NewValidator(policy, false), // Use main validator for orchestration
+		provider: provider,
+		policy:   policy,
 	}
-}
-
-// Validate validates git changes against LLM-based rules.
-// This method is for diff-based validation (pre-commit hooks, PR validation).
-// For regular file validation, use validator.Validate() which orchestrates all engines.
-// Concurrency is limited to CPU count to prevent CPU spike.
-func (v *llmValidator) Validate(ctx context.Context, changes []git.Change) (*ValidationResult, error) {
-	result := &ValidationResult{
-		Violations: make([]Violation, 0),
-	}
-
-	// Filter rules that use llm-validator engine
-	llmRules := v.filterLLMRules()
-	if len(llmRules) == 0 {
-		return result, nil
-	}
-
-	// Check each change against LLM rules using goroutines for parallel processing
-	// Limit concurrency to prevent resource exhaustion
-	// Use CPU/4, minimum 2, maximum 4 to balance performance and stability
-	var wg sync.WaitGroup
-	var mu sync.Mutex
-
-	maxConcurrent := runtime.NumCPU() / 4
-	if maxConcurrent < 2 {
-		maxConcurrent = 2
-	}
-	if maxConcurrent > 4 {
-		maxConcurrent = 4
-	}
-	sem := make(chan struct{}, maxConcurrent)
-
-	for _, change := range changes {
-		if change.Status == "D" {
-			continue // Skip deleted files
-		}
-
-		addedLines := git.ExtractAddedLines(change.Diff)
-		// If no git diff format detected, treat entire diff as code to validate
-		if len(addedLines) == 0 && strings.TrimSpace(change.Diff) != "" {
-			addedLines = strings.Split(change.Diff, "\n")
-		}
-
-		if len(addedLines) == 0 {
-			continue
-		}
-
-		// Validate against each LLM rule in parallel with concurrency limit
-		for _, rule := range llmRules {
-			mu.Lock()
-			result.Checked++
-			mu.Unlock()
-
-			wg.Add(1)
-			go func(ch git.Change, lines []string, r schema.PolicyRule) {
-				defer wg.Done()
-
-				// Acquire semaphore
-				sem <- struct{}{}
-				defer func() { <-sem }()
-
-				violation, err := v.checkRule(ctx, ch, lines, r)
-				if err != nil {
-					// Log error but continue
-					fmt.Printf("Warning: failed to check rule %s: %v\n", r.ID, err)
-					return
-				}
-
-				mu.Lock()
-				defer mu.Unlock()
-				if violation != nil {
-					result.Failed++
-					result.Violations = append(result.Violations, *violation)
-				} else {
-					result.Passed++
-				}
-			}(change, addedLines, rule)
-		}
-	}
-
-	// Wait for all goroutines to complete
-	wg.Wait()
-
-	return result, nil
 }
 
 // filterLLMRules filters rules that use llm-validator engine
