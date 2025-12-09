@@ -5,11 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"strings"
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/config"
-	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/ui"
@@ -19,7 +17,6 @@ import (
 
 var (
 	convertInputFile string
-	convertTargets   []string
 	convertOutputDir string
 )
 
@@ -29,36 +26,20 @@ var convertCmd = &cobra.Command{
 	Long: `Convert natural language policies (Schema A) written by users
 into linter-specific configurations and internal validation schema (Schema B).
 
-Supported linters are dynamically determined from registered adapters.
-Uses OpenAI API to intelligently analyze natural language rules and
-map them to appropriate linter rules.`,
-	Example: `  # Convert to all supported linters (outputs to <git-root>/.sym)
-  sym convert -i user-policy.json --targets all
+The conversion uses language-based routing with LLM inference to determine
+which linters apply to each rule. Supported linters include ESLint, Prettier,
+Pylint, TSC, Checkstyle, and PMD.`,
+	Example: `  # Convert policy (outputs to .sym directory)
+  sym convert -i user-policy.json
 
-  # Convert for specific linter
-  sym convert -i user-policy.json --targets eslint
-
-  # Convert for Java with specific model
-  sym convert -i user-policy.json --targets checkstyle,pmd
-
-  # Use custom output directory
-  sym convert -i user-policy.json --targets all --output-dir ./custom-dir`,
+  # Convert with custom output directory
+  sym convert -i user-policy.json -o ./custom-dir`,
 	RunE: runConvert,
 }
 
 func init() {
-	convertCmd.Flags().StringVarP(&convertInputFile, "input", "i", "", "input user policy file (default: from .sym/.env POLICY_PATH)")
-	convertCmd.Flags().StringSliceVar(&convertTargets, "targets", []string{}, buildTargetsDescription())
-	convertCmd.Flags().StringVar(&convertOutputDir, "output-dir", "", "output directory for linter configs (default: same as input file directory)")
-}
-
-// buildTargetsDescription dynamically builds the --targets flag description
-func buildTargetsDescription() string {
-	tools := linter.Global().GetAllToolNames()
-	if len(tools) == 0 {
-		return "target linters (or 'all')"
-	}
-	return fmt.Sprintf("target linters (%s or 'all')", strings.Join(tools, ","))
+	convertCmd.Flags().StringVarP(&convertInputFile, "input", "i", "", "input user policy file (default: from .sym/config.json)")
+	convertCmd.Flags().StringVarP(&convertOutputDir, "output-dir", "o", "", "output directory for linter configs (default: .sym)")
 }
 
 func runConvert(cmd *cobra.Command, args []string) error {
