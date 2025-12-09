@@ -8,7 +8,6 @@ import (
 )
 
 // verbose is a global flag for verbose output
-// Used by convert and validate commands
 var verbose bool
 
 var rootCmd = &cobra.Command{

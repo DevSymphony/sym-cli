@@ -6,7 +6,6 @@ import (
 
 	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/policy"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -50,7 +49,7 @@ func init() {
 func runPolicyPath(cmd *cobra.Command, args []string) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to load config: %v", err))
+		printError(fmt.Sprintf("Failed to load config: %v", err))
 		os.Exit(1)
 	}
 
@@ -58,11 +57,11 @@ func runPolicyPath(cmd *cobra.Command, args []string) {
 		// Set new path
 		cfg.PolicyPath = policyPathSet
 		if err := config.SaveConfig(cfg); err != nil {
-			ui.PrintError(fmt.Sprintf("Failed to save config: %v", err))
+			printError(fmt.Sprintf("Failed to save config: %v", err))
 			os.Exit(1)
 		}
 
-		ui.PrintOK(fmt.Sprintf("Policy path updated: %s", policyPathSet))
+		printOK(fmt.Sprintf("Policy path updated: %s", policyPathSet))
 	} else {
 		// Show current path
 		policyPath := cfg.PolicyPath
@@ -83,9 +82,9 @@ func runPolicyPath(cmd *cobra.Command, args []string) {
 		if err != nil {
 			fmt.Printf("Error checking file: %v\n", err)
 		} else if exists {
-			ui.PrintOK("Policy file exists")
+			printOK("Policy file exists")
 		} else {
-			ui.PrintWarn("Policy file does not exist")
+			printWarn("Policy file does not exist")
 		}
 	}
 }
@@ -93,7 +92,7 @@ func runPolicyPath(cmd *cobra.Command, args []string) {
 func runPolicyValidate(cmd *cobra.Command, args []string) {
 	cfg, err := config.LoadConfig()
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to load config: %v", err))
+		printError(fmt.Sprintf("Failed to load config: %v", err))
 		os.Exit(1)
 	}
 
@@ -101,16 +100,16 @@ func runPolicyValidate(cmd *cobra.Command, args []string) {
 
 	policyData, err := policy.LoadPolicy(cfg.PolicyPath)
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to load policy: %v", err))
+		printError(fmt.Sprintf("Failed to load policy: %v", err))
 		os.Exit(1)
 	}
 
 	if err := policy.ValidatePolicy(policyData); err != nil {
-		ui.PrintError(fmt.Sprintf("Validation failed: %v", err))
+		printError(fmt.Sprintf("Validation failed: %v", err))
 		os.Exit(1)
 	}
 
-	ui.PrintOK("Policy file is valid")
+	printOK("Policy file is valid")
 	fmt.Printf("  Version: %s\n", policyData.Version)
 	fmt.Printf("  Rules: %d\n", len(policyData.Rules))
 

@@ -6,7 +6,6 @@ import (
 
 	"github.com/DevSymphony/sym-cli/internal/roles"
 	"github.com/DevSymphony/sym-cli/internal/server"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -34,7 +33,7 @@ func runDashboard(cmd *cobra.Command, args []string) {
 	// Check if roles.json exists
 	exists, err := roles.RolesExists()
 	if err != nil || !exists {
-		ui.PrintError("roles.json not found")
+		printError("roles.json not found")
 		fmt.Println("Run 'sym init' to create it")
 		os.Exit(1)
 	}
@@ -42,12 +41,12 @@ func runDashboard(cmd *cobra.Command, args []string) {
 	// Start server
 	srv, err := server.NewServer(dashboardPort)
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to create server: %v", err))
+		printError(fmt.Sprintf("Failed to create server: %v", err))
 		os.Exit(1)
 	}
 
 	if err := srv.Start(); err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to start server: %v", err))
+		printError(fmt.Sprintf("Failed to start server: %v", err))
 		os.Exit(1)
 	}
 }

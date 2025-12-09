@@ -1,15 +1,12 @@
 package cmd
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/DevSymphony/sym-cli/internal/roles"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -42,8 +39,8 @@ func runMyRole(cmd *cobra.Command, args []string) {
 			output := map[string]string{"error": "roles.json not found"}
 			_ = json.NewEncoder(os.Stdout).Encode(output)
 		} else {
-			ui.PrintError("roles.json not found")
-			fmt.Println(ui.Indent("Run 'sym init' first"))
+			printError("roles.json not found")
+			fmt.Println(indent("Run 'sym init' first"))
 		}
 		os.Exit(1)
 	}
@@ -57,7 +54,11 @@ func runMyRole(cmd *cobra.Command, args []string) {
 	// Get current role
 	role, err := roles.GetCurrentRole()
 	if err != nil {
-		handleError("Failed to get current role", err, myRoleJSON)
+		if myRoleJSON {
+			_ = json.NewEncoder(os.Stdout).Encode(map[string]string{"error": fmt.Sprintf("Failed to get current role: %v", err)})
+		} else {
+			printError(fmt.Sprintf("Failed to get current role: %v", err))
+		}
 		os.Exit(1)
 	}
 
@@ -68,70 +69,54 @@ func runMyRole(cmd *cobra.Command, args []string) {
 		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
 		if role == "" {
-			ui.PrintWarn("No role selected")
-			fmt.Println(ui.Indent("Run 'sym my-role --select' to select a role"))
+			printWarn("No role selected")
+			fmt.Println(indent("Run 'sym my-role --select' to select a role"))
 		} else {
 			fmt.Printf("Current role: %s\n", role)
-			fmt.Println(ui.Indent("Run 'sym my-role --select' to change"))
+			fmt.Println(indent("Run 'sym my-role --select' to change"))
 		}
 	}
 }
 
 func selectNewRole() {
+	// Use custom template to hide "type to filter" and typed characters
+	restore := useSelectTemplateNoFilter()
+	defer restore()
+
 	availableRoles, err := roles.GetAvailableRoles()
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to get available roles: %v", err))
+		printError(fmt.Sprintf("Failed to get available roles: %v", err))
 		os.Exit(1)
 	}
 
 	if len(availableRoles) == 0 {
-		ui.PrintError("No roles defined in roles.json")
+		printError("No roles defined in roles.json")
 		os.Exit(1)
 	}
 
 	currentRole, _ := roles.GetCurrentRole()
 
-	ui.PrintTitle("Role", "Select your role")
 	fmt.Println()
-	for i, role := range availableRoles {
-		marker := "  "
-		if role == currentRole {
-			marker = "→ "
-		}
-		fmt.Printf("%s%d. %s\n", marker, i+1, role)
+	printTitle("Role", "Select your role")
+	fmt.Println()
+
+	// Use survey.Select for consistent UI
+	var selectedRole string
+	prompt := &survey.Select{
+		Message: "Select role:",
+		Options: availableRoles,
+		Default: currentRole,
 	}
-	fmt.Println()
 
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter number (1-" + strconv.Itoa(len(availableRoles)) + "): ")
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input == "" {
-		ui.PrintWarn("No selection made")
+	if err := survey.AskOne(prompt, &selectedRole); err != nil {
+		printWarn("No selection made")
 		return
 	}
 
-	num, err := strconv.Atoi(input)
-	if err != nil || num < 1 || num > len(availableRoles) {
-		ui.PrintError("Invalid selection")
-		os.Exit(1)
-	}
-
-	selectedRole := availableRoles[num-1]
 	if err := roles.SetCurrentRole(selectedRole); err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to save role: %v", err))
+		printError(fmt.Sprintf("Failed to save role: %v", err))
 		os.Exit(1)
 	}
 
-	ui.PrintOK(fmt.Sprintf("Your role has been changed to: %s", selectedRole))
-}
-
-func handleError(msg string, err error, jsonMode bool) {
-	if jsonMode {
-		output := map[string]string{"error": fmt.Sprintf("%s: %v", msg, err)}
-		_ = json.NewEncoder(os.Stdout).Encode(output)
-	} else {
-		ui.PrintError(fmt.Sprintf("%s: %v", msg, err))
-	}
+	printOK(fmt.Sprintf("Your role has been changed to: %s", selectedRole))
 }

@@ -9,7 +9,6 @@ import (
 
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/spf13/cobra"
@@ -57,11 +56,11 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	// Load code policy
 	policyPath := validatePolicyFile
 	if policyPath == "" {
-		symDir, err := getSymDir()
+		repoRoot, err := git.GetRepoRoot()
 		if err != nil {
-			return fmt.Errorf("failed to find .sym directory: %w", err)
+			return fmt.Errorf("failed to find git repository: %w", err)
 		}
-		policyPath = filepath.Join(symDir, "code-policy.json")
+		policyPath = filepath.Join(repoRoot, ".sym", "code-policy.json")
 	}
 
 	policyData, err := os.ReadFile(policyPath)
@@ -104,7 +103,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Found %d changed file(s)\n", len(changes))
 
 	// Create unified validator that handles all engines + RBAC
-	v := validator.NewValidator(&policy, true) // verbose=true for CLI
+	v := validator.NewValidator(&policy, verbose)
 	v.SetLLMProvider(llmProvider)
 	defer func() {
 		if err := v.Close(); err != nil {
@@ -136,7 +135,7 @@ func printValidationResult(result *validator.ValidationResult) {
 	fmt.Printf("Failed:  %d\n\n", result.Failed)
 
 	if len(result.Violations) == 0 {
-		ui.PrintOK("All checks passed")
+		printOK("All checks passed")
 		return
 	}
 
