@@ -45,10 +45,8 @@ git/
 | `GetChanges()` | changes.go:18 | 모든 변경 사항 (staged + unstaged + untracked) |
 | `GetStagedChanges()` | changes.go:146 | staged 변경만 |
 | `ExtractAddedLines(diff)` | changes.go:185 | diff에서 추가된 줄 추출 |
-| `GetRepoInfo()` | repo.go:11 | owner/repo 정보 |
-| `GetRepoRoot()` | repo.go:41 | 저장소 루트 경로 |
-| `IsGitRepo()` | repo.go:52 | Git 저장소 여부 |
-| `GetCurrentUser()` | repo.go:59 | Git user.name |
+| `GetRepoRoot()` | repo.go:10 | 저장소 루트 경로 |
+| `GetCurrentUser()` | repo.go:21 | Git user.name |
 
 ### Private API
 
