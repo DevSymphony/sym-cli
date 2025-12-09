@@ -1,6 +1,6 @@
 {
   "name": "@dev-symphony/sym",
-  "version": "0.1.7",
+  "version": "0.1.8",
   "description": "Symphony - LLM-friendly convention linter for AI coding assistants",
   "keywords": [
     "mcp",
