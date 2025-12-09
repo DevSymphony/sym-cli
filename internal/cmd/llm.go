@@ -223,7 +223,7 @@ func promptLLMBackendSetup() {
 
 	if selectedDisplayName == "Skip" {
 		fmt.Println("Skipped LLM configuration")
-		fmt.Println(ui.Indent("Tip: Run 'sym init --setup-llm' to configure later"))
+		fmt.Println(ui.Indent("Tip: Run 'sym llm setup' to configure later"))
 		return
 	}
 
