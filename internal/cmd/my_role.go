@@ -55,7 +55,11 @@ func runMyRole(cmd *cobra.Command, args []string) {
 	// Get current role
 	role, err := roles.GetCurrentRole()
 	if err != nil {
-		handleError("Failed to get current role", err, myRoleJSON)
+		if myRoleJSON {
+			_ = json.NewEncoder(os.Stdout).Encode(map[string]string{"error": fmt.Sprintf("Failed to get current role: %v", err)})
+		} else {
+			ui.PrintError(fmt.Sprintf("Failed to get current role: %v", err))
+		}
 		os.Exit(1)
 	}
 
@@ -116,13 +120,4 @@ func selectNewRole() {
 	}
 
 	ui.PrintOK(fmt.Sprintf("Your role has been changed to: %s", selectedRole))
-}
-
-func handleError(msg string, err error, jsonMode bool) {
-	if jsonMode {
-		output := map[string]string{"error": fmt.Sprintf("%s: %v", msg, err)}
-		_ = json.NewEncoder(os.Stdout).Encode(output)
-	} else {
-		ui.PrintError(fmt.Sprintf("%s: %v", msg, err))
-	}
 }

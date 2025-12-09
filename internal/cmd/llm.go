@@ -301,7 +301,7 @@ func promptAndSaveAPIKey(providerName string) error {
 
 	// Save to .env file
 	envPath := config.GetProjectEnvPath()
-	if err := saveAPIKeyToEnv(envPath, envVarName, apiKey); err != nil {
+	if err := envutil.SaveKeyToEnvFile(envPath, envVarName, apiKey); err != nil {
 		return err
 	}
 
@@ -313,11 +313,6 @@ func promptAndSaveAPIKey(providerName string) error {
 	}
 
 	return nil
-}
-
-// saveAPIKeyToEnv saves the API key to the .env file
-func saveAPIKeyToEnv(envPath, envVarName, apiKey string) error {
-	return envutil.SaveKeyToEnvFile(envPath, envVarName, apiKey)
 }
 
 // ensureGitignore ensures that the given path is in .gitignore
