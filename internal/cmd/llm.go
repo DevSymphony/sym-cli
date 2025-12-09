@@ -12,7 +12,6 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/spf13/cobra"
 )
 
@@ -60,7 +59,7 @@ func init() {
 }
 
 func runLLMStatus(_ *cobra.Command, _ []string) {
-	ui.PrintTitle("LLM", "Provider Status")
+	printTitle("LLM", "Provider Status")
 	fmt.Println()
 
 	// Load config
@@ -95,9 +94,9 @@ func runLLMStatus(_ *cobra.Command, _ []string) {
 	// Try to create provider
 	provider, err := llm.New(cfg)
 	if err != nil {
-		ui.PrintWarn(fmt.Sprintf("Configuration error: %v", err))
+		printWarn(fmt.Sprintf("Configuration error: %v", err))
 	} else {
-		ui.PrintOK(fmt.Sprintf("Active provider: %s", provider.Name()))
+		printOK(fmt.Sprintf("Active provider: %s", provider.Name()))
 	}
 
 	fmt.Println()
@@ -106,7 +105,7 @@ func runLLMStatus(_ *cobra.Command, _ []string) {
 }
 
 func runLLMTest(_ *cobra.Command, _ []string) {
-	ui.PrintTitle("LLM", "Testing Provider Connection")
+	printTitle("LLM", "Testing Provider Connection")
 	fmt.Println()
 
 	// Load config
@@ -115,7 +114,7 @@ func runLLMTest(_ *cobra.Command, _ []string) {
 	// Create provider
 	provider, err := llm.New(cfg)
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to create provider: %v", err))
+		printError(fmt.Sprintf("Failed to create provider: %v", err))
 		fmt.Println()
 		fmt.Println("Please configure a provider:")
 		fmt.Println("  sym llm setup")
@@ -132,16 +131,16 @@ func runLLMTest(_ *cobra.Command, _ []string) {
 	response, err := provider.Execute(ctx, prompt, llm.Text)
 
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Test failed: %v", err))
+		printError(fmt.Sprintf("Test failed: %v", err))
 		return
 	}
 
-	ui.PrintOK("Test successful!")
+	printOK("Test successful!")
 	fmt.Printf("  Response: %s\n", strings.TrimSpace(response))
 }
 
 func runLLMSetup(_ *cobra.Command, _ []string) {
-	ui.PrintTitle("LLM", "Provider Setup Instructions")
+	printTitle("LLM", "Provider Setup Instructions")
 	fmt.Println()
 
 	// Show available providers
@@ -202,8 +201,8 @@ func promptLLMBackendSetup() {
 	defer restore()
 
 	fmt.Println()
-	ui.PrintTitle("LLM", "Configure LLM Provider")
-	fmt.Println(ui.Indent("Symphony uses LLM for policy conversion and code validation"))
+	printTitle("LLM", "Configure LLM Provider")
+	fmt.Println(indent("Symphony uses LLM for policy conversion and code validation"))
 	fmt.Println()
 
 	// Get provider options dynamically from registry
@@ -223,14 +222,14 @@ func promptLLMBackendSetup() {
 
 	if selectedDisplayName == "Skip" {
 		fmt.Println("Skipped LLM configuration")
-		fmt.Println(ui.Indent("Tip: Run 'sym llm setup' to configure later"))
+		fmt.Println(indent("Tip: Run 'sym llm setup' to configure later"))
 		return
 	}
 
 	// Get provider info from registry
 	providerInfo := llm.GetProviderByDisplayName(selectedDisplayName)
 	if providerInfo == nil {
-		ui.PrintError(fmt.Sprintf("Unknown provider: %s", selectedDisplayName))
+		printError(fmt.Sprintf("Unknown provider: %s", selectedDisplayName))
 		return
 	}
 
@@ -240,7 +239,7 @@ func promptLLMBackendSetup() {
 	// Handle API key if required
 	if llm.RequiresAPIKey(providerName) {
 		if err := promptAndSaveAPIKey(providerName); err != nil {
-			ui.PrintError(fmt.Sprintf("Failed to save API key: %v", err))
+			printError(fmt.Sprintf("Failed to save API key: %v", err))
 			return
 		}
 	}
@@ -266,11 +265,11 @@ func promptLLMBackendSetup() {
 
 	// Save to config.json
 	if err := config.UpdateProjectConfigLLM(providerName, modelID); err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to save config: %v", err))
+		printError(fmt.Sprintf("Failed to save config: %v", err))
 		return
 	}
 
-	ui.PrintOK(fmt.Sprintf("LLM provider saved: %s (%s)", selectedDisplayName, modelID))
+	printOK(fmt.Sprintf("LLM provider saved: %s (%s)", selectedDisplayName, modelID))
 }
 
 // promptAndSaveAPIKey prompts for API key and saves to .env
@@ -291,7 +290,7 @@ func promptAndSaveAPIKey(providerName string) error {
 
 	// Validate API key using registry
 	if err := llm.ValidateAPIKey(providerName, apiKey); err != nil {
-		ui.PrintWarn(err.Error())
+		printWarn(err.Error())
 		// Continue anyway - it's a warning, not a blocking error
 		// But if the key is empty, we should return the error
 		if apiKey == "" {
@@ -305,11 +304,11 @@ func promptAndSaveAPIKey(providerName string) error {
 		return err
 	}
 
-	ui.PrintOK("API key saved to .sym/.env (gitignored)")
+	printOK("API key saved to .sym/.env (gitignored)")
 
 	// Ensure .env is in .gitignore
 	if err := ensureGitignore(".sym/.env"); err != nil {
-		ui.PrintWarn(fmt.Sprintf("Failed to update .gitignore: %v", err))
+		printWarn(fmt.Sprintf("Failed to update .gitignore: %v", err))
 	}
 
 	return nil

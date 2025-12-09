@@ -10,7 +10,6 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 
 	"github.com/spf13/cobra"
@@ -49,7 +48,7 @@ func runInit(cmd *cobra.Command, args []string) {
 	// Check if .sym directory already exists
 	repoRoot, err := git.GetRepoRoot()
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to find git repository: %v", err))
+		printError(fmt.Sprintf("Failed to find git repository: %v", err))
 		os.Exit(1)
 	}
 	symDir := filepath.Join(repoRoot, ".sym")
@@ -58,12 +57,12 @@ func runInit(cmd *cobra.Command, args []string) {
 	if _, err := os.Stat(symDir); err == nil {
 		symDirExists = true
 	} else if !os.IsNotExist(err) {
-		ui.PrintError(fmt.Sprintf("Failed to check .sym directory: %v", err))
+		printError(fmt.Sprintf("Failed to check .sym directory: %v", err))
 		os.Exit(1)
 	}
 
 	if symDirExists && !initForce {
-		ui.PrintWarn(".sym directory already exists")
+		printWarn(".sym directory already exists")
 		fmt.Println("Use --force flag to reinitialize")
 		os.Exit(1)
 	}
@@ -76,34 +75,34 @@ func runInit(cmd *cobra.Command, args []string) {
 	}
 
 	if err := roles.SaveRoles(newRoles); err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to create roles.json: %v", err))
+		printError(fmt.Sprintf("Failed to create roles.json: %v", err))
 		os.Exit(1)
 	}
 
 	rolesPath, _ := roles.GetRolesPath()
-	ui.PrintOK("roles.json created")
-	fmt.Println(ui.Indent(fmt.Sprintf("Location: %s", rolesPath)))
+	printOK("roles.json created")
+	fmt.Println(indent(fmt.Sprintf("Location: %s", rolesPath)))
 
 	// Create default policy file with RBAC roles
 	if err := createDefaultPolicy(); err != nil {
-		ui.PrintWarn(fmt.Sprintf("Failed to create policy file: %v", err))
-		fmt.Println(ui.Indent("You can manually create it later using the dashboard"))
+		printWarn(fmt.Sprintf("Failed to create policy file: %v", err))
+		fmt.Println(indent("You can manually create it later using the dashboard"))
 	} else {
-		ui.PrintOK("user-policy.json created with default RBAC roles")
+		printOK("user-policy.json created with default RBAC roles")
 	}
 
 	// Create .sym/config.json with default settings
 	if err := initializeConfigFile(); err != nil {
-		ui.PrintWarn(fmt.Sprintf("Failed to create config.json: %v", err))
+		printWarn(fmt.Sprintf("Failed to create config.json: %v", err))
 	} else {
-		ui.PrintOK("config.json created")
+		printOK("config.json created")
 	}
 
 	// Set default role to admin during initialization
 	if err := roles.SetCurrentRole("admin"); err != nil {
-		ui.PrintWarn(fmt.Sprintf("Failed to save role selection: %v", err))
+		printWarn(fmt.Sprintf("Failed to save role selection: %v", err))
 	} else {
-		ui.PrintOK("Your role has been set to: admin")
+		printOK("Your role has been set to: admin")
 	}
 
 	// MCP registration prompt
@@ -119,17 +118,17 @@ func runInit(cmd *cobra.Command, args []string) {
 	// Clean up generated files at the end (only when --force is set)
 	if initForce {
 		if err := removeExistingCodePolicy(); err != nil {
-			ui.PrintWarn(fmt.Sprintf("Failed to remove generated files: %v", err))
+			printWarn(fmt.Sprintf("Failed to remove generated files: %v", err))
 		}
 	}
 
 	// Show completion message
 	fmt.Println()
-	ui.PrintDone("Initialization complete")
+	printDone("Initialization complete")
 	fmt.Println()
 	fmt.Println("Next steps:")
-	fmt.Println(ui.Indent("Run 'sym dashboard' to manage roles and policies"))
-	fmt.Println(ui.Indent("Commit .sym/ folder to share with your team"))
+	fmt.Println(indent("Run 'sym dashboard' to manage roles and policies"))
+	fmt.Println(indent("Commit .sym/ folder to share with your team"))
 }
 
 // createDefaultPolicy creates a default policy file with RBAC roles
@@ -212,9 +211,9 @@ func removeExistingCodePolicy() error {
 			filePath := filepath.Join(symDir, filename)
 			if _, err := os.Stat(filePath); err == nil {
 				if err := os.Remove(filePath); err != nil {
-					ui.PrintWarn(fmt.Sprintf("Failed to remove %s: %v", filePath, err))
+					printWarn(fmt.Sprintf("Failed to remove %s: %v", filePath, err))
 				} else {
-					fmt.Println(ui.Indent(fmt.Sprintf("Removed existing %s", filePath)))
+					fmt.Println(indent(fmt.Sprintf("Removed existing %s", filePath)))
 				}
 			}
 		}
@@ -226,7 +225,7 @@ func removeExistingCodePolicy() error {
 		if err := os.Remove(legacyPath); err != nil {
 			return fmt.Errorf("failed to remove %s: %w", legacyPath, err)
 		}
-		fmt.Println(ui.Indent(fmt.Sprintf("Removed existing %s", legacyPath)))
+		fmt.Println(indent(fmt.Sprintf("Removed existing %s", legacyPath)))
 	}
 
 	return nil

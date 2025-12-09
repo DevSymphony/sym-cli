@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 )
 
 // Section markers for Symphony instructions in append-mode files (CLAUDE.md)
@@ -65,8 +64,8 @@ var mcpToolToApp = map[string]string{
 func promptMCPRegistration() {
 	// Check if npx is available
 	if !checkNpxAvailable() {
-		ui.PrintWarn("'npx' not found. MCP features require Node.js.")
-		fmt.Println(ui.Indent("Download: https://nodejs.org/"))
+		printWarn("'npx' not found. MCP features require Node.js.")
+		fmt.Println(indent("Download: https://nodejs.org/"))
 
 		var continueAnyway bool
 		prompt := &survey.Confirm{
@@ -84,9 +83,9 @@ func promptMCPRegistration() {
 	defer restore()
 
 	fmt.Println()
-	ui.PrintTitle("MCP", "Register Symphony as an MCP server")
-	fmt.Println(ui.Indent("Symphony MCP provides code convention tools for AI assistants"))
-	fmt.Println(ui.Indent("(Use arrows to move, space to select, enter to submit)"))
+	printTitle("MCP", "Register Symphony as an MCP server")
+	fmt.Println(indent("Symphony MCP provides code convention tools for AI assistants"))
+	fmt.Println(indent("(Use arrows to move, space to select, enter to submit)"))
 	fmt.Println()
 
 	// Multi-select prompt for tools
@@ -104,7 +103,7 @@ func promptMCPRegistration() {
 	// If no tools selected, skip
 	if len(selectedTools) == 0 {
 		fmt.Println("Skipped MCP registration")
-		fmt.Println(ui.Indent("Tip: Run 'sym mcp register' to register MCP later"))
+		fmt.Println(indent("Tip: Run 'sym mcp register' to register MCP later"))
 		return
 	}
 
@@ -124,11 +123,11 @@ func promptMCPRegistration() {
 	// Print results
 	fmt.Println()
 	if len(registered) > 0 {
-		ui.PrintOK(fmt.Sprintf("Registered: %s", strings.Join(registered, ", ")))
-		fmt.Println(ui.Indent("Reload/restart the tools to use Symphony"))
+		printOK(fmt.Sprintf("Registered: %s", strings.Join(registered, ", ")))
+		fmt.Println(indent("Reload/restart the tools to use Symphony"))
 	}
 	for _, f := range failed {
-		ui.PrintError(fmt.Sprintf("Failed to register %s", f))
+		printError(fmt.Sprintf("Failed to register %s", f))
 	}
 }
 
@@ -137,13 +136,13 @@ func registerMCP(app string) error {
 	configPath := getMCPConfigPath(app)
 
 	if configPath == "" {
-		fmt.Println(ui.Warn(fmt.Sprintf("%s config path could not be determined", getAppDisplayName(app))))
+		fmt.Println(warn(fmt.Sprintf("%s config path could not be determined", getAppDisplayName(app))))
 		return fmt.Errorf("config path not determined")
 	}
 
 	// All supported apps are now project-specific
-	fmt.Println(ui.Indent(fmt.Sprintf("Configuring %s", getAppDisplayName(app))))
-	fmt.Println(ui.Indent(fmt.Sprintf("Location: %s", configPath)))
+	fmt.Println(indent(fmt.Sprintf("Configuring %s", getAppDisplayName(app))))
+	fmt.Println(indent(fmt.Sprintf("Location: %s", configPath)))
 
 	// Create config directory if it doesn't exist
 	configDir := filepath.Dir(configPath)
@@ -166,15 +165,15 @@ func registerMCP(app string) error {
 				// Invalid JSON, create backup and start fresh
 				backupPath := configPath + ".bak"
 				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
-					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
+					fmt.Println(indent(fmt.Sprintf("Failed to create backup: %v", err)))
 				} else {
-					fmt.Println(ui.Indent(fmt.Sprintf("Invalid JSON, backup created: %s", filepath.Base(backupPath))))
+					fmt.Println(indent(fmt.Sprintf("Invalid JSON, backup created: %s", filepath.Base(backupPath))))
 				}
 				vscodeConfig = VSCodeMCPConfig{}
 			}
 			// Valid JSON: no backup needed, just update symphony entry
 		} else {
-			fmt.Println(ui.Indent("Creating new configuration file"))
+			fmt.Println(indent("Creating new configuration file"))
 		}
 
 		// Initialize Servers if nil
@@ -203,15 +202,15 @@ func registerMCP(app string) error {
 				// Invalid JSON, create backup and start fresh
 				backupPath := configPath + ".bak"
 				if err := os.WriteFile(backupPath, existingData, 0644); err != nil {
-					fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
+					fmt.Println(indent(fmt.Sprintf("Failed to create backup: %v", err)))
 				} else {
-					fmt.Println(ui.Indent(fmt.Sprintf("Invalid JSON, backup created: %s", filepath.Base(backupPath))))
+					fmt.Println(indent(fmt.Sprintf("Invalid JSON, backup created: %s", filepath.Base(backupPath))))
 				}
 				config = MCPRegistrationConfig{}
 			}
 			// Valid JSON: no backup needed, just update symphony entry
 		} else {
-			fmt.Println(ui.Indent("Creating new configuration file"))
+			fmt.Println(indent("Creating new configuration file"))
 		}
 
 		// Initialize MCPServers if nil
@@ -244,11 +243,11 @@ func registerMCP(app string) error {
 		return fmt.Errorf("failed to write config: %w", err)
 	}
 
-	fmt.Println(ui.Indent("Symphony MCP server registered"))
+	fmt.Println(indent("Symphony MCP server registered"))
 
 	// Create instructions file for all supported apps
 	if err := createInstructionsFile(app); err != nil {
-		fmt.Println(ui.Indent(fmt.Sprintf("Failed to create instructions file: %v", err)))
+		fmt.Println(indent(fmt.Sprintf("Failed to create instructions file: %v", err)))
 	}
 
 	return nil
@@ -363,16 +362,16 @@ func createInstructionsFile(app string) error {
 		content = updateSymphonySection(existingStr, content)
 
 		if strings.Contains(existingStr, symphonySectionStart) {
-			fmt.Println(ui.Indent(fmt.Sprintf("Updated Symphony section in %s", instructionsPath)))
+			fmt.Println(indent(fmt.Sprintf("Updated Symphony section in %s", instructionsPath)))
 		} else {
-			fmt.Println(ui.Indent(fmt.Sprintf("Appended Symphony section to %s", instructionsPath)))
+			fmt.Println(indent(fmt.Sprintf("Appended Symphony section to %s", instructionsPath)))
 		}
 	} else if fileExists {
 		// Symphony-dedicated file: just overwrite (no backup needed)
-		fmt.Println(ui.Indent(fmt.Sprintf("Updated %s", instructionsPath)))
+		fmt.Println(indent(fmt.Sprintf("Updated %s", instructionsPath)))
 	} else {
 		// New file
-		fmt.Println(ui.Indent(fmt.Sprintf("Created %s", instructionsPath)))
+		fmt.Println(indent(fmt.Sprintf("Created %s", instructionsPath)))
 	}
 
 	// Write file
@@ -383,9 +382,9 @@ func createInstructionsFile(app string) error {
 	// Add VS Code instructions directory to .gitignore
 	if app == "vscode" {
 		if err := ensureGitignore(".github/instructions/"); err != nil {
-			fmt.Println(ui.Indent(fmt.Sprintf("Warning: Failed to update .gitignore: %v", err)))
+			fmt.Println(indent(fmt.Sprintf("Warning: Failed to update .gitignore: %v", err)))
 		} else {
-			fmt.Println(ui.Indent("Added .github/instructions/ to .gitignore"))
+			fmt.Println(indent("Added .github/instructions/ to .gitignore"))
 		}
 	}
 

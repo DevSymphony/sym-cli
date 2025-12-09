@@ -9,7 +9,6 @@ import (
 
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/spf13/cobra"
@@ -136,7 +135,7 @@ func printValidationResult(result *validator.ValidationResult) {
 	fmt.Printf("Failed:  %d\n\n", result.Failed)
 
 	if len(result.Violations) == 0 {
-		ui.PrintOK("All checks passed")
+		printOK("All checks passed")
 		return
 	}
 

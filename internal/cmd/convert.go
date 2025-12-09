@@ -10,7 +10,6 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/spf13/cobra"
 )
@@ -95,7 +94,7 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 	defer cancel()
 
-	ui.PrintTitle("Convert", "Language-based routing with parallel LLM inference")
+	printTitle("Convert", "Language-based routing with parallel LLM inference")
 	fmt.Printf("Output: %s\n\n", convertOutputDir)
 
 	// Convert
@@ -106,7 +105,7 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 
 	// Print results
 	fmt.Println()
-	ui.PrintOK("Conversion completed successfully")
+	printOK("Conversion completed successfully")
 	fmt.Printf("Generated %d configuration file(s):\n", len(result.GeneratedFiles))
 	for _, file := range result.GeneratedFiles {
 		fmt.Printf("  - %s\n", file)
@@ -114,7 +113,7 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 
 	if len(result.Errors) > 0 {
 		fmt.Println()
-		ui.PrintWarn(fmt.Sprintf("Errors (%d):", len(result.Errors)))
+		printWarn(fmt.Sprintf("Errors (%d):", len(result.Errors)))
 		for linter, err := range result.Errors {
 			fmt.Printf("  - %s: %v\n", linter, err)
 		}
@@ -122,7 +121,7 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 
 	if len(result.Warnings) > 0 {
 		fmt.Println()
-		ui.PrintWarn(fmt.Sprintf("Warnings (%d):", len(result.Warnings)))
+		printWarn(fmt.Sprintf("Warnings (%d):", len(result.Warnings)))
 		for _, warning := range result.Warnings {
 			fmt.Printf("  - %s\n", warning)
 		}

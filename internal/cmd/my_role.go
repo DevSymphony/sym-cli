@@ -7,7 +7,6 @@ import (
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/DevSymphony/sym-cli/internal/roles"
-	"github.com/DevSymphony/sym-cli/internal/ui"
 
 	"github.com/spf13/cobra"
 )
@@ -40,8 +39,8 @@ func runMyRole(cmd *cobra.Command, args []string) {
 			output := map[string]string{"error": "roles.json not found"}
 			_ = json.NewEncoder(os.Stdout).Encode(output)
 		} else {
-			ui.PrintError("roles.json not found")
-			fmt.Println(ui.Indent("Run 'sym init' first"))
+			printError("roles.json not found")
+			fmt.Println(indent("Run 'sym init' first"))
 		}
 		os.Exit(1)
 	}
@@ -58,7 +57,7 @@ func runMyRole(cmd *cobra.Command, args []string) {
 		if myRoleJSON {
 			_ = json.NewEncoder(os.Stdout).Encode(map[string]string{"error": fmt.Sprintf("Failed to get current role: %v", err)})
 		} else {
-			ui.PrintError(fmt.Sprintf("Failed to get current role: %v", err))
+			printError(fmt.Sprintf("Failed to get current role: %v", err))
 		}
 		os.Exit(1)
 	}
@@ -70,11 +69,11 @@ func runMyRole(cmd *cobra.Command, args []string) {
 		_ = json.NewEncoder(os.Stdout).Encode(output)
 	} else {
 		if role == "" {
-			ui.PrintWarn("No role selected")
-			fmt.Println(ui.Indent("Run 'sym my-role --select' to select a role"))
+			printWarn("No role selected")
+			fmt.Println(indent("Run 'sym my-role --select' to select a role"))
 		} else {
 			fmt.Printf("Current role: %s\n", role)
-			fmt.Println(ui.Indent("Run 'sym my-role --select' to change"))
+			fmt.Println(indent("Run 'sym my-role --select' to change"))
 		}
 	}
 }
@@ -86,19 +85,19 @@ func selectNewRole() {
 
 	availableRoles, err := roles.GetAvailableRoles()
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to get available roles: %v", err))
+		printError(fmt.Sprintf("Failed to get available roles: %v", err))
 		os.Exit(1)
 	}
 
 	if len(availableRoles) == 0 {
-		ui.PrintError("No roles defined in roles.json")
+		printError("No roles defined in roles.json")
 		os.Exit(1)
 	}
 
 	currentRole, _ := roles.GetCurrentRole()
 
 	fmt.Println()
-	ui.PrintTitle("Role", "Select your role")
+	printTitle("Role", "Select your role")
 	fmt.Println()
 
 	// Use survey.Select for consistent UI
@@ -110,14 +109,14 @@ func selectNewRole() {
 	}
 
 	if err := survey.AskOne(prompt, &selectedRole); err != nil {
-		ui.PrintWarn("No selection made")
+		printWarn("No selection made")
 		return
 	}
 
 	if err := roles.SetCurrentRole(selectedRole); err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to save role: %v", err))
+		printError(fmt.Sprintf("Failed to save role: %v", err))
 		os.Exit(1)
 	}
 
-	ui.PrintOK(fmt.Sprintf("Your role has been changed to: %s", selectedRole))
+	printOK(fmt.Sprintf("Your role has been changed to: %s", selectedRole))
 }
