@@ -57,11 +57,11 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	// Load code policy
 	policyPath := validatePolicyFile
 	if policyPath == "" {
-		symDir, err := getSymDir()
+		repoRoot, err := git.GetRepoRoot()
 		if err != nil {
-			return fmt.Errorf("failed to find .sym directory: %w", err)
+			return fmt.Errorf("failed to find git repository: %w", err)
 		}
-		policyPath = filepath.Join(symDir, "code-policy.json")
+		policyPath = filepath.Join(repoRoot, ".sym", "code-policy.json")
 	}
 
 	policyData, err := os.ReadFile(policyPath)
@@ -104,7 +104,7 @@ func runValidate(cmd *cobra.Command, args []string) error {
 	fmt.Printf("Found %d changed file(s)\n", len(changes))
 
 	// Create unified validator that handles all engines + RBAC
-	v := validator.NewValidator(&policy, true) // verbose=true for CLI
+	v := validator.NewValidator(&policy, verbose)
 	v.SetLLMProvider(llmProvider)
 	defer func() {
 		if err := v.Close(); err != nil {

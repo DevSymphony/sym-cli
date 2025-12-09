@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 
 	"github.com/DevSymphony/sym-cli/internal/config"
+	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
@@ -46,11 +47,12 @@ func init() {
 
 func runInit(cmd *cobra.Command, args []string) {
 	// Check if .sym directory already exists
-	symDir, err := getSymDir()
+	repoRoot, err := git.GetRepoRoot()
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to determine .sym directory: %v", err))
+		ui.PrintError(fmt.Sprintf("Failed to find git repository: %v", err))
 		os.Exit(1)
 	}
+	symDir := filepath.Join(repoRoot, ".sym")
 
 	symDirExists := false
 	if _, err := os.Stat(symDir); err == nil {
@@ -203,8 +205,9 @@ func removeExistingCodePolicy() error {
 	convertGeneratedFiles = append(convertGeneratedFiles, linter.Global().GetAllConfigFiles()...)
 
 	// Check and remove from .sym directory
-	symDir, err := getSymDir()
+	repoRoot, err := git.GetRepoRoot()
 	if err == nil {
+		symDir := filepath.Join(repoRoot, ".sym")
 		for _, filename := range convertGeneratedFiles {
 			filePath := filepath.Join(symDir, filename)
 			if _, err := os.Stat(filePath); err == nil {

@@ -81,6 +81,7 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 
 	// Create LLM provider
 	cfg := llm.LoadConfig()
+	cfg.Verbose = verbose
 	llmProvider, err := llm.New(cfg)
 	if err != nil {
 		return fmt.Errorf("no available LLM backend for convert: %w\nTip: configure provider in .sym/config.json", err)
