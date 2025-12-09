@@ -3,7 +3,7 @@ package llm
 import (
 	"fmt"
 
-	"github.com/DevSymphony/sym-cli/internal/config"
+	"github.com/DevSymphony/sym-cli/internal/util/config"
 )
 
 // Validate checks if the configuration is valid.

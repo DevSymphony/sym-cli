@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm"
+	"github.com/DevSymphony/sym-cli/internal/util/env"
 )
 
 const (
@@ -36,7 +36,7 @@ func init() {
 		Name:         providerName,
 		DisplayName:  displayName,
 		DefaultModel: defaultModel,
-		Available:    envutil.GetAPIKey("OPENAI_API_KEY") != "",
+		Available:    env.GetAPIKey("OPENAI_API_KEY") != "",
 		Path:         "",
 		Models: []llm.ModelInfo{
 			{ID: "gpt-4o-mini", DisplayName: "gpt-4o-mini", Description: "Fast and efficient", Recommended: true},
@@ -67,7 +67,7 @@ var _ llm.RawProvider = (*Provider)(nil)
 // Returns ErrAPIKeyRequired if API key is not provided.
 func newProvider(cfg llm.Config) (llm.RawProvider, error) {
 	// Provider handles its own API key loading from env vars and .sym/.env
-	apiKey := envutil.GetAPIKey("OPENAI_API_KEY")
+	apiKey := env.GetAPIKey("OPENAI_API_KEY")
 	if apiKey == "" {
 		return nil, ErrAPIKeyRequired
 	}

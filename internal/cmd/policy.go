@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/policy"
+	"github.com/DevSymphony/sym-cli/internal/util/config"
 
 	"github.com/spf13/cobra"
 )
