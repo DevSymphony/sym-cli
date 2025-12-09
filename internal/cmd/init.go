@@ -18,65 +18,52 @@ import (
 var initCmd = &cobra.Command{
 	Use:   "init",
 	Short: "Initialize Symphony for the current directory",
-	Long: `Create a .sym directory with roles.json and user-policy.json files.
+	Long: `Initialize Symphony for the current project.
 
 This command:
   1. Creates .sym/roles.json with default roles (admin, developer, viewer)
   2. Creates .sym/user-policy.json with default RBAC configuration
-  3. Sets your role to admin (can be changed later via dashboard)
-  4. Optionally registers MCP server for AI tools`,
+  3. Creates .sym/config.json with default settings
+  4. Sets your role to admin (can be changed later via dashboard)
+  5. Optionally registers MCP server for AI tools
+  6. Optionally configures LLM backend
+
+Use --force to reinitialize an existing Symphony project.`,
 	Run: runInit,
 }
 
 var (
 	initForce       bool
 	skipMCPRegister bool
-	registerMCPOnly bool
 	skipLLMSetup    bool
-	setupLLMOnly    bool
 )
 
 func init() {
-	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing roles.json")
+	initCmd.Flags().BoolVarP(&initForce, "force", "f", false, "Overwrite existing Symphony configuration")
 	initCmd.Flags().BoolVar(&skipMCPRegister, "skip-mcp", false, "Skip MCP server registration prompt")
-	initCmd.Flags().BoolVar(&registerMCPOnly, "register-mcp", false, "Register MCP server only (skip roles/policy init)")
 	initCmd.Flags().BoolVar(&skipLLMSetup, "skip-llm", false, "Skip LLM backend configuration prompt")
-	initCmd.Flags().BoolVar(&setupLLMOnly, "setup-llm", false, "Setup LLM backend only (skip roles/policy init)")
 }
 
 func runInit(cmd *cobra.Command, args []string) {
-	// MCP registration only mode
-	if registerMCPOnly {
-		ui.PrintTitle("MCP", "Registering Symphony MCP server")
-		promptMCPRegistration()
-		return
-	}
-
-	// LLM setup only mode
-	if setupLLMOnly {
-		ui.PrintTitle("LLM", "Setting up LLM backend")
-		promptLLMBackendSetup()
-		return
-	}
-
-	// Check if roles.json already exists
-	exists, err := roles.RolesExists()
+	// Check if .sym directory already exists
+	symDir, err := getSymDir()
 	if err != nil {
-		ui.PrintError(fmt.Sprintf("Failed to check roles.json: %v", err))
+		ui.PrintError(fmt.Sprintf("Failed to determine .sym directory: %v", err))
 		os.Exit(1)
 	}
 
-	if exists && !initForce {
-		ui.PrintWarn("roles.json already exists")
-		fmt.Println("Use --force flag to overwrite")
+	symDirExists := false
+	if _, err := os.Stat(symDir); err == nil {
+		symDirExists = true
+	} else if !os.IsNotExist(err) {
+		ui.PrintError(fmt.Sprintf("Failed to check .sym directory: %v", err))
 		os.Exit(1)
 	}
 
-	// If force flag is set, remove existing code-policy.json
-	if initForce {
-		if err := removeExistingCodePolicy(); err != nil {
-			ui.PrintWarn(fmt.Sprintf("Failed to remove existing code-policy.json: %v", err))
-		}
+	if symDirExists && !initForce {
+		ui.PrintWarn(".sym directory already exists")
+		fmt.Println("Use --force flag to reinitialize")
+		os.Exit(1)
 	}
 
 	// Create default roles (empty user lists - users select their own role)
@@ -125,6 +112,13 @@ func runInit(cmd *cobra.Command, args []string) {
 	// LLM backend configuration prompt
 	if !skipLLMSetup {
 		promptLLMBackendSetup()
+	}
+
+	// Clean up generated files at the end (only when --force is set)
+	if initForce {
+		if err := removeExistingCodePolicy(); err != nil {
+			ui.PrintWarn(fmt.Sprintf("Failed to remove generated files: %v", err))
+		}
 	}
 
 	// Show completion message
@@ -189,8 +183,8 @@ func createDefaultPolicy() error {
 
 // initializeConfigFile creates .sym/config.json with default settings
 func initializeConfigFile() error {
-	// Check if config.json already exists
-	if config.ProjectConfigExists() {
+	// Check if config.json already exists (skip unless force is set)
+	if config.ProjectConfigExists() && !initForce {
 		return nil
 	}
 
