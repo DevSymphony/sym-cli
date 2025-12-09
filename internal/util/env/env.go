@@ -1,4 +1,4 @@
-package envutil
+package env
 
 import (
 	"bufio"

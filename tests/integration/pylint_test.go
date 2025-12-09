@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/git"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"

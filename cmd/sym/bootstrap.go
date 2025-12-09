@@ -1,4 +1,4 @@
-package bootstrap
+package main
 
 import (
 	// Import linters for registration side-effects.
@@ -10,7 +10,9 @@ import (
 	_ "github.com/DevSymphony/sym-cli/internal/linter/prettier"
 	_ "github.com/DevSymphony/sym-cli/internal/linter/pylint"
 	_ "github.com/DevSymphony/sym-cli/internal/linter/tsc"
-)
 
-// This package only imports linter packages for their init() side-effects.
-// Import this package from main.go to ensure all linters are registered.
+	// Import LLM providers for registration side-effects.
+	_ "github.com/DevSymphony/sym-cli/internal/llm/claudecode"
+	_ "github.com/DevSymphony/sym-cli/internal/llm/geminicli"
+	_ "github.com/DevSymphony/sym-cli/internal/llm/openaiapi"
+)

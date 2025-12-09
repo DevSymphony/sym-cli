@@ -9,9 +9,9 @@ import (
 	"time"
 
 	"github.com/AlecAivazis/survey/v2"
-	"github.com/DevSymphony/sym-cli/internal/config"
-	"github.com/DevSymphony/sym-cli/internal/envutil"
 	"github.com/DevSymphony/sym-cli/internal/llm"
+	"github.com/DevSymphony/sym-cli/internal/util/config"
+	"github.com/DevSymphony/sym-cli/internal/util/env"
 	"github.com/spf13/cobra"
 )
 
@@ -300,7 +300,7 @@ func promptAndSaveAPIKey(providerName string) error {
 
 	// Save to .env file
 	envPath := config.GetProjectEnvPath()
-	if err := envutil.SaveKeyToEnvFile(envPath, envVarName, apiKey); err != nil {
+	if err := env.SaveKeyToEnvFile(envPath, envVarName, apiKey); err != nil {
 		return err
 	}
 

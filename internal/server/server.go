@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/DevSymphony/sym-cli/internal/config"
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
+	"github.com/DevSymphony/sym-cli/internal/util/config"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 
 	"github.com/pkg/browser"

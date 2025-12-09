@@ -5,8 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/mcp"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/spf13/cobra"
 )
 

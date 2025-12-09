@@ -164,7 +164,7 @@ func newProvider(cfg llm.Config) (llm.RawProvider, error) {
 ### Step 4: Add Import to Bootstrap
 
 ```go
-// internal/bootstrap/providers.go
+// cmd/sym/bootstrap.go
 import (
     _ "github.com/DevSymphony/sym-cli/internal/llm/myprovider"
 )

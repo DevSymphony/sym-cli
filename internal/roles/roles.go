@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 
-	"github.com/DevSymphony/sym-cli/internal/envutil"
+	"github.com/DevSymphony/sym-cli/internal/util/env"
 )
 
 // Roles represents a map of role names to lists of usernames
@@ -132,7 +132,7 @@ func GetCurrentRole() (string, error) {
 		return "", err
 	}
 
-	role := envutil.LoadKeyFromEnvFile(envPath, currentRoleKey)
+	role := env.LoadKeyFromEnvFile(envPath, currentRoleKey)
 	return role, nil
 }
 
@@ -143,7 +143,7 @@ func SetCurrentRole(role string) error {
 		return err
 	}
 
-	return envutil.SaveKeyToEnvFile(envPath, currentRoleKey, role)
+	return env.SaveKeyToEnvFile(envPath, currentRoleKey, role)
 }
 
 // GetAvailableRoles returns all role names defined in roles.json

@@ -241,7 +241,7 @@ func init() {
 ### Step 5: Add Import to Bootstrap
 
 ```go
-// internal/bootstrap/linters.go
+// cmd/sym/bootstrap.go
 import (
     _ "github.com/DevSymphony/sym-cli/internal/linter/mylinter"
 )
