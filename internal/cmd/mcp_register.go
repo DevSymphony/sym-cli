@@ -318,58 +318,31 @@ func updateSymphonySection(existingContent, symphonyContent string) string {
 	return existingContent + separator + symphonyContent
 }
 
-// createInstructionsFile creates or updates the instructions file for the specified app
+// createInstructionsFile creates or updates the instructions file for the specified app.
+// Logic is consistent with MCP config handling:
+// - File doesn't exist → create new
+// - File exists → update symphony content (no backup for Symphony-dedicated files)
+// - Shared files (CLAUDE.md) use section markers to preserve other content
 func createInstructionsFile(app string) error {
 	var instructionsPath string
 	var content string
-	var appendMode bool
+	var isSharedFile bool // true for files that may contain other content (CLAUDE.md)
 
 	switch app {
 	case "claude-code":
 		instructionsPath = "CLAUDE.md"
 		content = getClaudeCodeInstructions()
-		appendMode = true
+		isSharedFile = true // CLAUDE.md may have other project instructions
 	case "cursor":
 		instructionsPath = filepath.Join(".cursor", "rules", "symphony.mdc")
 		content = getCursorInstructions()
-		appendMode = false
+		isSharedFile = false // Symphony-dedicated file
 	case "vscode":
 		instructionsPath = filepath.Join(".github", "instructions", "symphony.instructions.md")
 		content = getVSCodeInstructions()
-		appendMode = false
+		isSharedFile = false // Symphony-dedicated file
 	default:
 		return nil
-	}
-
-	// Check if file exists
-	existingContent, err := os.ReadFile(instructionsPath)
-	fileExists := err == nil
-
-	if fileExists {
-		if appendMode {
-			// Update Symphony section (replace if exists, append if not)
-			existingStr := string(existingContent)
-			content = updateSymphonySection(existingStr, content)
-
-			// Determine message based on whether section was replaced or appended
-			if strings.Contains(existingStr, symphonySectionStart) {
-				fmt.Println(ui.Indent(fmt.Sprintf("Updated Symphony section in %s", instructionsPath)))
-			} else {
-				fmt.Println(ui.Indent(fmt.Sprintf("Appended Symphony section to %s", instructionsPath)))
-			}
-		} else {
-			// Create backup
-			backupPath := instructionsPath + ".bak"
-			if err := os.WriteFile(backupPath, existingContent, 0644); err != nil {
-				fmt.Println(ui.Indent(fmt.Sprintf("Failed to create backup: %v", err)))
-			} else {
-				fmt.Println(ui.Indent(fmt.Sprintf("Backup: %s", filepath.Base(backupPath))))
-			}
-			fmt.Println(ui.Indent(fmt.Sprintf("Created %s", instructionsPath)))
-		}
-	} else {
-		// Create new file
-		fmt.Println(ui.Indent(fmt.Sprintf("Created %s", instructionsPath)))
 	}
 
 	// Create directory if needed
@@ -380,6 +353,28 @@ func createInstructionsFile(app string) error {
 		}
 	}
 
+	// Check if file exists
+	existingContent, err := os.ReadFile(instructionsPath)
+	fileExists := err == nil
+
+	if fileExists && isSharedFile {
+		// Shared file: update/append Symphony section only, preserve other content
+		existingStr := string(existingContent)
+		content = updateSymphonySection(existingStr, content)
+
+		if strings.Contains(existingStr, symphonySectionStart) {
+			fmt.Println(ui.Indent(fmt.Sprintf("Updated Symphony section in %s", instructionsPath)))
+		} else {
+			fmt.Println(ui.Indent(fmt.Sprintf("Appended Symphony section to %s", instructionsPath)))
+		}
+	} else if fileExists {
+		// Symphony-dedicated file: just overwrite (no backup needed)
+		fmt.Println(ui.Indent(fmt.Sprintf("Updated %s", instructionsPath)))
+	} else {
+		// New file
+		fmt.Println(ui.Indent(fmt.Sprintf("Created %s", instructionsPath)))
+	}
+
 	// Write file
 	if err := os.WriteFile(instructionsPath, []byte(content), 0644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
@@ -387,11 +382,10 @@ func createInstructionsFile(app string) error {
 
 	// Add VS Code instructions directory to .gitignore
 	if app == "vscode" {
-		gitignorePath := ".github/instructions/"
-		if err := ensureGitignore(gitignorePath); err != nil {
+		if err := ensureGitignore(".github/instructions/"); err != nil {
 			fmt.Println(ui.Indent(fmt.Sprintf("Warning: Failed to update .gitignore: %v", err)))
 		} else {
-			fmt.Println(ui.Indent(fmt.Sprintf("Added %s to .gitignore", gitignorePath)))
+			fmt.Println(ui.Indent("Added .github/instructions/ to .gitignore"))
 		}
 	}
 
