@@ -1,13 +1,11 @@
 package cmd
 
 import (
-	"bufio"
 	"encoding/json"
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 
+	"github.com/AlecAivazis/survey/v2"
 	"github.com/DevSymphony/sym-cli/internal/roles"
 	"github.com/DevSymphony/sym-cli/internal/ui"
 
@@ -78,6 +76,10 @@ func runMyRole(cmd *cobra.Command, args []string) {
 }
 
 func selectNewRole() {
+	// Use custom template to hide "type to filter" and typed characters
+	restore := useSelectTemplateNoFilter()
+	defer restore()
+
 	availableRoles, err := roles.GetAvailableRoles()
 	if err != nil {
 		ui.PrintError(fmt.Sprintf("Failed to get available roles: %v", err))
@@ -91,34 +93,23 @@ func selectNewRole() {
 
 	currentRole, _ := roles.GetCurrentRole()
 
+	fmt.Println()
 	ui.PrintTitle("Role", "Select your role")
 	fmt.Println()
-	for i, role := range availableRoles {
-		marker := "  "
-		if role == currentRole {
-			marker = "→ "
-		}
-		fmt.Printf("%s%d. %s\n", marker, i+1, role)
+
+	// Use survey.Select for consistent UI
+	var selectedRole string
+	prompt := &survey.Select{
+		Message: "Select role:",
+		Options: availableRoles,
+		Default: currentRole,
 	}
-	fmt.Println()
 
-	reader := bufio.NewReader(os.Stdin)
-	fmt.Print("Enter number (1-" + strconv.Itoa(len(availableRoles)) + "): ")
-	input, _ := reader.ReadString('\n')
-	input = strings.TrimSpace(input)
-
-	if input == "" {
+	if err := survey.AskOne(prompt, &selectedRole); err != nil {
 		ui.PrintWarn("No selection made")
 		return
 	}
 
-	num, err := strconv.Atoi(input)
-	if err != nil || num < 1 || num > len(availableRoles) {
-		ui.PrintError("Invalid selection")
-		os.Exit(1)
-	}
-
-	selectedRole := availableRoles[num-1]
 	if err := roles.SetCurrentRole(selectedRole); err != nil {
 		ui.PrintError(fmt.Sprintf("Failed to save role: %v", err))
 		os.Exit(1)
