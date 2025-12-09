@@ -4,12 +4,9 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/git"
 	"github.com/DevSymphony/sym-cli/internal/mcp"
-	"github.com/DevSymphony/sym-cli/internal/ui"
-	"github.com/pkg/browser"
 	"github.com/spf13/cobra"
 )
 
@@ -57,49 +54,11 @@ func runMCP(cmd *cobra.Command, args []string) error {
 	}
 
 	// Check if user-policy.json exists
-	userPolicyExists := fileExists(userPolicyPath)
-
-	// If no user-policy.json → Launch dashboard
-	if !userPolicyExists {
-		ui.PrintError(fmt.Sprintf("User policy not found at: %s", userPolicyPath))
-		fmt.Println("Opening dashboard to create policy...")
-
-		// Launch dashboard
-		if err := launchDashboard(); err != nil {
-			return fmt.Errorf("failed to launch dashboard: %w", err)
-		}
-
-		fmt.Println()
-		ui.PrintOK("Dashboard launched at http://localhost:8787")
-		fmt.Println("Please create your policy in the dashboard, then restart MCP server.")
-		return nil
+	if _, err := os.Stat(userPolicyPath); os.IsNotExist(err) {
+		return fmt.Errorf("user policy not found: %s\nRun 'sym init' first or 'sym dashboard' to create policy", userPolicyPath)
 	}
 
 	// Start MCP server - it will handle conversion automatically if needed
 	server := mcp.NewServer(configPath)
 	return server.Start()
-}
-
-// fileExists checks if a file exists
-func fileExists(path string) bool {
-	_, err := os.Stat(path)
-	return err == nil
-}
-
-// launchDashboard launches the dashboard in the background
-func launchDashboard() error {
-	// Open browser to dashboard
-	url := "http://localhost:8787"
-	go func() {
-		time.Sleep(1 * time.Second)
-		_ = browser.OpenURL(url) // Ignore error - browser opening is best-effort
-	}()
-
-	// Start dashboard server in background
-	// Note: This will block, so in practice you'd want to run this in a separate process
-	// For now, we just inform the user to run it manually
-	fmt.Println("Please run in another terminal:")
-	fmt.Println("  sym dashboard")
-
-	return nil
 }
