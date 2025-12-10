@@ -46,7 +46,7 @@ clean:
 	@rm -f coverage.out coverage.html
 
 fmt:
-	@go fmt ./...
+	@golangci-lint fmt
 
 lint:
 	@golangci-lint run
@@ -56,7 +56,7 @@ tidy:
 
 setup:
 	@go mod download
-	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.4.0
+	@go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.7.2
 
 run:
 	@go run $(MAIN_PATH) $(ARGS)
