@@ -1,106 +1,111 @@
 # validator
 
-코드 검증 오케스트레이터입니다.
+Code validation orchestrator that validates code changes against policy using linters and LLM.
 
-정책에 정의된 규칙을 바탕으로 린터와 LLM 엔진을 조율하고, 검증 결과를 수집하여 위반 사항을 보고합니다.
+Implements a 4-phase pipeline:
+1. RBAC permission checking
+2. Rule grouping by engine
+3. Execution unit creation
+4. Parallel execution with concurrency control
 
-## 패키지 구조
+## Package Structure
 
 ```
 validator/
-├── validator.go          # Validator 구조체, 4단계 파이프라인
-├── execution_unit.go     # executionUnit 인터페이스 및 구현체
-├── llm_validator.go      # LLM 기반 검증 로직
-├── llm_validator_test.go
+├── validator.go          # Main orchestrator, 4-phase validation pipeline
+├── validator_test.go     # Unit tests for validator
+├── execution_unit.go     # Execution unit interface and implementations
+├── llm_validator.go      # LLM-based validation logic
+├── llm_validator_test.go # Unit tests for LLM validator
 └── README.md
 ```
 
-## 의존성
+## Dependencies
 
-### 패키지 사용자
+### Package Users
 
-| 위치 | 용도 |
-|------|------|
-| `internal/cmd/validate.go` | sym validate CLI 명령어 |
-| `internal/mcp/server.go` | MCP validate_code 도구 |
+| Location | Purpose |
+|----------|---------|
+| `internal/cmd/validate.go` | CLI `sym validate` command |
+| `internal/mcp/server.go` | MCP `validate_code` tool |
 
-### 패키지 의존성
+### Package Dependencies
+
+| Package | Purpose |
+|---------|---------|
+| `internal/linter` | Linter registry and execution |
+| `internal/llm` | LLM provider interface |
+| `internal/roles` | RBAC permission validation |
+| `internal/util/git` | Git change types and diff utilities |
+| `pkg/schema` | Policy and rule definitions |
 
 ```
                   ┌─────────────┐
                   │  validator  │
                   └──────┬──────┘
-        ┌────────────┬───┴───┬────────────┐
-        ▼            ▼       ▼            ▼
-  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
-  │  linter  │ │   llm    │ │  roles   │ │   git    │
-  └──────────┘ └──────────┘ └──────────┘ └──────────┘
-        │
-        ▼
-  ┌────────────┐
-  │ pkg/schema │
-  └────────────┘
+        ┌────────────┬───┴───┬────────────┬────────────┐
+        ▼            ▼       ▼            ▼            ▼
+  ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌────────────┐
+  │  linter  │ │   llm    │ │  roles   │ │ util/git │ │ pkg/schema │
+  └──────────┘ └──────────┘ └──────────┘ └──────────┘ └────────────┘
 ```
 
-## Public / Private API
+## Public/Private API
 
 ### Public API
 
 #### Types
 
-| 타입 | 파일 | 설명 |
-|------|------|------|
-| `Validator` | validator.go:37 | 검증 오케스트레이터 |
-| `Violation` | validator.go:21 | 위반 사항 |
-| `ValidationResult` | llm_validator.go:23 | 검증 결과 |
-| `ValidationError` | llm_validator.go:16 | 엔진 실행 오류 |
+| Type | File | Description |
+|------|------|-------------|
+| `Validator` | validator.go | Main validation orchestrator |
+| `Violation` | validator.go | Represents a policy violation |
+| `ValidationResult` | llm_validator.go | Aggregated validation results |
+| `ValidationError` | llm_validator.go | Engine execution error |
 
 #### Constructors
 
-| 함수 | 파일 | 설명 |
-|------|------|------|
-| `NewValidator(policy, verbose)` | validator.go:49 | Validator 생성 |
-| `NewValidatorWithWorkDir(policy, verbose, workDir)` | validator.go:71 | 커스텀 workDir로 생성 |
+| Function | Description |
+|----------|-------------|
+| `NewValidator(policy, verbose) *Validator` | Creates validator with current working directory |
+| `NewValidatorWithWorkDir(policy, verbose, workDir) *Validator` | Creates validator with custom working directory |
 
 #### Methods
 
-| 메서드 | 파일 | 설명 |
-|--------|------|------|
-| `(*Validator) SetLLMProvider(provider)` | validator.go:89 | LLM Provider 설정 |
-| `(*Validator) ValidateChanges(ctx, changes)` | validator.go:280 | 검증 실행 |
-| `(*Validator) Close()` | validator.go:413 | 리소스 정리 |
+| Method | Description |
+|--------|-------------|
+| `(*Validator) SetLLMProvider(provider)` | Sets LLM provider for llm-validator rules |
+| `(*Validator) ValidateChanges(ctx, changes) (*ValidationResult, error)` | Runs 4-phase validation pipeline |
+| `(*Validator) Close() error` | Releases resources |
 
 ### Private API
 
+#### Interfaces
+
+| Interface | File | Description |
+|-----------|------|-------------|
+| `executionUnit` | execution_unit.go | Polymorphic execution contract |
+
 #### Types
 
-| 타입 | 파일 | 설명 |
-|------|------|------|
-| `llmValidator` | llm_validator.go:35 | LLM 전용 검증기 |
-| `validationResponse` | llm_validator.go:241 | LLM 응답 파싱 결과 |
-| `executionUnit` | execution_unit.go:21 | 실행 단위 인터페이스 |
-| `linterExecutionUnit` | execution_unit.go:34 | 린터 실행 단위 |
-| `llmExecutionUnit` | execution_unit.go:216 | LLM 실행 단위 |
-| `ruleGroup` | validator.go:101 | 규칙 그룹화 |
+| Type | File | Description |
+|------|------|-------------|
+| `linterExecutionUnit` | execution_unit.go | Batches rules for single linter execution |
+| `llmExecutionUnit` | execution_unit.go | Single (file, rule) pair for LLM validation |
+| `llmValidator` | llm_validator.go | LLM-specific validation logic |
+| `ruleGroup` | validator.go | Groups rules by engine for batching |
+| `validationResponse` | llm_validator.go | Parsed LLM response structure |
+| `jsonValidationResponse` | llm_validator.go | JSON deserialization target |
 
 #### Functions
 
-| 함수 | 파일 | 설명 |
-|------|------|------|
-| `newLLMValidator(provider, policy)` | llm_validator.go:41 | llmValidator 생성 |
-| `getEngineName(rule)` | validator.go:93 | 규칙에서 엔진명 추출 |
-| `getDefaultConcurrency()` | validator.go:109 | 기본 동시성 레벨 |
-| `getLanguageFromFile(filePath)` | validator.go:420 | 파일 확장자로 언어 판별 |
-| `parseValidationResponse(response)` | llm_validator.go:256 | LLM 응답 파싱 |
-| `extractJSONField(response, field)` | llm_validator.go:353 | JSON 필드 추출 |
-
-#### Methods
-
-| 메서드 | 파일 | 설명 |
-|--------|------|------|
-| `(*Validator) groupRulesByEngine(...)` | validator.go:121 | 규칙 그룹화 |
-| `(*Validator) createExecutionUnits(...)` | validator.go:179 | 실행 단위 생성 |
-| `(*Validator) executeUnitsParallel(...)` | validator.go:221 | 병렬 실행 |
-| `(*Validator) filterChangesForRule(...)` | validator.go:384 | 규칙별 변경 필터 |
-| `(*llmValidator) Validate(...)` | llm_validator.go:54 | LLM 검증 실행 |
-| `(*llmValidator) checkRule(...)` | llm_validator.go:153 | 단일 규칙 검증 |
+| Function | File | Description |
+|----------|------|-------------|
+| `getEngineName(rule)` | validator.go | Extracts engine name from rule |
+| `getDefaultConcurrency()` | validator.go | Returns CPU/2 bounded to [1,8] |
+| `getLanguageFromFile(filePath)` | validator.go | Maps file extension to language |
+| `newLLMValidator(provider, policy)` | llm_validator.go | Creates LLM validator instance |
+| `parseValidationResponse(response)` | llm_validator.go | Parses LLM JSON response |
+| `parseValidationResponseFallback(response)` | llm_validator.go | Fallback string-based parsing |
+| `parseJSON(jsonStr, target)` | llm_validator.go | JSON unmarshaling wrapper |
+| `extractJSONField(response, field)` | llm_validator.go | Manual JSON field extraction |
