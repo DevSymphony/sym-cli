@@ -76,10 +76,10 @@ make test
 | `make setup` | 개발 환경 초기화: Go 종속성 다운로드 및 golangci-lint v2.4.0 설치 |
 | `make build` | 현재 플랫폼용 바이너리 빌드. 출력: `bin/sym` |
 | `make build-all` | 모든 플랫폼용 빌드 (Linux amd64/arm64, macOS amd64/arm64, Windows amd64) |
-| `make test` | 레이스 감지와 함께 모든 테스트 실행 및 커버리지 리포트 생성 (`coverage.out`) |
+| `make test` | 레이스 감지와 함께 모든 테스트 실행 및 커버리지 리포트 생성 (`coverage.html`) |
 | `make unit-test` | 커버리지 없이 짧은 모드로 테스트 실행 (빠른 확인용) |
 | `make lint` | golangci-lint를 실행하여 코드 품질 검사 |
-| `make fmt` | `go fmt`를 사용하여 모든 Go 소스 파일 포맷팅 |
+| `make fmt` | `golangci-lint fmt`를 사용하여 모든 Go 소스 파일 포맷팅 |
 | `make tidy` | `go mod tidy`를 실행하여 모듈 종속성 정리 |
 | `make clean` | 빌드 아티팩트 제거 (`bin/`, `coverage.out`, `coverage.html`) |
 | `make run ARGS="..."` | 지정된 인자로 애플리케이션 빌드 및 실행 |
@@ -458,7 +458,7 @@ Make 타겟을 사용하여 테스트 실행:
 
 ```bash
 # 레이스 감지 및 커버리지와 함께 모든 테스트 실행
-# coverage.out 파일 생성
+# coverage.html 파일 생성
 make test
 
 # 커버리지 없이 빠른 테스트 실행 (개발 반복용으로 더 빠름)
@@ -594,15 +594,9 @@ func TestConverter_ConvertRule(t *testing.T) {
 
 ### 커버리지
 
-`make test` 실행 후 커버리지 데이터가 `coverage.out`에 저장됩니다.
+`make test` 실행 후 커버리지 데이터가 `coverage.html`에 저장됩니다.
 
 ```bash
-# 터미널에서 커버리지 리포트 보기
-go tool cover -func=coverage.out
-
-# HTML 커버리지 리포트 생성
-go tool cover -html=coverage.out -o coverage.html
-
 # 브라우저에서 열기 (macOS)
 open coverage.html
 ```
