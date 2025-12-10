@@ -1,0 +1,153 @@
+@startuml Symphony Class Diagram
+' Symphony CLI - Core Architecture
+' Design Patterns: Registry, Plugin, Strategy, Dual Schema
+
+skinparam classAttributeIconSize 0
+skinparam linetype ortho
+
+package "Schema (Dual Schema Pattern)" {
+    class UserPolicy <<A Schema>> {
+        +Version: string
+        +RBAC: UserRBAC
+        +Rules: []UserRule
+        --
+        Natural language rules
+        for human authoring
+    }
+
+    class CodePolicy <<B Schema>> {
+        +Version: string
+        +RBAC: PolicyRBAC
+        +Rules: []PolicyRule
+        +Enforce: EnforceSettings
+        --
+        Formal rules for
+        machine execution
+    }
+
+    class PolicyRule {
+        +ID: string
+        +Selector: Selector
+        +Engine: string
+        +Check: map
+    }
+
+    class Selector {
+        +Languages: []string
+        +Include: []string
+        +Exclude: []string
+        +Roles: []string
+    }
+
+    UserPolicy ..> CodePolicy : "LLM converts"
+    CodePolicy *-- PolicyRule
+    PolicyRule *-- Selector
+}
+
+package "Linter (Plugin Pattern)" {
+    interface Linter <<interface>> {
+        +Name(): string
+        +GetCapabilities(): Capabilities
+        +CheckAvailability(ctx): error
+        +Execute(ctx, config, files): ToolOutput
+        +ParseOutput(output): []Violation
+    }
+
+    interface Converter <<interface>> {
+        +Name(): string
+        +GetLLMDescription(): string
+        +GetRoutingHints(): []string
+        +ConvertSingleRule(ctx, rule): SingleRuleResult
+        +BuildConfig(results): LinterConfig
+    }
+
+    class Registry <<singleton>> {
+        -tools: map[string]ToolEntry
+        +RegisterTool(linter, converter, configFile)
+        +GetAllTools(): []ToolEntry
+        +GetByName(name): ToolEntry
+    }
+
+    class ESLint implements Linter
+    class Prettier implements Linter
+    class TSC implements Linter
+    class PyLint implements Linter
+
+    Registry o-- Linter : registers
+    Registry o-- Converter : registers
+}
+
+package "LLM Provider (Strategy Pattern)" {
+    interface Provider <<interface>> {
+        +Name(): string
+        +Execute(ctx, prompt, format): string
+    }
+
+    class ClaudeCode implements Provider
+    class GeminiCLI implements Provider
+    class OpenAIAPI implements Provider
+}
+
+package "Validator (Execution Unit Pattern)" {
+    class Validator {
+        +ValidateChanges(changes): ValidationResult
+        -createExecutionUnits(): []ExecutionUnit
+        -executeInParallel(units): []Violation
+    }
+
+    interface ExecutionUnit <<interface>> {
+        +Execute(ctx): []Violation
+        +GetRuleIDs(): []string
+        +GetEngineName(): string
+        +GetFiles(): []string
+    }
+
+    class LinterExecutionUnit implements ExecutionUnit {
+        Batch: all files, all rules
+        Single linter invocation
+    }
+
+    class LLMExecutionUnit implements ExecutionUnit {
+        Granular: one file, one rule
+        Parallel LLM calls
+    }
+
+    Validator --> ExecutionUnit : creates
+    LinterExecutionUnit --> Linter : uses
+    LLMExecutionUnit --> Provider : uses
+}
+
+package "MCP Server" {
+    class MCPServer {
+        +query_conventions(category, languages): string
+        +validate_code(role): ValidationResult
+    }
+
+    MCPServer --> Validator : delegates
+    MCPServer --> UserPolicy : reads
+}
+
+package "RBAC" {
+    class RBACChecker {
+        +CheckPermission(role, file): bool
+        +GetDeniedFiles(role, files): []string
+    }
+
+    Validator --> RBACChecker : "first check"
+}
+
+' Key relationships
+Validator --> CodePolicy : validates against
+Converter ..> Provider : "uses for conversion"
+
+note bottom of Registry
+  Self-registration via init()
+  in each linter package
+end note
+
+note bottom of ExecutionUnit
+  Linters: Batched for efficiency
+  LLM: Granular for parallelism
+end note
+
+@enduml

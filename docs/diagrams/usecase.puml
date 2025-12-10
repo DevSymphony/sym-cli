@@ -1,0 +1,57 @@
+@startuml Symphony Use Case Diagram
+' Symphony CLI - LLM-Friendly Convention Linter
+' Core Use Cases
+
+skinparam actorStyle awesome
+skinparam packageStyle rectangle
+
+left to right direction
+
+actor "Developer" as dev
+actor "AI IDE\n(MCP Client)" as ai
+
+rectangle Symphony {
+    ' Project Setup
+    usecase "Initialize Project\n(sym init)" as UC_INIT
+
+    ' Policy Management
+    usecase "Define Conventions\n(Natural Language)" as UC_DEFINE
+    usecase "Convert Policy\n(A→B Schema)" as UC_CONVERT
+
+    ' Validation
+    usecase "Validate Code\n(sym validate)" as UC_VALIDATE
+
+    ' MCP Integration
+    usecase "Query Conventions\n(MCP Tool)" as UC_QUERY
+    usecase "Validate Changes\n(MCP Tool)" as UC_MCP_VALIDATE
+
+    ' RBAC
+    usecase "Check Permissions\n(RBAC)" as UC_RBAC
+}
+
+' Developer interactions
+dev --> UC_INIT
+dev --> UC_DEFINE
+dev --> UC_VALIDATE
+
+' AI IDE interactions (MCP protocol)
+ai --> UC_QUERY : "query_conventions"
+ai --> UC_MCP_VALIDATE : "validate_code"
+
+' Internal relationships
+UC_DEFINE ..> UC_CONVERT : <<include>>
+UC_VALIDATE ..> UC_RBAC : <<include>>
+UC_MCP_VALIDATE ..> UC_VALIDATE : <<include>>
+UC_CONVERT ..> UC_QUERY : "enables"
+
+note right of UC_CONVERT
+  LLM transforms natural language
+  rules into linter-specific configs
+end note
+
+note bottom of UC_RBAC
+  Role-based file access control
+  enforced before validation
+end note
+
+@enduml

@@ -1,0 +1,87 @@
+@startuml Symphony Validation Sequence
+' Symphony CLI - Code Validation Workflow
+' Shows the core validation pipeline
+
+skinparam sequenceMessageAlign center
+skinparam responseMessageBelowArrow true
+
+actor "AI IDE" as client
+participant "MCP Server" as mcp
+participant "Validator" as validator
+participant "RBAC\nChecker" as rbac
+participant "Git" as git
+participant "Linter\nExecutionUnit" as linter_unit
+participant "LLM\nExecutionUnit" as llm_unit
+participant "Linter\n(ESLint, etc.)" as linter
+participant "LLM\nProvider" as llm
+
+== MCP validate_code Request ==
+
+client -> mcp: validate_code(role)
+activate mcp
+
+mcp -> git: GetChanges()
+git --> mcp: []Change (staged + unstaged)
+
+mcp -> validator: ValidateChanges(changes)
+activate validator
+
+== Phase 1: RBAC Check ==
+
+validator -> rbac: CheckPermissions(role, files)
+rbac --> validator: deniedFiles[]
+
+alt has denied files
+    validator --> validator: Create RBAC violations
+end
+
+== Phase 2: Group Rules by Engine ==
+
+validator -> validator: Group rules by engine type
+note right
+  Linter rules → batch
+  LLM rules → granular
+end note
+
+== Phase 3: Create Execution Units ==
+
+validator -> linter_unit **: create(linter, allFiles, allRules)
+validator -> llm_unit **: create(file, rule) for each pair
+
+== Phase 4: Parallel Execution ==
+
+par Concurrent execution (CPU/2 limit)
+    validator -> linter_unit: Execute()
+    activate linter_unit
+    linter_unit -> linter: Execute(config, files)
+    linter --> linter_unit: raw output
+    linter_unit -> linter_unit: ParseOutput()
+    linter_unit --> validator: []Violation
+    deactivate linter_unit
+else
+    validator -> llm_unit: Execute()
+    activate llm_unit
+    llm_unit -> llm: Execute(prompt)
+    llm --> llm_unit: analysis result
+    llm_unit --> validator: []Violation
+    deactivate llm_unit
+end
+
+== Phase 5: Aggregate Results ==
+
+validator -> validator: Merge all violations
+validator --> mcp: ValidationResult
+deactivate validator
+
+mcp --> client: {status, violations[]}
+deactivate mcp
+
+note over client, llm
+  Design Philosophy:
+  - RBAC enforced first
+  - Linters batched for efficiency
+  - LLM calls parallelized for throughput
+  - Graceful fallback: linter → LLM
+end note
+
+@enduml
