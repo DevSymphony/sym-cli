@@ -21,6 +21,7 @@ Symphony (`sym`)는 코드 컨벤션 관리와 RBAC(역할 기반 접근 제어)
       - [sym policy validate](#sym-policy-validate)
     - [sym convert](#sym-convert)
     - [sym validate](#sym-validate)
+    - [sym category](#sym-category)
     - [sym mcp](#sym-mcp)
     - [sym llm](#sym-llm)
       - [sym llm status](#sym-llm-status)
@@ -39,6 +40,7 @@ Symphony (`sym`)는 코드 컨벤션 관리와 RBAC(역할 기반 접근 제어)
     - [MCP 도구 스키마](#mcp-도구-스키마)
       - [query\_conventions](#query_conventions)
       - [validate\_code](#validate_code)
+      - [list\_category](#list_category)
     - [등록 방법](#등록-방법)
   - [LLM 프로바이더](#llm-프로바이더)
     - [지원 프로바이더](#지원-프로바이더)
@@ -104,6 +106,7 @@ sym
 │   └── validate           # 정책 파일 유효성 검사
 ├── convert                 # 정책 → 린터 설정 변환
 ├── validate                # Git 변경사항 검증
+├── category                # 카테고리 목록 조회
 ├── mcp                     # MCP 서버 실행
 ├── llm                     # LLM 프로바이더 관리
 │   ├── status             # 현재 설정 확인
@@ -124,7 +127,7 @@ sym
 
 **수행 작업**:
 1. `.sym/roles.json` 생성 (기본 역할: admin, developer, viewer)
-2. `.sym/user-policy.json` 생성 (기본 RBAC 설정)
+2. `.sym/user-policy.json` 생성 (기본 카테고리 7개 + RBAC 설정)
 3. `.sym/config.json` 생성 (기본 설정)
 4. 역할을 admin으로 설정 (대시보드에서 변경 가능)
 5. MCP 서버 등록 (선택적)
@@ -367,6 +370,68 @@ sym validate --timeout 60
 
 ---
 
+### sym category
+
+**설명**: 사용 가능한 모든 컨벤션 카테고리와 설명을 표시합니다.
+
+user-policy.json에 정의된 카테고리를 표시합니다. `sym init` 실행 시 7개의 기본 카테고리(security, style, documentation, error_handling, architecture, performance, testing)가 생성됩니다. 사용자는 이 카테고리를 수정, 삭제하거나 새로운 카테고리를 추가할 수 있습니다.
+
+**문법**:
+```
+sym category
+```
+
+**예시**:
+```bash
+# 카테고리 목록 조회
+sym category
+```
+
+**출력 예시**:
+```
+[Convention Categories] 7 categories available
+
+  • security
+    Security rules (authentication, authorization, vulnerability prevention, etc.)
+
+  • style
+    Code style and formatting rules
+
+  • documentation
+    Documentation rules (comments, docstrings, etc.)
+
+  • error_handling
+    Error handling and exception management rules
+
+  • architecture
+    Code structure and architecture rules
+
+  • performance
+    Performance optimization rules
+
+  • testing
+    Testing rules (coverage, test patterns, etc.)
+```
+
+**사용자 정의 카테고리**:
+
+user-policy.json에 `category` 필드를 추가하여 사용자 정의 카테고리를 추가하거나 기존 카테고리 설명을 변경할 수 있습니다:
+
+```json
+{
+  "version": "1.0",
+  "category": [
+    {"name": "security", "description": "보안 관련 규칙 (인증, 인가, 취약점 방지 등)"},
+    {"name": "naming", "description": "네이밍 컨벤션 규칙 (변수, 함수, 클래스 등)"}
+  ],
+  "rules": [...]
+}
+```
+
+**관련 파일**: `internal/cmd/category.go`
+
+---
+
 ### sym mcp
 
 **설명**: MCP(Model Context Protocol) 서버를 시작합니다. LLM 기반 코딩 도구가 stdio를 통해 컨벤션을 쿼리하고 코드를 검증할 수 있습니다.
@@ -374,6 +439,7 @@ sym validate --timeout 60
 **제공되는 MCP 도구**:
 - `query_conventions`: 주어진 컨텍스트에 대한 컨벤션 쿼리
 - `validate_code`: 코드의 컨벤션 준수 여부 검증
+- `list_category`: 사용 가능한 카테고리 목록 조회
 
 **통신 방식**: stdio (Claude Desktop, Claude Code, Cursor 등 MCP 클라이언트와 통합)
 
@@ -621,6 +687,44 @@ Git 변경사항을 프로젝트 컨벤션에 대해 검증합니다.
 | 파라미터 | 타입 | 필수 | 설명 |
 |----------|------|------|------|
 | `role` | string | 아니오 | 검증용 RBAC 역할 (선택) |
+
+#### list_category
+
+사용 가능한 모든 카테고리와 설명을 반환합니다.
+
+user-policy.json에 정의된 카테고리를 반환합니다. 카테고리가 없으면 `sym init`을 실행하라는 안내 메시지를 반환합니다.
+
+**입력 스키마**:
+
+파라미터 없음 (모든 카테고리 반환)
+
+**출력 예시**:
+```
+Available categories (7):
+
+• security
+  Security rules (authentication, authorization, vulnerability prevention, etc.)
+
+• style
+  Code style and formatting rules
+
+• documentation
+  Documentation rules (comments, docstrings, etc.)
+
+• error_handling
+  Error handling and exception management rules
+
+• architecture
+  Code structure and architecture rules
+
+• performance
+  Performance optimization rules
+
+• testing
+  Testing rules (coverage, test patterns, etc.)
+
+Use query_conventions with a specific category to get rules for that category.
+```
 
 ### 등록 방법
 

@@ -36,7 +36,8 @@ pkg/schema/
 ```
 ┌─────────────────────────────────────────────────────────────────┐
 │                    A Schema (사용자 친화적)                      │
-│  UserPolicy ──┬── UserRBAC ─── UserRole                         │
+│  UserPolicy ──┬── CategoryDef[]                                 │
+│               ├── UserRBAC ─── UserRole                         │
 │               ├── UserDefaults                                  │
 │               └── UserRule[]                                    │
 └────────────────────────────┬────────────────────────────────────┘
@@ -59,6 +60,17 @@ pkg/schema/
 
 사용자가 자연어로 컨벤션을 정의하기 위한 간소화된 스키마입니다.
 
+### CategoryDef
+
+카테고리 정의 구조체입니다.
+
+```go
+type CategoryDef struct {
+    Name        string `json:"name"`        // 카테고리 식별자 (예: "security")
+    Description string `json:"description"` // 자연어 설명 (1-2줄)
+}
+```
+
 ### UserPolicy
 
 메인 정책 구조체입니다.
@@ -66,6 +78,7 @@ pkg/schema/
 ```go
 type UserPolicy struct {
     Version  string        `json:"version,omitempty"`  // 정책 버전 (예: "1.0.0")
+    Category []CategoryDef `json:"category,omitempty"` // 카테고리 정의 목록
     RBAC     *UserRBAC     `json:"rbac,omitempty"`     // 역할 기반 접근 제어
     Defaults *UserDefaults `json:"defaults,omitempty"` // 규칙 기본값
     Rules    []UserRule    `json:"rules"`              // 자연어 규칙 목록
@@ -265,6 +278,10 @@ type RBACEnforce struct {
 ```json
 {
   "version": "1.0.0",
+  "category": [
+    {"name": "security", "description": "보안 관련 규칙"},
+    {"name": "naming", "description": "네이밍 컨벤션 규칙"}
+  ],
   "rbac": {
     "roles": {
       "admin": { "allowWrite": ["**/*"], "canEditPolicy": true },

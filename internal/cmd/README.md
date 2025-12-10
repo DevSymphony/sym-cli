@@ -20,6 +20,7 @@ cmd/
 ├── llm.go               # sym llm status|test|setup 명령어 (LLM 관리)
 ├── mcp.go               # sym mcp 명령어 (MCP 서버)
 ├── mcp_register.go      # MCP 서버 등록 헬퍼 함수
+├── category.go          # sym category 명령어 (카테고리 목록)
 ├── survey_templates.go  # 커스텀 survey UI 템플릿
 └── README.md
 ```
@@ -84,6 +85,7 @@ cmd/
 | `llmTestCmd` | llm.go:40 | llm test 명령어 |
 | `llmSetupCmd` | llm.go:47 | llm setup 명령어 |
 | `mcpCmd` | mcp.go:15 | mcp 명령어 |
+| `categoryCmd` | category.go:10 | category 명령어 |
 
 #### 명령어 실행 함수
 
@@ -100,6 +102,7 @@ cmd/
 | `runLLMTest(cmd, args)` | llm.go:107 | llm test 실행 |
 | `runLLMSetup(cmd, args)` | llm.go:142 | llm setup 실행 |
 | `runMCP(cmd, args)` | mcp.go:37 | mcp 실행 |
+| `runCategory(cmd, args)` | category.go:27 | category 실행 |
 
 #### 헬퍼 함수 - 초기화
 

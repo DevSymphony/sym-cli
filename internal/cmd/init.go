@@ -146,9 +146,18 @@ func createDefaultPolicy() error {
 		return nil
 	}
 
-	// Create default policy with admin, developer, viewer RBAC roles
+	// Create default policy with categories and RBAC roles
 	defaultPolicy := &schema.UserPolicy{
 		Version: "1.0.0",
+		Category: []schema.CategoryDef{
+			{Name: "security", Description: "Security rules (authentication, authorization, vulnerability prevention, etc.)"},
+			{Name: "style", Description: "Code style and formatting rules"},
+			{Name: "documentation", Description: "Documentation rules (comments, docstrings, etc.)"},
+			{Name: "error_handling", Description: "Error handling and exception management rules"},
+			{Name: "architecture", Description: "Code structure and architecture rules"},
+			{Name: "performance", Description: "Performance optimization rules"},
+			{Name: "testing", Description: "Testing rules (coverage, test patterns, etc.)"},
+		},
 		RBAC: &schema.UserRBAC{
 			Roles: map[string]schema.UserRole{
 				"admin": {

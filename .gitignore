@@ -29,3 +29,6 @@ coverage.txt
 !npm/bin/
 !npm/bin/*.js
 npm/bin/sym-*
+
+CLAUDE.md
+AGENTS.md
