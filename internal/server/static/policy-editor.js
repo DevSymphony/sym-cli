@@ -1165,8 +1165,9 @@ async function handleApplyTemplate(e) {
             throw new Error('Invalid template format received');
         }
 
-        // Preserve existing RBAC
+        // Preserve existing RBAC and categories
         const currentRBAC = appState.policy.rbac;
+        const currentCategory = appState.policy.category;
 
         // Collect all languages from template (defaults and rules)
         const templateLanguages = new Set();
@@ -1194,6 +1195,7 @@ async function handleApplyTemplate(e) {
         appState.policy = {
             version: template.version || '1.0.0',
             rbac: currentRBAC || { roles: {} }, // Keep current RBAC
+            category: currentCategory || [],     // Keep current categories
             defaults: {
                 ...template.defaults,
                 languages: languageArray, // Normalized languages
