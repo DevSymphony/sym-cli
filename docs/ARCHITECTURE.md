@@ -140,6 +140,7 @@ AI 코딩 도구(Claude Code, Cursor 등)와 stdio를 통해 통신합니다.
 |------|-------------|
 | `query_conventions` | 프로젝트 컨벤션 조회 |
 | `validate_code` | 코드 변경사항 검증 |
+| `list_category` | 카테고리 목록 조회 |
 
 #### HTTP Server (`internal/server`)
 
