@@ -60,6 +60,16 @@ var mcpToolToApp = map[string]string{
 	"VS Code Copilot": "vscode",
 }
 
+// getNpmPackageRef returns the npm package reference with version
+// Returns "@dev-symphony/sym@latest" for dev builds, "@dev-symphony/sym@<version>" otherwise
+func getNpmPackageRef() string {
+	v := GetVersion()
+	if v == "dev" || v == "" {
+		return "@dev-symphony/sym@latest"
+	}
+	return fmt.Sprintf("@dev-symphony/sym@%s", v)
+}
+
 // promptMCPRegistration prompts user to register Symphony as MCP server
 func promptMCPRegistration() {
 	// Check if npx is available
@@ -185,7 +195,7 @@ func registerMCP(app string) error {
 		vscodeConfig.Servers["symphony"] = VSCodeServerConfig{
 			Type:    "stdio",
 			Command: "npx",
-			Args:    []string{"-y", "@dev-symphony/sym@latest", "mcp"},
+			Args:    []string{"-y", getNpmPackageRef(), "mcp"},
 		}
 
 		// Marshal
@@ -221,7 +231,7 @@ func registerMCP(app string) error {
 		// Add/update Symphony server
 		serverConfig := MCPServerConfig{
 			Command: "npx",
-			Args:    []string{"-y", "@dev-symphony/sym@latest", "mcp"},
+			Args:    []string{"-y", getNpmPackageRef(), "mcp"},
 		}
 
 		// For Cursor, add type field

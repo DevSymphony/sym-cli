@@ -26,3 +26,8 @@ func init() {
 func SetVersion(v string) {
 	version = v
 }
+
+// GetVersion returns the current version string
+func GetVersion() string {
+	return version
+}
