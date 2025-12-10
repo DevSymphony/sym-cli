@@ -62,7 +62,7 @@ pkg/schema/
 
 ### CategoryDef
 
-카테고리 정의 구조체입니다.
+카테고리 정의 구조체입니다. 규칙을 관심 영역별로 분류하여 조직화합니다.
 
 ```go
 type CategoryDef struct {
@@ -70,6 +70,17 @@ type CategoryDef struct {
     Description string `json:"description"` // 자연어 설명 (1-2줄)
 }
 ```
+
+**기본 카테고리** (`sym init` 실행 시 생성):
+- `security` - 보안 규칙 (인증, 인가, 취약점 방지)
+- `style` - 코드 스타일 및 포맷팅 규칙
+- `documentation` - 문서화 규칙 (주석, docstring)
+- `error_handling` - 에러 처리 및 예외 관리
+- `architecture` - 코드 구조 및 아키텍처 규칙
+- `performance` - 성능 최적화 규칙
+- `testing` - 테스팅 규칙 (커버리지, 테스트 패턴)
+
+**관리 명령어**: `sym category list|add|edit|remove`
 
 ### UserPolicy
 

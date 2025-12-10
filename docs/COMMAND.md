@@ -41,6 +41,9 @@ Symphony (`sym`)는 코드 컨벤션 관리와 RBAC(역할 기반 접근 제어)
       - [query\_conventions](#query_conventions)
       - [validate\_code](#validate_code)
       - [list\_category](#list_category)
+      - [add\_category](#add_category)
+      - [edit\_category](#edit_category)
+      - [remove\_category](#remove_category)
     - [등록 방법](#등록-방법)
   - [LLM 프로바이더](#llm-프로바이더)
     - [지원 프로바이더](#지원-프로바이더)
@@ -372,19 +375,27 @@ sym validate --timeout 60
 
 ### sym category
 
-**설명**: 사용 가능한 모든 컨벤션 카테고리와 설명을 표시합니다.
+**설명**: 컨벤션 카테고리를 관리합니다.
 
-user-policy.json에 정의된 카테고리를 표시합니다. `sym init` 실행 시 7개의 기본 카테고리(security, style, documentation, error_handling, architecture, performance, testing)가 생성됩니다. 사용자는 이 카테고리를 수정, 삭제하거나 새로운 카테고리를 추가할 수 있습니다.
+user-policy.json에 정의된 카테고리를 조회, 추가, 편집, 삭제할 수 있습니다. `sym init` 실행 시 7개의 기본 카테고리(security, style, documentation, error_handling, architecture, performance, testing)가 생성됩니다.
+
+**서브커맨드**:
+- `list` - 카테고리 목록 조회
+- `add` - 새 카테고리 추가
+- `edit` - 기존 카테고리 편집
+- `remove` - 카테고리 삭제
+
+**관련 파일**: `internal/cmd/category.go`
+
+---
+
+#### sym category list
+
+**설명**: 모든 카테고리와 설명을 표시합니다.
 
 **문법**:
 ```
-sym category
-```
-
-**예시**:
-```bash
-# 카테고리 목록 조회
-sym category
+sym category list
 ```
 
 **출력 예시**:
@@ -399,36 +410,115 @@ sym category
 
   • documentation
     Documentation rules (comments, docstrings, etc.)
-
-  • error_handling
-    Error handling and exception management rules
-
-  • architecture
-    Code structure and architecture rules
-
-  • performance
-    Performance optimization rules
-
-  • testing
-    Testing rules (coverage, test patterns, etc.)
 ```
 
-**사용자 정의 카테고리**:
+---
 
-user-policy.json에 `category` 필드를 추가하여 사용자 정의 카테고리를 추가하거나 기존 카테고리 설명을 변경할 수 있습니다:
+#### sym category add
 
+**설명**: 새 카테고리를 추가합니다.
+
+**문법**:
+```
+sym category add <name> <description>
+sym category add -f <file.json>
+```
+
+**플래그**:
+- `-f, --file` - 배치 추가를 위한 JSON 파일
+
+**예시**:
+```bash
+# 단일 추가
+sym category add accessibility "Accessibility rules (WCAG, ARIA, etc.)"
+
+# 배치 추가
+sym category add -f categories.json
+```
+
+**배치 파일 형식** (`categories.json`):
 ```json
-{
-  "version": "1.0",
-  "category": [
-    {"name": "security", "description": "보안 관련 규칙 (인증, 인가, 취약점 방지 등)"},
-    {"name": "naming", "description": "네이밍 컨벤션 규칙 (변수, 함수, 클래스 등)"}
-  ],
-  "rules": [...]
-}
+[
+  {"name": "security", "description": "Security rules"},
+  {"name": "performance", "description": "Performance rules"}
+]
 ```
 
-**관련 파일**: `internal/cmd/category.go`
+---
+
+#### sym category edit
+
+**설명**: 기존 카테고리의 이름 또는 설명을 변경합니다.
+
+**문법**:
+```
+sym category edit <name> [--name <new-name>] [--description <desc>]
+sym category edit -f <file.json>
+```
+
+**플래그**:
+- `--name` - 새 카테고리 이름
+- `--description` - 새 설명
+- `-f, --file` - 배치 편집을 위한 JSON 파일
+
+**예시**:
+```bash
+# 설명만 변경
+sym category edit security --description "Updated security rules"
+
+# 이름 변경 (관련 규칙도 자동 업데이트)
+sym category edit old-name --name new-name
+
+# 이름과 설명 모두 변경
+sym category edit security --name sec --description "Security conventions"
+
+# 배치 편집
+sym category edit -f edits.json
+```
+
+**배치 파일 형식** (`edits.json`):
+```json
+[
+  {"name": "security", "new_name": "sec"},
+  {"name": "performance", "description": "New description"}
+]
+```
+
+**참고**: 카테고리 이름 변경 시 해당 카테고리를 참조하는 모든 규칙이 자동으로 업데이트됩니다.
+
+---
+
+#### sym category remove
+
+**설명**: 카테고리를 삭제합니다.
+
+**문법**:
+```
+sym category remove <name> [names...]
+sym category remove -f <file.json>
+```
+
+**플래그**:
+- `-f, --file` - 삭제할 카테고리 이름이 담긴 JSON 파일
+
+**예시**:
+```bash
+# 단일 삭제
+sym category remove deprecated-category
+
+# 다중 삭제
+sym category remove cat1 cat2 cat3
+
+# 배치 삭제
+sym category remove -f names.json
+```
+
+**배치 파일 형식** (`names.json`):
+```json
+["cat1", "cat2", "cat3"]
+```
+
+**참고**: 규칙이 참조하고 있는 카테고리는 삭제할 수 없습니다. 먼저 해당 규칙을 삭제하거나 다른 카테고리로 변경해야 합니다.
 
 ---
 
@@ -440,6 +530,9 @@ user-policy.json에 `category` 필드를 추가하여 사용자 정의 카테고
 - `query_conventions`: 주어진 컨텍스트에 대한 컨벤션 쿼리
 - `validate_code`: 코드의 컨벤션 준수 여부 검증
 - `list_category`: 사용 가능한 카테고리 목록 조회
+- `add_category`: 카테고리 추가 (배치 지원)
+- `edit_category`: 카테고리 편집 (배치 지원)
+- `remove_category`: 카테고리 삭제 (배치 지원)
 
 **통신 방식**: stdio (Claude Desktop, Claude Code, Cursor 등 MCP 클라이언트와 통합)
 
@@ -724,6 +817,63 @@ Available categories (7):
   Testing rules (coverage, test patterns, etc.)
 
 Use query_conventions with a specific category to get rules for that category.
+```
+
+#### add_category
+
+카테고리를 추가합니다 (배치 모드).
+
+**입력 스키마**:
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `categories` | array | 예 | `{name, description}` 객체 배열 |
+
+**예시**:
+```json
+{
+  "categories": [
+    {"name": "accessibility", "description": "Accessibility rules (WCAG, ARIA)"},
+    {"name": "i18n", "description": "Internationalization rules"}
+  ]
+}
+```
+
+#### edit_category
+
+카테고리를 편집합니다 (배치 모드). 이름 변경 시 규칙 참조도 자동 업데이트됩니다.
+
+**입력 스키마**:
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `edits` | array | 예 | `{name, new_name?, description?}` 객체 배열 |
+
+**예시**:
+```json
+{
+  "edits": [
+    {"name": "security", "description": "Updated security rules"},
+    {"name": "style", "new_name": "formatting"}
+  ]
+}
+```
+
+#### remove_category
+
+카테고리를 삭제합니다 (배치 모드). 규칙이 참조하는 카테고리는 삭제할 수 없습니다.
+
+**입력 스키마**:
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `names` | array | 예 | 삭제할 카테고리 이름 배열 |
+
+**예시**:
+```json
+{
+  "names": ["deprecated-category", "unused-category"]
+}
 ```
 
 ### 등록 방법
