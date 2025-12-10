@@ -1149,19 +1149,6 @@ function renderTemplates() {
     });
 }
 
-// Default descriptions for common categories
-const DEFAULT_CATEGORY_DESCRIPTIONS = {
-    'security': 'Security rules (authentication, authorization, vulnerability prevention)',
-    'style': 'Code style and formatting rules',
-    'documentation': 'Documentation rules (comments, docstrings, etc.)',
-    'error_handling': 'Error handling and exception management rules',
-    'architecture': 'Code structure and architecture rules',
-    'performance': 'Performance optimization rules',
-    'testing': 'Testing rules (coverage, test patterns, etc.)',
-    'naming': 'Naming convention rules',
-    'formatting': 'Code formatting rules'
-};
-
 async function handleApplyTemplate(e) {
     const templateName = e.currentTarget.dataset.templateName;
     console.log('Applying template:', templateName);
@@ -1178,32 +1165,8 @@ async function handleApplyTemplate(e) {
             throw new Error('Invalid template format received');
         }
 
-        // Preserve existing RBAC and categories
+        // Preserve existing RBAC only (category is now overwritten from template)
         const currentRBAC = appState.policy.rbac;
-        const currentCategory = appState.policy.category || [];
-
-        // Collect categories used by template rules
-        const templateCategories = new Set();
-        if (template.rules) {
-            template.rules.forEach(rule => {
-                if (rule.category) {
-                    templateCategories.add(rule.category);
-                }
-            });
-        }
-
-        // Add missing categories
-        const existingNames = new Set(currentCategory.map(c => c.name));
-        const addedCategories = [];
-        templateCategories.forEach(catName => {
-            if (!existingNames.has(catName)) {
-                currentCategory.push({
-                    name: catName,
-                    description: DEFAULT_CATEGORY_DESCRIPTIONS[catName] || `${catName} related rules`
-                });
-                addedCategories.push(catName);
-            }
-        });
 
         // Collect all languages from template (defaults and rules)
         const templateLanguages = new Set();
@@ -1227,11 +1190,11 @@ async function handleApplyTemplate(e) {
         const templateDefaultLang = template.defaults?.defaultLanguage?.toLowerCase() ||
             (languageArray.length > 0 ? languageArray[0] : '');
 
-        // Apply template to policy
+        // Apply template to policy (category is overwritten from template)
         appState.policy = {
             version: template.version || '1.0.0',
-            rbac: currentRBAC || { roles: {} }, // Keep current RBAC
-            category: currentCategory || [],     // Keep current categories
+            rbac: currentRBAC || { roles: {} },    // Keep current RBAC
+            category: template.category || [],      // Use template's category (overwrite)
             defaults: {
                 ...template.defaults,
                 languages: languageArray, // Normalized languages
@@ -1252,18 +1215,16 @@ async function handleApplyTemplate(e) {
             })
         };
 
-        console.log('Template applied to appState (RBAC preserved):', appState.policy);
-        console.log('Languages added from template:', Array.from(templateLanguages));
+        console.log('Template applied to appState:', appState.policy);
+        console.log('Languages from template:', Array.from(templateLanguages));
+        console.log('Categories from template:', template.category?.length || 0);
 
         renderAll();
         hideModal('template-modal');
 
         const langCount = templateLanguages.size;
-        let message = `템플릿이 적용되었습니다 (${langCount}개 언어, RBAC/카테고리 유지됨)`;
-        if (addedCategories.length > 0) {
-            message = `템플릿이 적용되었습니다 (${addedCategories.length}개 카테고리 추가: ${addedCategories.join(', ')})`;
-        }
-        showToast(message);
+        const catCount = template.category?.length || 0;
+        showToast(`템플릿이 적용되었습니다 (${langCount}개 언어, ${catCount}개 카테고리)`);
         markDirty();
     } catch (error) {
         console.error('Failed to apply template:', error);
@@ -1405,9 +1366,9 @@ async function savePolicy() {
             const message = changedItems.length > 0 ?
                 `${changedItems.join(', ')}.\n\n` +
                 'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
-                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.' :
+                '이 작업은 설정된 LLM Provider를 사용하며 몇 분 정도 소요될 수 있습니다.' :
                 'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
-                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.';
+                '이 작업은 설정된 LLM Provider를 사용하며 몇 분 정도 소요될 수 있습니다.';
 
             const shouldConvert = confirm(message);
 

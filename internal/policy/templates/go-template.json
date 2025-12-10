@@ -1,5 +1,11 @@
 {
   "version": "1.0.0",
+  "category": [
+    {"name": "naming", "description": "Naming convention rules (package names, identifiers, interfaces)"},
+    {"name": "error_handling", "description": "Error handling rules (error returns, context, goroutines)"},
+    {"name": "formatting", "description": "Code formatting rules (gofmt)"},
+    {"name": "documentation", "description": "Documentation rules (exported functions, types)"}
+  ],
   "defaults": {
     "languages": ["go"],
     "severity": "error",
