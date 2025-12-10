@@ -1149,6 +1149,19 @@ function renderTemplates() {
     });
 }
 
+// Default descriptions for common categories
+const DEFAULT_CATEGORY_DESCRIPTIONS = {
+    'security': 'Security rules (authentication, authorization, vulnerability prevention)',
+    'style': 'Code style and formatting rules',
+    'documentation': 'Documentation rules (comments, docstrings, etc.)',
+    'error_handling': 'Error handling and exception management rules',
+    'architecture': 'Code structure and architecture rules',
+    'performance': 'Performance optimization rules',
+    'testing': 'Testing rules (coverage, test patterns, etc.)',
+    'naming': 'Naming convention rules',
+    'formatting': 'Code formatting rules'
+};
+
 async function handleApplyTemplate(e) {
     const templateName = e.currentTarget.dataset.templateName;
     console.log('Applying template:', templateName);
@@ -1167,7 +1180,30 @@ async function handleApplyTemplate(e) {
 
         // Preserve existing RBAC and categories
         const currentRBAC = appState.policy.rbac;
-        const currentCategory = appState.policy.category;
+        const currentCategory = appState.policy.category || [];
+
+        // Collect categories used by template rules
+        const templateCategories = new Set();
+        if (template.rules) {
+            template.rules.forEach(rule => {
+                if (rule.category) {
+                    templateCategories.add(rule.category);
+                }
+            });
+        }
+
+        // Add missing categories
+        const existingNames = new Set(currentCategory.map(c => c.name));
+        const addedCategories = [];
+        templateCategories.forEach(catName => {
+            if (!existingNames.has(catName)) {
+                currentCategory.push({
+                    name: catName,
+                    description: DEFAULT_CATEGORY_DESCRIPTIONS[catName] || `${catName} related rules`
+                });
+                addedCategories.push(catName);
+            }
+        });
 
         // Collect all languages from template (defaults and rules)
         const templateLanguages = new Set();
@@ -1223,7 +1259,11 @@ async function handleApplyTemplate(e) {
         hideModal('template-modal');
 
         const langCount = templateLanguages.size;
-        showToast(`템플릿이 적용되었습니다 (${langCount}개 언어 추가됨, RBAC 유지됨)`);
+        let message = `템플릿이 적용되었습니다 (${langCount}개 언어, RBAC/카테고리 유지됨)`;
+        if (addedCategories.length > 0) {
+            message = `템플릿이 적용되었습니다 (${addedCategories.length}개 카테고리 추가: ${addedCategories.join(', ')})`;
+        }
+        showToast(message);
         markDirty();
     } catch (error) {
         console.error('Failed to apply template:', error);
