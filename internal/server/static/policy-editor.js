@@ -457,12 +457,12 @@ function renderCategories() {
                     </div>
                 </div>
                 <div class="category-edit hidden">
-                    <div class="flex gap-3 items-end">
-                        <div class="flex-1">
+                    <div class="grid grid-cols-[1fr_2fr_auto_auto] gap-3 items-end">
+                        <div>
                             <label class="block text-xs font-medium text-slate-500 mb-1">이름</label>
                             <input type="text" class="edit-category-name w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" value="${cat.name}" data-original-name="${cat.name}">
                         </div>
-                        <div class="flex-2">
+                        <div>
                             <label class="block text-xs font-medium text-slate-500 mb-1">설명</label>
                             <input type="text" class="edit-category-description w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" value="${cat.description || ''}">
                         </div>
