@@ -202,22 +202,38 @@ type ListCategoryInput struct {
 	// No parameters - returns all categories
 }
 
-// AddCategoryInput represents the input schema for the add_category tool (go-sdk).
-type AddCategoryInput struct {
-	Name        string `json:"name" jsonschema:"Category name (unique identifier)"`
-	Description string `json:"description" jsonschema:"Category description (1-2 lines)"`
+// CategoryItem represents a single category for batch operations.
+type CategoryItem struct {
+	Name        string `json:"name" jsonschema:"Category name"`
+	Description string `json:"description" jsonschema:"Category description"`
 }
 
-// EditCategoryInput represents the input schema for the edit_category tool (go-sdk).
-type EditCategoryInput struct {
-	Name        string `json:"name" jsonschema:"Current category name to edit"`
-	NewName     string `json:"new_name,omitempty" jsonschema:"New category name (optional)"`
+// CategoryEditItem represents a single category edit for batch operations.
+type CategoryEditItem struct {
+	Name        string `json:"name" jsonschema:"Current category name"`
+	NewName     string `json:"new_name,omitempty" jsonschema:"New name (optional)"`
 	Description string `json:"description,omitempty" jsonschema:"New description (optional)"`
 }
 
-// RemoveCategoryInput represents the input schema for the remove_category tool (go-sdk).
+// FailedItem represents a failed operation in batch processing.
+type FailedItem struct {
+	Name   string `json:"name"`
+	Reason string `json:"reason"`
+}
+
+// AddCategoryInput represents the input schema for the add_category tool (batch mode).
+type AddCategoryInput struct {
+	Categories []CategoryItem `json:"categories" jsonschema:"Array of categories to add"`
+}
+
+// EditCategoryInput represents the input schema for the edit_category tool (batch mode).
+type EditCategoryInput struct {
+	Edits []CategoryEditItem `json:"edits" jsonschema:"Array of category edits"`
+}
+
+// RemoveCategoryInput represents the input schema for the remove_category tool (batch mode).
 type RemoveCategoryInput struct {
-	Name string `json:"name" jsonschema:"Category name to remove"`
+	Names []string `json:"names" jsonschema:"Array of category names to remove"`
 }
 
 // runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
@@ -271,36 +287,36 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 		return nil, result.(map[string]any), nil
 	})
 
-	// Tool: add_category
+	// Tool: add_category (batch mode)
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "add_category",
-		Description: "Add a new convention category. Requires name and description.",
+		Description: "Add convention categories. Pass array of {name, description} objects in 'categories' field.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input AddCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
-		result, rpcErr := s.handleAddCategory(input.Name, input.Description)
+		result, rpcErr := s.handleAddCategory(input)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
 		return nil, result.(map[string]any), nil
 	})
 
-	// Tool: edit_category
+	// Tool: edit_category (batch mode)
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "edit_category",
-		Description: "Edit an existing convention category. Requires current name; new_name and description are optional.",
+		Description: "Edit convention categories. Pass array of {name, new_name?, description?} objects in 'edits' field.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input EditCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
-		result, rpcErr := s.handleEditCategory(input.Name, input.NewName, input.Description)
+		result, rpcErr := s.handleEditCategory(input)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
 		return nil, result.(map[string]any), nil
 	})
 
-	// Tool: remove_category
+	// Tool: remove_category (batch mode)
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "remove_category",
-		Description: "Remove a convention category. Cannot remove if rules reference the category.",
+		Description: "Remove convention categories. Pass array of category names in 'names' field.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input RemoveCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
-		result, rpcErr := s.handleRemoveCategory(input.Name)
+		result, rpcErr := s.handleRemoveCategory(input)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
@@ -910,157 +926,253 @@ func (s *Server) getCategory() []schema.CategoryDef {
 	return nil
 }
 
-// handleAddCategory handles adding a new category.
-func (s *Server) handleAddCategory(name, description string) (interface{}, *RPCError) {
-	// Validate inputs
-	if name == "" {
-		return nil, &RPCError{Code: -32602, Message: "Category name is required"}
-	}
-	if description == "" {
-		return nil, &RPCError{Code: -32602, Message: "Category description is required"}
+// handleAddCategory handles adding categories (batch mode).
+func (s *Server) handleAddCategory(input AddCategoryInput) (interface{}, *RPCError) {
+	// Validate input
+	if len(input.Categories) == 0 {
+		return nil, &RPCError{Code: -32602, Message: "At least one category is required in 'categories' array"}
 	}
 
-	// Check for duplicate
+	// Build existing names map
+	existingNames := make(map[string]bool)
 	for _, cat := range s.userPolicy.Category {
-		if cat.Name == name {
-			return nil, &RPCError{Code: -32602, Message: fmt.Sprintf("Category '%s' already exists", name)}
+		existingNames[cat.Name] = true
+	}
+
+	var succeeded []string
+	var failed []FailedItem
+
+	// Process each category
+	for _, cat := range input.Categories {
+		// Validate
+		if cat.Name == "" {
+			failed = append(failed, FailedItem{Name: "(empty)", Reason: "Category name is required"})
+			continue
+		}
+		if cat.Description == "" {
+			failed = append(failed, FailedItem{Name: cat.Name, Reason: "Category description is required"})
+			continue
+		}
+
+		// Check for duplicate
+		if existingNames[cat.Name] {
+			failed = append(failed, FailedItem{Name: cat.Name, Reason: fmt.Sprintf("Category '%s' already exists", cat.Name)})
+			continue
+		}
+
+		// Add category
+		s.userPolicy.Category = append(s.userPolicy.Category, schema.CategoryDef{
+			Name:        cat.Name,
+			Description: cat.Description,
+		})
+		existingNames[cat.Name] = true
+		succeeded = append(succeeded, cat.Name)
+	}
+
+	// Save policy if any succeeded
+	if len(succeeded) > 0 {
+		if err := s.saveUserPolicy(); err != nil {
+			return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
 		}
 	}
 
-	// Add new category
-	s.userPolicy.Category = append(s.userPolicy.Category, schema.CategoryDef{
-		Name:        name,
-		Description: description,
-	})
-
-	// Save policy
-	if err := s.saveUserPolicy(); err != nil {
-		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
-	}
-
-	return map[string]interface{}{
-		"content": []map[string]interface{}{
-			{"type": "text", "text": fmt.Sprintf("Category '%s' added successfully.", name)},
-		},
-	}, nil
+	// Build response
+	return s.buildBatchResponse("Added", succeeded, failed), nil
 }
 
-// handleEditCategory handles editing an existing category.
-func (s *Server) handleEditCategory(name, newName, description string) (interface{}, *RPCError) {
-	// Validate inputs
-	if name == "" {
-		return nil, &RPCError{Code: -32602, Message: "Category name is required"}
-	}
-	if newName == "" && description == "" {
-		return nil, &RPCError{Code: -32602, Message: "At least one of new_name or description must be provided"}
+// handleEditCategory handles editing categories (batch mode).
+func (s *Server) handleEditCategory(input EditCategoryInput) (interface{}, *RPCError) {
+	// Validate input
+	if len(input.Edits) == 0 {
+		return nil, &RPCError{Code: -32602, Message: "At least one edit is required in 'edits' array"}
 	}
 
-	// Find category
-	categoryIndex := -1
+	// Build category index map
+	categoryIndex := make(map[string]int)
 	for i, cat := range s.userPolicy.Category {
-		if cat.Name == name {
-			categoryIndex = i
-			break
+		categoryIndex[cat.Name] = i
+	}
+
+	var succeeded []string
+	var failed []FailedItem
+	totalRulesUpdated := 0
+
+	// Process each edit
+	for _, edit := range input.Edits {
+		// Validate
+		if edit.Name == "" {
+			failed = append(failed, FailedItem{Name: "(empty)", Reason: "Category name is required"})
+			continue
 		}
-	}
+		if edit.NewName == "" && edit.Description == "" {
+			failed = append(failed, FailedItem{Name: edit.Name, Reason: "At least one of new_name or description must be provided"})
+			continue
+		}
 
-	if categoryIndex == -1 {
-		return nil, &RPCError{Code: -32602, Message: fmt.Sprintf("Category '%s' not found", name)}
-	}
+		// Find category
+		idx, exists := categoryIndex[edit.Name]
+		if !exists {
+			failed = append(failed, FailedItem{Name: edit.Name, Reason: fmt.Sprintf("Category '%s' not found", edit.Name)})
+			continue
+		}
 
-	// If renaming, check for duplicate and update rule references
-	affectedRules := 0
-	if newName != "" && newName != name {
-		// Check for duplicate
-		for _, cat := range s.userPolicy.Category {
-			if cat.Name == newName {
-				return nil, &RPCError{Code: -32602, Message: fmt.Sprintf("Category '%s' already exists", newName)}
+		rulesUpdated := 0
+		resultText := edit.Name
+
+		// If renaming
+		if edit.NewName != "" && edit.NewName != edit.Name {
+			// Check for duplicate
+			if _, dupExists := categoryIndex[edit.NewName]; dupExists {
+				failed = append(failed, FailedItem{Name: edit.Name, Reason: fmt.Sprintf("Category '%s' already exists", edit.NewName)})
+				continue
+			}
+
+			// Update rule references
+			for i := range s.userPolicy.Rules {
+				if s.userPolicy.Rules[i].Category == edit.Name {
+					s.userPolicy.Rules[i].Category = edit.NewName
+					rulesUpdated++
+				}
+			}
+
+			// Update index map
+			delete(categoryIndex, edit.Name)
+			categoryIndex[edit.NewName] = idx
+
+			s.userPolicy.Category[idx].Name = edit.NewName
+			resultText = fmt.Sprintf("%s → %s", edit.Name, edit.NewName)
+		}
+
+		// Update description if provided
+		if edit.Description != "" {
+			s.userPolicy.Category[idx].Description = edit.Description
+			if edit.NewName == "" || edit.NewName == edit.Name {
+				resultText = fmt.Sprintf("%s (description updated)", edit.Name)
 			}
 		}
 
-		// Update rule references
-		for i := range s.userPolicy.Rules {
-			if s.userPolicy.Rules[i].Category == name {
-				s.userPolicy.Rules[i].Category = newName
-				affectedRules++
-			}
+		if rulesUpdated > 0 {
+			resultText = fmt.Sprintf("%s (%d rules updated)", resultText, rulesUpdated)
+			totalRulesUpdated += rulesUpdated
 		}
 
-		s.userPolicy.Category[categoryIndex].Name = newName
+		succeeded = append(succeeded, resultText)
 	}
 
-	// Update description if provided
-	if description != "" {
-		s.userPolicy.Category[categoryIndex].Description = description
+	// Save policy if any succeeded
+	if len(succeeded) > 0 {
+		if err := s.saveUserPolicy(); err != nil {
+			return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+		}
 	}
 
-	// Save policy
-	if err := s.saveUserPolicy(); err != nil {
-		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+	// Build response
+	return s.buildBatchResponse("Updated", succeeded, failed), nil
+}
+
+// handleRemoveCategory handles removing categories (batch mode).
+func (s *Server) handleRemoveCategory(input RemoveCategoryInput) (interface{}, *RPCError) {
+	// Validate input
+	if len(input.Names) == 0 {
+		return nil, &RPCError{Code: -32602, Message: "At least one category name is required in 'names' array"}
 	}
 
+	// Build category index map and rule count map
+	categoryIndex := make(map[string]int)
+	for i, cat := range s.userPolicy.Category {
+		categoryIndex[cat.Name] = i
+	}
+
+	ruleCount := make(map[string]int)
+	for _, rule := range s.userPolicy.Rules {
+		ruleCount[rule.Category]++
+	}
+
+	var succeeded []string
+	var failed []FailedItem
+	toRemove := make(map[int]bool) // indices to remove
+
+	// Process each name
+	for _, name := range input.Names {
+		// Validate
+		if name == "" {
+			failed = append(failed, FailedItem{Name: "(empty)", Reason: "Category name is required"})
+			continue
+		}
+
+		// Find category
+		idx, exists := categoryIndex[name]
+		if !exists {
+			failed = append(failed, FailedItem{Name: name, Reason: fmt.Sprintf("Category '%s' not found", name)})
+			continue
+		}
+
+		// Check if rules reference this category
+		if count := ruleCount[name]; count > 0 {
+			failed = append(failed, FailedItem{Name: name, Reason: fmt.Sprintf("Category is used by %d rule(s)", count)})
+			continue
+		}
+
+		toRemove[idx] = true
+		succeeded = append(succeeded, name)
+	}
+
+	// Remove categories (in reverse order to preserve indices)
+	if len(toRemove) > 0 {
+		newCategories := make([]schema.CategoryDef, 0, len(s.userPolicy.Category)-len(toRemove))
+		for i, cat := range s.userPolicy.Category {
+			if !toRemove[i] {
+				newCategories = append(newCategories, cat)
+			}
+		}
+		s.userPolicy.Category = newCategories
+
+		if err := s.saveUserPolicy(); err != nil {
+			return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+		}
+	}
+
+	// Build response
+	return s.buildBatchResponse("Removed", succeeded, failed), nil
+}
+
+// buildBatchResponse builds a standardized batch operation response.
+func (s *Server) buildBatchResponse(action string, succeeded []string, failed []FailedItem) map[string]interface{} {
 	var textContent string
-	if affectedRules > 0 {
-		textContent = fmt.Sprintf("Category updated successfully. %d rule(s) updated.", affectedRules)
+
+	if len(failed) == 0 && len(succeeded) > 0 {
+		// All succeeded
+		textContent = fmt.Sprintf("%s %d category(ies) successfully:\n", action, len(succeeded))
+		for _, name := range succeeded {
+			textContent += fmt.Sprintf("  ✓ %s\n", name)
+		}
+	} else if len(succeeded) == 0 && len(failed) > 0 {
+		// All failed
+		textContent = fmt.Sprintf("Failed to %s any categories:\n", strings.ToLower(action))
+		for _, f := range failed {
+			textContent += fmt.Sprintf("  ✗ %s: %s\n", f.Name, f.Reason)
+		}
+	} else if len(succeeded) > 0 && len(failed) > 0 {
+		// Partial success
+		textContent = "Batch operation completed with errors:\n"
+		textContent += fmt.Sprintf("  ✓ Succeeded (%d):\n", len(succeeded))
+		for _, name := range succeeded {
+			textContent += fmt.Sprintf("    - %s\n", name)
+		}
+		textContent += fmt.Sprintf("  ✗ Failed (%d):\n", len(failed))
+		for _, f := range failed {
+			textContent += fmt.Sprintf("    - %s: %s\n", f.Name, f.Reason)
+		}
 	} else {
-		textContent = "Category updated successfully."
+		// Nothing to do
+		textContent = "No categories to process."
 	}
 
 	return map[string]interface{}{
 		"content": []map[string]interface{}{
 			{"type": "text", "text": textContent},
 		},
-	}, nil
-}
-
-// handleRemoveCategory handles removing a category.
-func (s *Server) handleRemoveCategory(name string) (interface{}, *RPCError) {
-	// Validate inputs
-	if name == "" {
-		return nil, &RPCError{Code: -32602, Message: "Category name is required"}
 	}
-
-	// Find category
-	categoryIndex := -1
-	for i, cat := range s.userPolicy.Category {
-		if cat.Name == name {
-			categoryIndex = i
-			break
-		}
-	}
-
-	if categoryIndex == -1 {
-		return nil, &RPCError{Code: -32602, Message: fmt.Sprintf("Category '%s' not found", name)}
-	}
-
-	// Check if any rules reference this category
-	rulesUsingCategory := 0
-	for _, rule := range s.userPolicy.Rules {
-		if rule.Category == name {
-			rulesUsingCategory++
-		}
-	}
-
-	if rulesUsingCategory > 0 {
-		return nil, &RPCError{
-			Code:    -32602,
-			Message: fmt.Sprintf("Category '%s' is used by %d rule(s). Remove rule references first.", name, rulesUsingCategory),
-		}
-	}
-
-	// Remove category
-	s.userPolicy.Category = append(s.userPolicy.Category[:categoryIndex], s.userPolicy.Category[categoryIndex+1:]...)
-
-	// Save policy
-	if err := s.saveUserPolicy(); err != nil {
-		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
-	}
-
-	return map[string]interface{}{
-		"content": []map[string]interface{}{
-			{"type": "text", "text": fmt.Sprintf("Category '%s' removed successfully.", name)},
-		},
-	}, nil
 }
 
 // saveUserPolicy saves the user policy to file.

@@ -249,7 +249,10 @@ func TestAddCategory(t *testing.T) {
 		require.NoError(t, err)
 		server.userPolicy = userPolicy
 
-		result, rpcErr := server.handleAddCategory("testing", "Testing rules")
+		input := AddCategoryInput{
+			Categories: []CategoryItem{{Name: "testing", Description: "Testing rules"}},
+		}
+		result, rpcErr := server.handleAddCategory(input)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -257,12 +260,34 @@ func TestAddCategory(t *testing.T) {
 		content := resultMap["content"].([]map[string]interface{})
 		text := content[0]["text"].(string)
 
-		assert.Contains(t, text, "added successfully")
+		assert.Contains(t, text, "successfully")
 		assert.Len(t, server.userPolicy.Category, 2)
 		assert.Equal(t, "testing", server.userPolicy.Category[1].Name)
 	})
 
-	t.Run("reject duplicate category", func(t *testing.T) {
+	t.Run("batch add multiple categories", func(t *testing.T) {
+		server := &Server{
+			loader: policy.NewLoader(false),
+			userPolicy: &schema.UserPolicy{
+				Version:  "1.0.0",
+				Category: []schema.CategoryDef{},
+			},
+		}
+
+		input := AddCategoryInput{
+			Categories: []CategoryItem{
+				{Name: "security", Description: "Security rules"},
+				{Name: "performance", Description: "Performance rules"},
+			},
+		}
+		result, rpcErr := server.handleAddCategory(input)
+		require.Nil(t, rpcErr)
+		require.NotNil(t, result)
+
+		assert.Len(t, server.userPolicy.Category, 2)
+	})
+
+	t.Run("partial failure in batch", func(t *testing.T) {
 		server := &Server{
 			loader: policy.NewLoader(false),
 			userPolicy: &schema.UserPolicy{
@@ -273,31 +298,34 @@ func TestAddCategory(t *testing.T) {
 			},
 		}
 
-		_, rpcErr := server.handleAddCategory("security", "Duplicate")
-		require.NotNil(t, rpcErr)
-		assert.Contains(t, rpcErr.Message, "already exists")
+		input := AddCategoryInput{
+			Categories: []CategoryItem{
+				{Name: "security", Description: "Duplicate"},  // will fail
+				{Name: "performance", Description: "Perf"},    // will succeed
+			},
+		}
+		result, rpcErr := server.handleAddCategory(input)
+		require.Nil(t, rpcErr)
+		require.NotNil(t, result)
+
+		resultMap := result.(map[string]interface{})
+		content := resultMap["content"].([]map[string]interface{})
+		text := content[0]["text"].(string)
+
+		assert.Contains(t, text, "errors")
+		assert.Len(t, server.userPolicy.Category, 2) // security + performance
 	})
 
-	t.Run("reject empty name", func(t *testing.T) {
+	t.Run("reject empty categories array", func(t *testing.T) {
 		server := &Server{
 			loader:     policy.NewLoader(false),
 			userPolicy: &schema.UserPolicy{Version: "1.0.0"},
 		}
 
-		_, rpcErr := server.handleAddCategory("", "Some description")
+		input := AddCategoryInput{Categories: []CategoryItem{}}
+		_, rpcErr := server.handleAddCategory(input)
 		require.NotNil(t, rpcErr)
-		assert.Contains(t, rpcErr.Message, "name is required")
-	})
-
-	t.Run("reject empty description", func(t *testing.T) {
-		server := &Server{
-			loader:     policy.NewLoader(false),
-			userPolicy: &schema.UserPolicy{Version: "1.0.0"},
-		}
-
-		_, rpcErr := server.handleAddCategory("testing", "")
-		require.NotNil(t, rpcErr)
-		assert.Contains(t, rpcErr.Message, "description is required")
+		assert.Contains(t, rpcErr.Message, "At least one category is required")
 	})
 }
 
@@ -330,7 +358,10 @@ func TestEditCategory(t *testing.T) {
 		require.NoError(t, err)
 		server.userPolicy = userPolicy
 
-		result, rpcErr := server.handleEditCategory("security", "", "New description")
+		input := EditCategoryInput{
+			Edits: []CategoryEditItem{{Name: "security", Description: "New description"}},
+		}
+		result, rpcErr := server.handleEditCategory(input)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -370,7 +401,10 @@ func TestEditCategory(t *testing.T) {
 		require.NoError(t, err)
 		server.userPolicy = userPolicy
 
-		result, rpcErr := server.handleEditCategory("old-name", "new-name", "")
+		input := EditCategoryInput{
+			Edits: []CategoryEditItem{{Name: "old-name", NewName: "new-name"}},
+		}
+		result, rpcErr := server.handleEditCategory(input)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -378,14 +412,14 @@ func TestEditCategory(t *testing.T) {
 		content := resultMap["content"].([]map[string]interface{})
 		text := content[0]["text"].(string)
 
-		assert.Contains(t, text, "2 rule(s) updated")
+		assert.Contains(t, text, "2 rules updated")
 		assert.Equal(t, "new-name", server.userPolicy.Category[0].Name)
 		assert.Equal(t, "new-name", server.userPolicy.Rules[0].Category)
 		assert.Equal(t, "new-name", server.userPolicy.Rules[1].Category)
 		assert.Equal(t, "other", server.userPolicy.Rules[2].Category)
 	})
 
-	t.Run("reject rename to existing name", func(t *testing.T) {
+	t.Run("batch edit with partial failure", func(t *testing.T) {
 		server := &Server{
 			loader: policy.NewLoader(false),
 			userPolicy: &schema.UserPolicy{
@@ -397,39 +431,33 @@ func TestEditCategory(t *testing.T) {
 			},
 		}
 
-		_, rpcErr := server.handleEditCategory("security", "style", "")
-		require.NotNil(t, rpcErr)
-		assert.Contains(t, rpcErr.Message, "already exists")
-	})
-
-	t.Run("reject not found category", func(t *testing.T) {
-		server := &Server{
-			loader: policy.NewLoader(false),
-			userPolicy: &schema.UserPolicy{
-				Version:  "1.0.0",
-				Category: []schema.CategoryDef{},
+		input := EditCategoryInput{
+			Edits: []CategoryEditItem{
+				{Name: "security", NewName: "style"},     // fail: duplicate
+				{Name: "style", Description: "Updated"},  // succeed
 			},
 		}
+		result, rpcErr := server.handleEditCategory(input)
+		require.Nil(t, rpcErr)
 
-		_, rpcErr := server.handleEditCategory("nonexistent", "new-name", "")
-		require.NotNil(t, rpcErr)
-		assert.Contains(t, rpcErr.Message, "not found")
+		resultMap := result.(map[string]interface{})
+		content := resultMap["content"].([]map[string]interface{})
+		text := content[0]["text"].(string)
+
+		assert.Contains(t, text, "errors")
+		assert.Equal(t, "Updated", server.userPolicy.Category[1].Description)
 	})
 
-	t.Run("reject no changes provided", func(t *testing.T) {
+	t.Run("reject empty edits array", func(t *testing.T) {
 		server := &Server{
-			loader: policy.NewLoader(false),
-			userPolicy: &schema.UserPolicy{
-				Version: "1.0.0",
-				Category: []schema.CategoryDef{
-					{Name: "security", Description: "Security"},
-				},
-			},
+			loader:     policy.NewLoader(false),
+			userPolicy: &schema.UserPolicy{Version: "1.0.0"},
 		}
 
-		_, rpcErr := server.handleEditCategory("security", "", "")
+		input := EditCategoryInput{Edits: []CategoryEditItem{}}
+		_, rpcErr := server.handleEditCategory(input)
 		require.NotNil(t, rpcErr)
-		assert.Contains(t, rpcErr.Message, "At least one")
+		assert.Contains(t, rpcErr.Message, "At least one edit is required")
 	})
 }
 
@@ -465,7 +493,8 @@ func TestRemoveCategory(t *testing.T) {
 		require.NoError(t, err)
 		server.userPolicy = userPolicy
 
-		result, rpcErr := server.handleRemoveCategory("unused")
+		input := RemoveCategoryInput{Names: []string{"unused"}}
+		result, rpcErr := server.handleRemoveCategory(input)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -473,43 +502,50 @@ func TestRemoveCategory(t *testing.T) {
 		content := resultMap["content"].([]map[string]interface{})
 		text := content[0]["text"].(string)
 
-		assert.Contains(t, text, "removed successfully")
+		assert.Contains(t, text, "successfully")
 		assert.Len(t, server.userPolicy.Category, 1)
 		assert.Equal(t, "security", server.userPolicy.Category[0].Name)
 	})
 
-	t.Run("reject remove category with rules", func(t *testing.T) {
+	t.Run("batch remove with partial failure", func(t *testing.T) {
 		server := &Server{
 			loader: policy.NewLoader(false),
 			userPolicy: &schema.UserPolicy{
 				Version: "1.0.0",
 				Category: []schema.CategoryDef{
 					{Name: "security", Description: "Security"},
+					{Name: "unused1", Description: "Unused 1"},
+					{Name: "unused2", Description: "Unused 2"},
 				},
 				Rules: []schema.UserRule{
 					{ID: "R1", Say: "Rule 1", Category: "security"},
-					{ID: "R2", Say: "Rule 2", Category: "security"},
 				},
 			},
 		}
 
-		_, rpcErr := server.handleRemoveCategory("security")
-		require.NotNil(t, rpcErr)
-		assert.Contains(t, rpcErr.Message, "is used by 2 rule(s)")
+		input := RemoveCategoryInput{Names: []string{"security", "unused1", "unused2"}}
+		result, rpcErr := server.handleRemoveCategory(input)
+		require.Nil(t, rpcErr)
+
+		resultMap := result.(map[string]interface{})
+		content := resultMap["content"].([]map[string]interface{})
+		text := content[0]["text"].(string)
+
+		assert.Contains(t, text, "errors")
+		assert.Len(t, server.userPolicy.Category, 1) // only security remains
+		assert.Equal(t, "security", server.userPolicy.Category[0].Name)
 	})
 
-	t.Run("reject not found category", func(t *testing.T) {
+	t.Run("reject empty names array", func(t *testing.T) {
 		server := &Server{
-			loader: policy.NewLoader(false),
-			userPolicy: &schema.UserPolicy{
-				Version:  "1.0.0",
-				Category: []schema.CategoryDef{},
-			},
+			loader:     policy.NewLoader(false),
+			userPolicy: &schema.UserPolicy{Version: "1.0.0"},
 		}
 
-		_, rpcErr := server.handleRemoveCategory("nonexistent")
+		input := RemoveCategoryInput{Names: []string{}}
+		_, rpcErr := server.handleRemoveCategory(input)
 		require.NotNil(t, rpcErr)
-		assert.Contains(t, rpcErr.Message, "not found")
+		assert.Contains(t, rpcErr.Message, "At least one category name is required")
 	})
 }
 
