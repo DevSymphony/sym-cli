@@ -1,8 +1,15 @@
 package schema
 
+// CategoryDef represents a category definition with description
+type CategoryDef struct {
+	Name        string `json:"name"`        // Category identifier (e.g., "security")
+	Description string `json:"description"` // Natural language description (1-2 lines)
+}
+
 // UserPolicy represents the user-friendly policy schema (A schema)
 type UserPolicy struct {
 	Version  string        `json:"version,omitempty"`
+	Category []CategoryDef `json:"category,omitempty"` // User-defined categories with descriptions
 	RBAC     *UserRBAC     `json:"rbac,omitempty"`
 	Defaults *UserDefaults `json:"defaults,omitempty"`
 	Rules    []UserRule    `json:"rules"`
