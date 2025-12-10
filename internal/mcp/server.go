@@ -202,6 +202,24 @@ type ListCategoryInput struct {
 	// No parameters - returns all categories
 }
 
+// AddCategoryInput represents the input schema for the add_category tool (go-sdk).
+type AddCategoryInput struct {
+	Name        string `json:"name" jsonschema:"required,description=Category name (unique identifier)"`
+	Description string `json:"description" jsonschema:"required,description=Category description (1-2 lines)"`
+}
+
+// EditCategoryInput represents the input schema for the edit_category tool (go-sdk).
+type EditCategoryInput struct {
+	Name        string `json:"name" jsonschema:"required,description=Current category name to edit"`
+	NewName     string `json:"new_name,omitempty" jsonschema:"description=New category name (optional)"`
+	Description string `json:"description,omitempty" jsonschema:"description=New description (optional)"`
+}
+
+// RemoveCategoryInput represents the input schema for the remove_category tool (go-sdk).
+type RemoveCategoryInput struct {
+	Name string `json:"name" jsonschema:"required,description=Category name to remove"`
+}
+
 // runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
 func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{
@@ -247,6 +265,42 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 		Description: "List all available convention categories with descriptions. Use this to discover what categories exist before querying conventions.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ListCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		result, rpcErr := s.handleListCategory()
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
+	// Tool: add_category
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "add_category",
+		Description: "Add a new convention category. Requires name and description.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input AddCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleAddCategory(input.Name, input.Description)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
+	// Tool: edit_category
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "edit_category",
+		Description: "Edit an existing convention category. Requires current name; new_name and description are optional.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input EditCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleEditCategory(input.Name, input.NewName, input.Description)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
+	// Tool: remove_category
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "remove_category",
+		Description: "Remove a convention category. Cannot remove if rules reference the category.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input RemoveCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleRemoveCategory(input.Name)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
@@ -854,4 +908,179 @@ func (s *Server) getCategory() []schema.CategoryDef {
 		return s.userPolicy.Category
 	}
 	return nil
+}
+
+// handleAddCategory handles adding a new category.
+func (s *Server) handleAddCategory(name, description string) (interface{}, *RPCError) {
+	// Validate inputs
+	if name == "" {
+		return nil, &RPCError{Code: -32602, Message: "Category name is required"}
+	}
+	if description == "" {
+		return nil, &RPCError{Code: -32602, Message: "Category description is required"}
+	}
+
+	// Check for duplicate
+	for _, cat := range s.userPolicy.Category {
+		if cat.Name == name {
+			return nil, &RPCError{Code: -32602, Message: fmt.Sprintf("Category '%s' already exists", name)}
+		}
+	}
+
+	// Add new category
+	s.userPolicy.Category = append(s.userPolicy.Category, schema.CategoryDef{
+		Name:        name,
+		Description: description,
+	})
+
+	// Save policy
+	if err := s.saveUserPolicy(); err != nil {
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{"type": "text", "text": fmt.Sprintf("Category '%s' added successfully.", name)},
+		},
+	}, nil
+}
+
+// handleEditCategory handles editing an existing category.
+func (s *Server) handleEditCategory(name, newName, description string) (interface{}, *RPCError) {
+	// Validate inputs
+	if name == "" {
+		return nil, &RPCError{Code: -32602, Message: "Category name is required"}
+	}
+	if newName == "" && description == "" {
+		return nil, &RPCError{Code: -32602, Message: "At least one of new_name or description must be provided"}
+	}
+
+	// Find category
+	categoryIndex := -1
+	for i, cat := range s.userPolicy.Category {
+		if cat.Name == name {
+			categoryIndex = i
+			break
+		}
+	}
+
+	if categoryIndex == -1 {
+		return nil, &RPCError{Code: -32602, Message: fmt.Sprintf("Category '%s' not found", name)}
+	}
+
+	// If renaming, check for duplicate and update rule references
+	affectedRules := 0
+	if newName != "" && newName != name {
+		// Check for duplicate
+		for _, cat := range s.userPolicy.Category {
+			if cat.Name == newName {
+				return nil, &RPCError{Code: -32602, Message: fmt.Sprintf("Category '%s' already exists", newName)}
+			}
+		}
+
+		// Update rule references
+		for i := range s.userPolicy.Rules {
+			if s.userPolicy.Rules[i].Category == name {
+				s.userPolicy.Rules[i].Category = newName
+				affectedRules++
+			}
+		}
+
+		s.userPolicy.Category[categoryIndex].Name = newName
+	}
+
+	// Update description if provided
+	if description != "" {
+		s.userPolicy.Category[categoryIndex].Description = description
+	}
+
+	// Save policy
+	if err := s.saveUserPolicy(); err != nil {
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+	}
+
+	var textContent string
+	if affectedRules > 0 {
+		textContent = fmt.Sprintf("Category updated successfully. %d rule(s) updated.", affectedRules)
+	} else {
+		textContent = "Category updated successfully."
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{"type": "text", "text": textContent},
+		},
+	}, nil
+}
+
+// handleRemoveCategory handles removing a category.
+func (s *Server) handleRemoveCategory(name string) (interface{}, *RPCError) {
+	// Validate inputs
+	if name == "" {
+		return nil, &RPCError{Code: -32602, Message: "Category name is required"}
+	}
+
+	// Find category
+	categoryIndex := -1
+	for i, cat := range s.userPolicy.Category {
+		if cat.Name == name {
+			categoryIndex = i
+			break
+		}
+	}
+
+	if categoryIndex == -1 {
+		return nil, &RPCError{Code: -32602, Message: fmt.Sprintf("Category '%s' not found", name)}
+	}
+
+	// Check if any rules reference this category
+	rulesUsingCategory := 0
+	for _, rule := range s.userPolicy.Rules {
+		if rule.Category == name {
+			rulesUsingCategory++
+		}
+	}
+
+	if rulesUsingCategory > 0 {
+		return nil, &RPCError{
+			Code:    -32602,
+			Message: fmt.Sprintf("Category '%s' is used by %d rule(s). Remove rule references first.", name, rulesUsingCategory),
+		}
+	}
+
+	// Remove category
+	s.userPolicy.Category = append(s.userPolicy.Category[:categoryIndex], s.userPolicy.Category[categoryIndex+1:]...)
+
+	// Save policy
+	if err := s.saveUserPolicy(); err != nil {
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{"type": "text", "text": fmt.Sprintf("Category '%s' removed successfully.", name)},
+		},
+	}, nil
+}
+
+// saveUserPolicy saves the user policy to file.
+func (s *Server) saveUserPolicy() error {
+	// Get policy path
+	projectCfg, _ := config.LoadProjectConfig()
+	userPolicyPath := projectCfg.PolicyPath
+	if userPolicyPath == "" {
+		userPolicyPath = ".sym/user-policy.json"
+	}
+
+	// Make absolute path if relative
+	if !filepath.IsAbs(userPolicyPath) {
+		repoRoot, err := git.GetRepoRoot()
+		if err != nil {
+			return fmt.Errorf("failed to get repo root: %w", err)
+		}
+		userPolicyPath = filepath.Join(repoRoot, userPolicyPath)
+	}
+
+	// Save using policy package
+	return policy.SavePolicy(s.userPolicy, "")
 }
