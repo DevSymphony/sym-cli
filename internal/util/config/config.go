@@ -63,9 +63,3 @@ func SaveConfig(cfg *Config) error {
 
 	return os.WriteFile(configPath, data, 0600)
 }
-
-
-// GetConfigPath returns the config file path
-func GetConfigPath() string {
-	return configPath
-}

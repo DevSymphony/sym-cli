@@ -243,47 +243,6 @@ func TestFilterChangesForRule(t *testing.T) {
 	})
 }
 
-func TestFilterLLMRules_Detailed(t *testing.T) {
-	t.Run("filters llm-validator rules only", func(t *testing.T) {
-		policy := &schema.CodePolicy{
-			Rules: []schema.PolicyRule{
-				{ID: "rule1", Enabled: true, Check: map[string]interface{}{"engine": "llm-validator"}},
-				{ID: "rule2", Enabled: true, Check: map[string]interface{}{"engine": "eslint"}},
-				{ID: "rule3", Enabled: true, Check: map[string]interface{}{"engine": "llm-validator"}},
-			},
-		}
-		v := &llmValidator{policy: policy}
-		result := v.filterLLMRules()
-		assert.Len(t, result, 2)
-		assert.Equal(t, "rule1", result[0].ID)
-		assert.Equal(t, "rule3", result[1].ID)
-	})
-
-	t.Run("skips disabled rules", func(t *testing.T) {
-		policy := &schema.CodePolicy{
-			Rules: []schema.PolicyRule{
-				{ID: "rule1", Enabled: false, Check: map[string]interface{}{"engine": "llm-validator"}},
-				{ID: "rule2", Enabled: true, Check: map[string]interface{}{"engine": "llm-validator"}},
-			},
-		}
-		v := &llmValidator{policy: policy}
-		result := v.filterLLMRules()
-		assert.Len(t, result, 1)
-		assert.Equal(t, "rule2", result[0].ID)
-	})
-
-	t.Run("returns empty for no matching rules", func(t *testing.T) {
-		policy := &schema.CodePolicy{
-			Rules: []schema.PolicyRule{
-				{ID: "rule1", Enabled: true, Check: map[string]interface{}{"engine": "eslint"}},
-			},
-		}
-		v := &llmValidator{policy: policy}
-		result := v.filterLLMRules()
-		assert.Len(t, result, 0)
-	})
-}
-
 func TestLinterExecutionUnit_Getters(t *testing.T) {
 	rules := []schema.PolicyRule{
 		{ID: "rule-1"},

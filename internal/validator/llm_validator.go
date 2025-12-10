@@ -43,24 +43,6 @@ func newLLMValidator(provider llm.Provider, policy *schema.CodePolicy) *llmValid
 	}
 }
 
-// filterLLMRules filters rules that use llm-validator engine
-func (v *llmValidator) filterLLMRules() []schema.PolicyRule {
-	llmRules := make([]schema.PolicyRule, 0)
-
-	for _, rule := range v.policy.Rules {
-		if !rule.Enabled {
-			continue
-		}
-
-		engine, ok := rule.Check["engine"].(string)
-		if ok && engine == "llm-validator" {
-			llmRules = append(llmRules, rule)
-		}
-	}
-
-	return llmRules
-}
-
 // checkRule checks if code violates a specific rule using LLM
 // This is the single source of truth for LLM-based validation logic
 func (v *llmValidator) checkRule(ctx context.Context, change git.Change, addedLines []string, rule schema.PolicyRule) (*Violation, error) {
