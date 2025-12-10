@@ -170,9 +170,10 @@ func findJSONBoundaries(s string) string {
 			continue
 		}
 
-		if c == startChar {
+		switch c {
+		case startChar:
 			depth++
-		} else if c == endChar {
+		case endChar:
 			depth--
 			if depth == 0 {
 				return s[start : i+1]

@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +40,7 @@ func TestESLint_ValidateChanges(t *testing.T) {
 
 	// 3. Create validator with custom workDir
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	// 4. Check tool availability
 	adp, err := linter.Global().GetLinter("eslint")
@@ -112,7 +112,7 @@ func TestESLint_NamingConventions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(policyData, &policy))
 
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	adp, err := linter.Global().GetLinter("eslint")
 	if err != nil {
@@ -169,7 +169,7 @@ func TestESLint_MaxLineLength(t *testing.T) {
 	require.NoError(t, json.Unmarshal(policyData, &policy))
 
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	adp, err := linter.Global().GetLinter("eslint")
 	if err != nil {
@@ -224,7 +224,7 @@ func TestESLint_ToolNameAndRuleID(t *testing.T) {
 	require.NoError(t, json.Unmarshal(policyData, &policy))
 
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	adp, err := linter.Global().GetLinter("eslint")
 	if err != nil {

@@ -34,7 +34,7 @@ type UserDefaults struct {
 
 // UserRule represents a single rule in user schema
 type UserRule struct {
-	ID        string         `json:"id"`                   // Rule ID (required, can be number or string)
+	ID        string         `json:"id"` // Rule ID (required, can be number or string)
 	Say       string         `json:"say"`
 	Category  string         `json:"category,omitempty"`
 	Languages []string       `json:"languages,omitempty"`

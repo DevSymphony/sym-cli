@@ -52,7 +52,7 @@ func (l *Linter) execute(ctx context.Context, config []byte, files []string) (*l
 		return nil, fmt.Errorf("failed to create temp tsconfig: %w", err)
 	}
 	configPath := tmpFile.Name()
-	tmpFile.Close() // Close for WriteFile to reopen
+	_ = tmpFile.Close() // Close for WriteFile to reopen
 
 	if err := os.WriteFile(configPath, updatedConfig, 0644); err != nil {
 		return nil, fmt.Errorf("failed to write tsconfig: %w", err)

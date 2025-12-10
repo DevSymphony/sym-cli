@@ -88,34 +88,34 @@ func TestUnit_RuleFiltering(t *testing.T) {
 // TestUnit_ValidationResponseParsing tests parsing LLM validation responses
 func TestUnit_ValidationResponseParsing(t *testing.T) {
 	tests := []struct {
-		name		string
-		response	string
-		expectViolates	bool
-		expectDesc	bool
+		name           string
+		response       string
+		expectViolates bool
+		expectDesc     bool
 	}{
 		{
-			name:		"explicit violation",
-			response:	`{"violates": true, "description": "Hardcoded secret detected"}`,
-			expectViolates:	true,
-			expectDesc:	true,
+			name:           "explicit violation",
+			response:       `{"violates": true, "description": "Hardcoded secret detected"}`,
+			expectViolates: true,
+			expectDesc:     true,
 		},
 		{
-			name:		"no violation",
-			response:	`{"violates": false}`,
-			expectViolates:	false,
-			expectDesc:	false,
+			name:           "no violation",
+			response:       `{"violates": false}`,
+			expectViolates: false,
+			expectDesc:     false,
 		},
 		{
-			name:		"text-based violation",
-			response:	`The code violates the security policy by hardcoding an API key.`,
-			expectViolates:	true,
-			expectDesc:	true,
+			name:           "text-based violation",
+			response:       `The code violates the security policy by hardcoding an API key.`,
+			expectViolates: true,
+			expectDesc:     true,
 		},
 		{
-			name:		"text-based no violation",
-			response:	`The code does not violate any conventions.`,
-			expectViolates:	false,
-			expectDesc:	false,
+			name:           "text-based no violation",
+			response:       `The code does not violate any conventions.`,
+			expectViolates: false,
+			expectDesc:     false,
 		},
 	}
 
@@ -130,10 +130,9 @@ func TestUnit_ValidationResponseParsing(t *testing.T) {
 			hasJSONNoViolation := contains(tt.response, "\"violates\": false")
 
 			// Check for text-based violation (but exclude negations like "does not violate")
-			hasTextViolation := !hasJSONNoViolation && (
-				contains(tt.response, "violates the") ||
-					contains(tt.response, "violates any") ||
-					(contains(tt.response, "violate") && !contains(tt.response, "does not violate") && !contains(tt.response, "not violate")))
+			hasTextViolation := !hasJSONNoViolation && (contains(tt.response, "violates the") ||
+				contains(tt.response, "violates any") ||
+				(contains(tt.response, "violate") && !contains(tt.response, "does not violate") && !contains(tt.response, "not violate")))
 
 			containsViolation := hasJSONViolation || hasTextViolation
 
@@ -152,7 +151,7 @@ func TestUnit_ValidationResponseParsing(t *testing.T) {
 func TestUnit_WorkflowSteps(t *testing.T) {
 	t.Run("step1_user_creates_policy", func(t *testing.T) {
 		policy := schema.UserPolicy{
-			Version:	"1.0.0",
+			Version: "1.0.0",
 			Rules: []schema.UserRule{
 				{Say: "No hardcoded secrets", Category: "security"},
 			},
@@ -172,9 +171,9 @@ func TestUnit_WorkflowSteps(t *testing.T) {
 	t.Run("step2_conversion_structure", func(t *testing.T) {
 		// Test that conversion produces expected structure
 		userRule := schema.UserRule{
-			Say:		"No hardcoded secrets",
-			Category:	"security",
-			Severity:	"error",
+			Say:      "No hardcoded secrets",
+			Category: "security",
+			Severity: "error",
 		}
 
 		// After conversion, should have structured fields
@@ -202,15 +201,15 @@ func TestUnit_WorkflowSteps(t *testing.T) {
 	t.Run("step4_validation_result_structure", func(t *testing.T) {
 		// Test validation result structure
 		result := validator.ValidationResult{
-			Checked:	5,
-			Passed:		3,
-			Failed:		2,
+			Checked: 5,
+			Passed:  3,
+			Failed:  2,
 			Violations: []validator.Violation{
 				{
-					RuleID:		"SEC-001",
-					Severity:	"error",
-					Message:	"Hardcoded secret detected",
-					File:		"test.go",
+					RuleID:   "SEC-001",
+					Severity: "error",
+					Message:  "Hardcoded secret detected",
+					File:     "test.go",
 				},
 			},
 		}
@@ -227,18 +226,18 @@ func TestUnit_MCPToolResponses(t *testing.T) {
 	t.Run("get_conventions_by_category", func(t *testing.T) {
 		// Simulated MCP tool response
 		response := map[string]interface{}{
-			"tool":		"get_conventions_by_category",
-			"category":	"security",
+			"tool":     "get_conventions_by_category",
+			"category": "security",
 			"conventions": []map[string]string{
 				{
-					"id":		"SEC-001",
-					"message":	"No hardcoded secrets",
-					"severity":	"error",
+					"id":       "SEC-001",
+					"message":  "No hardcoded secrets",
+					"severity": "error",
 				},
 				{
-					"id":		"SEC-002",
-					"message":	"Use parameterized queries",
-					"severity":	"error",
+					"id":       "SEC-002",
+					"message":  "Use parameterized queries",
+					"severity": "error",
 				},
 			},
 		}
@@ -250,8 +249,8 @@ func TestUnit_MCPToolResponses(t *testing.T) {
 
 	t.Run("get_all_conventions", func(t *testing.T) {
 		response := map[string]interface{}{
-			"tool":		"get_all_conventions",
-			"count":	10,
+			"tool":  "get_all_conventions",
+			"count": 10,
 			"conventions": []string{
 				"No hardcoded secrets",
 				"Document exported functions",

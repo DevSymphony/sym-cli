@@ -118,4 +118,3 @@ func TestExtractJSONField(t *testing.T) {
 		})
 	}
 }
-

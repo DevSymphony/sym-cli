@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +40,7 @@ func TestPylint_ValidateChanges(t *testing.T) {
 
 	// 3. Create validator with custom workDir (symDir = workDir/.sym)
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	// 4. Check tool availability
 	adp, err := linter.Global().GetLinter("pylint")
@@ -114,7 +114,7 @@ func TestPylint_NamingConventions(t *testing.T) {
 	require.NoError(t, json.Unmarshal(policyData, &policy))
 
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	adp, err := linter.Global().GetLinter("pylint")
 	if err != nil {
@@ -200,7 +200,7 @@ func TestPylint_ToolNameAndRuleID(t *testing.T) {
 	require.NoError(t, json.Unmarshal(policyData, &policy))
 
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	adp, err := linter.Global().GetLinter("pylint")
 	if err != nil {

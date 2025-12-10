@@ -6,8 +6,8 @@ import (
 	"os"
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -39,7 +39,7 @@ func TestE2E_ValidatorWithPolicy(t *testing.T) {
 	// Create validator
 	v := validator.NewValidator(policy, false)
 	v.SetLLMProvider(provider)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	// Create a test change (simulating git diff output)
 	changes := []git.Change{
@@ -95,7 +95,7 @@ func TestE2E_ValidatorWithGoodCode(t *testing.T) {
 	// Create validator
 	v := validator.NewValidator(policy, false)
 	v.SetLLMProvider(provider)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	// Create a test change with good code
 	changes := []git.Change{
@@ -182,7 +182,7 @@ func TestE2E_ValidatorFilter(t *testing.T) {
 	// Create validator
 	v := validator.NewValidator(policy, false)
 	v.SetLLMProvider(provider)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	// Test with Go file
 	changes := []git.Change{

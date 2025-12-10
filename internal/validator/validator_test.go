@@ -3,8 +3,8 @@ package validator
 import (
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
 )
@@ -141,39 +141,39 @@ func TestParseJSON(t *testing.T) {
 
 func TestParseValidationResponseFallback(t *testing.T) {
 	tests := []struct {
-		name            string
-		response        string
-		expectViolates  bool
+		name             string
+		response         string
+		expectViolates   bool
 		expectConfidence string
 	}{
 		{
-			name:            "violates true",
-			response:        `{"violates": true, "description": "test"}`,
-			expectViolates:  true,
+			name:             "violates true",
+			response:         `{"violates": true, "description": "test"}`,
+			expectViolates:   true,
 			expectConfidence: "medium",
 		},
 		{
-			name:            "violates true no space",
-			response:        `{"violates":true}`,
-			expectViolates:  true,
+			name:             "violates true no space",
+			response:         `{"violates":true}`,
+			expectViolates:   true,
 			expectConfidence: "medium",
 		},
 		{
-			name:            "violates false",
-			response:        `{"violates": false}`,
-			expectViolates:  false,
+			name:             "violates false",
+			response:         `{"violates": false}`,
+			expectViolates:   false,
 			expectConfidence: "low",
 		},
 		{
-			name:            "does not violate text",
-			response:        `The code does not violate the rule.`,
-			expectViolates:  false,
+			name:             "does not violate text",
+			response:         `The code does not violate the rule.`,
+			expectViolates:   false,
 			expectConfidence: "low",
 		},
 		{
-			name:            "no violation indicators",
-			response:        `Random text without any violation`,
-			expectViolates:  false,
+			name:             "no violation indicators",
+			response:         `Random text without any violation`,
+			expectViolates:   false,
 			expectConfidence: "low",
 		},
 	}

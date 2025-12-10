@@ -113,7 +113,6 @@ func (l *Linter) Install(ctx context.Context, config linter.InstallConfig) error
 	return nil
 }
 
-
 // Execute runs tsc with the given config and files.
 // Returns type checking results.
 func (l *Linter) Execute(ctx context.Context, config []byte, files []string) (*linter.ToolOutput, error) {

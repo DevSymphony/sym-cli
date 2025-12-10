@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -148,7 +148,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 	// Create validator
 	v := validator.NewValidator(policy, false)
 	v.SetLLMProvider(provider)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 	ctx := context.Background()
 
 	// Test 1: Validate BAD code (should find multiple violations)
@@ -261,7 +261,7 @@ func TestMCP_ValidateAIGeneratedCode(t *testing.T) {
 
 		securityValidator := validator.NewValidator(securityPolicy, false)
 		securityValidator.SetLLMProvider(provider)
-		defer securityValidator.Close()
+		defer func() { _ = securityValidator.Close() }()
 
 		// Code with security violation (format as git diff with + prefix)
 		codeWithSecurityIssue := `+const apiKey = "sk-1234567890abcdef"; // Hardcoded secret
@@ -387,7 +387,7 @@ func TestMCP_EndToEndWorkflow(t *testing.T) {
 	require.NoError(t, err, "LLM provider creation should succeed")
 	v := validator.NewValidator(policy, false)
 	v.SetLLMProvider(llmProvider)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	result, err := v.ValidateChanges(context.Background(), []git.Change{
 		{FilePath: "auth.js", Diff: generatedCode},

@@ -99,7 +99,6 @@ func (l *Linter) Install(ctx context.Context, config linter.InstallConfig) error
 	return err
 }
 
-
 // Execute runs Prettier with the given config and files.
 // mode: "check" or "write"
 func (l *Linter) Execute(ctx context.Context, config []byte, files []string) (*linter.ToolOutput, error) {

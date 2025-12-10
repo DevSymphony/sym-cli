@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +40,7 @@ func TestPMD_ValidateChanges(t *testing.T) {
 
 	// 3. Create validator with custom workDir
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	// 4. Check tool availability
 	adp, err := linter.Global().GetLinter("pmd")
@@ -113,7 +113,7 @@ func TestPMD_EmptyCatchBlock(t *testing.T) {
 	require.NoError(t, json.Unmarshal(policyData, &policy))
 
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	adp, err := linter.Global().GetLinter("pmd")
 	if err != nil {
@@ -168,7 +168,7 @@ func TestPMD_UnusedPrivateMethod(t *testing.T) {
 	require.NoError(t, json.Unmarshal(policyData, &policy))
 
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	adp, err := linter.Global().GetLinter("pmd")
 	if err != nil {
@@ -223,7 +223,7 @@ func TestPMD_ToolNameAndRuleID(t *testing.T) {
 	require.NoError(t, json.Unmarshal(policyData, &policy))
 
 	v := validator.NewValidatorWithWorkDir(&policy, true, testdataDir)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 
 	adp, err := linter.Global().GetLinter("pmd")
 	if err != nil {
