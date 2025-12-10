@@ -141,6 +141,9 @@ AI 코딩 도구(Claude Code, Cursor 등)와 stdio를 통해 통신합니다.
 | `query_conventions` | 프로젝트 컨벤션 조회 |
 | `validate_code` | 코드 변경사항 검증 |
 | `list_category` | 카테고리 목록 조회 |
+| `add_category` | 카테고리 추가 (배치 지원) |
+| `edit_category` | 카테고리 편집 (배치 지원) |
+| `remove_category` | 카테고리 삭제 (배치 지원) |
 
 #### HTTP Server (`internal/server`)
 
@@ -152,6 +155,10 @@ AI 코딩 도구(Claude Code, Cursor 등)와 stdio를 통해 통신합니다.
 | `POST /api/policy` | 정책 저장 |
 | `GET /api/roles` | 역할 목록 조회 |
 | `POST /api/select-role` | 역할 선택 |
+| `GET /api/categories` | 카테고리 목록 조회 |
+| `POST /api/categories` | 카테고리 추가 |
+| `PUT /api/categories/{name}` | 카테고리 편집 |
+| `DELETE /api/categories/{name}` | 카테고리 삭제 |
 
 ### Layer 3: Core
 

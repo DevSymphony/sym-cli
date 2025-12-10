@@ -17,6 +17,10 @@ Symphony는 AI 개발환경(IDE, MCP 기반 LLM Tooling)을 위한 정책 기반
   - [사용 가능한 MCP 도구](#사용-가능한-mcp-도구)
     - [`query_conventions`](#query_conventions)
     - [`validate_code`](#validate_code)
+    - [`list_category`](#list_category)
+    - [`add_category`](#add_category)
+    - [`edit_category`](#edit_category)
+    - [`remove_category`](#remove_category)
   - [컨벤션 파일](#컨벤션-파일)
   - [요구사항](#요구사항)
   - [지원 플랫폼](#지원-플랫폼)
@@ -29,6 +33,7 @@ Symphony는 AI 개발환경(IDE, MCP 기반 LLM Tooling)을 위한 정책 기반
 - 자연어로 컨벤션 정의
 - LLM이 MCP를 통해 필요한 컨벤션만 추출하여 컨텍스트에 포함
 - LLM이 MCP를 통해 코드 변경사항에 대한 컨벤션 준수 여부를 검사
+- 카테고리 기반 규칙 분류 및 관리
 - RBAC 기반 접근 제어
 
 ---
@@ -79,6 +84,26 @@ sym dashboard
 
 - 코드가 정의된 규칙을 따르는지 검사합니다.
 - 필수 파라미터: `files`
+
+### `list_category`
+
+- 프로젝트에 정의된 카테고리 목록을 조회합니다.
+- 파라미터 없음
+
+### `add_category`
+
+- 새 카테고리를 추가합니다 (배치 지원).
+- 필수 파라미터: `categories` (배열)
+
+### `edit_category`
+
+- 기존 카테고리를 편집합니다 (배치 지원).
+- 필수 파라미터: `edits` (배열)
+
+### `remove_category`
+
+- 카테고리를 삭제합니다 (배치 지원).
+- 필수 파라미터: `names` (배열)
 
 ---
 

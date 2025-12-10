@@ -67,7 +67,7 @@ type Server struct {
 - `hasPermissionForRoleWithPolicy(role, permission string, policy *schema.UserPolicy) (bool, error)` - 제공된 정책으로 권한 확인
 - `checkPermissionForRole(userRole, permission string, policy *schema.UserPolicy) (bool, error)` - 권한 검사 핵심 로직
 
-**HTTP 핸들러 (14개):**
+**HTTP 핸들러 (19개):**
 
 | 핸들러 | 라우트 | 설명 |
 |--------|--------|------|
@@ -87,6 +87,11 @@ type Server struct {
 | handlePolicyTemplateDetail | GET /api/policy/templates/{name} | 특정 템플릿 상세 |
 | handleUsers | GET /api/users | 모든 사용자 목록 |
 | handleConvert | POST /api/policy/convert | 정책 변환 실행 |
+| handleCategories | /api/categories | GET/POST/PUT/DELETE 라우터 |
+| handleGetCategories | GET /api/categories | 카테고리 목록 조회 |
+| handleAddCategory | POST /api/categories | 카테고리 추가 |
+| handleEditCategory | PUT /api/categories/{name} | 카테고리 편집 |
+| handleDeleteCategory | DELETE /api/categories/{name} | 카테고리 삭제 |
 
 ## 참고 문헌
 
