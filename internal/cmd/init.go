@@ -24,11 +24,15 @@ This command:
   1. Creates .sym/roles.json with default roles (admin, developer, viewer)
   2. Creates .sym/user-policy.json with default RBAC configuration
   3. Creates .sym/config.json with default settings
-  4. Sets your role to admin (can be changed later via dashboard)
+  4. Sets your default role (admin for new projects, non-privileged for existing)
   5. Optionally registers MCP server for AI tools
   6. Optionally configures LLM backend
 
-Use --force to reinitialize an existing Symphony project.`,
+If .sym/ already exists (e.g., synced via git), existing configuration files
+are preserved and only missing files are created. This allows team members
+to share roles and policies through version control.
+
+Use --force to reinitialize and overwrite existing configuration.`,
 	Run: runInit,
 }
 
@@ -61,48 +65,67 @@ func runInit(cmd *cobra.Command, args []string) {
 		os.Exit(1)
 	}
 
+	// When .sym exists without --force, preserve existing files and only create missing ones
 	if symDirExists && !initForce {
-		printWarn(".sym directory already exists")
-		fmt.Println("Use --force flag to reinitialize")
-		os.Exit(1)
+		fmt.Println("Found existing .sym directory, preserving existing configuration files...")
 	}
 
-	// Create default roles (empty user lists - users select their own role)
-	newRoles := roles.Roles{
-		"admin":     []string{},
-		"developer": []string{},
-		"viewer":    []string{},
-	}
-
-	if err := roles.SaveRoles(newRoles); err != nil {
-		printError(fmt.Sprintf("Failed to create roles.json: %v", err))
+	// Create roles.json only if it doesn't exist or --force is set
+	rolesExist, err := roles.RolesExists()
+	if err != nil {
+		printError(fmt.Sprintf("Failed to check roles.json: %v", err))
 		os.Exit(1)
 	}
 
 	rolesPath, _ := roles.GetRolesPath()
-	printOK("roles.json created")
-	fmt.Println(indent(fmt.Sprintf("Location: %s", rolesPath)))
+	if rolesExist && !initForce {
+		printOK("roles.json already exists (preserved)")
+		fmt.Println(indent(fmt.Sprintf("Location: %s", rolesPath)))
+	} else {
+		// Create default roles (empty user lists - users select their own role)
+		newRoles := roles.Roles{
+			"admin":     []string{},
+			"developer": []string{},
+			"viewer":    []string{},
+		}
 
-	// Create default policy file with RBAC roles
-	if err := createDefaultPolicy(); err != nil {
+		if err := roles.SaveRoles(newRoles); err != nil {
+			printError(fmt.Sprintf("Failed to create roles.json: %v", err))
+			os.Exit(1)
+		}
+
+		printOK("roles.json created")
+		fmt.Println(indent(fmt.Sprintf("Location: %s", rolesPath)))
+	}
+
+	// Create default policy file with RBAC roles (only if not exists or --force)
+	policyCreated, err := createDefaultPolicy()
+	if err != nil {
 		printWarn(fmt.Sprintf("Failed to create policy file: %v", err))
 		fmt.Println(indent("You can manually create it later using the dashboard"))
-	} else {
+	} else if policyCreated {
 		printOK("user-policy.json created with default RBAC roles")
-	}
-
-	// Create .sym/config.json with default settings
-	if err := initializeConfigFile(); err != nil {
-		printWarn(fmt.Sprintf("Failed to create config.json: %v", err))
 	} else {
-		printOK("config.json created")
+		printOK("user-policy.json already exists (preserved)")
 	}
 
-	// Set default role to admin during initialization
-	if err := roles.SetCurrentRole("admin"); err != nil {
+	// Create .sym/config.json with default settings (only if not exists or --force)
+	configCreated, err := initializeConfigFile()
+	if err != nil {
+		printWarn(fmt.Sprintf("Failed to create config.json: %v", err))
+	} else if configCreated {
+		printOK("config.json created")
+	} else {
+		printOK("config.json already exists (preserved)")
+	}
+
+	// Select appropriate default role based on existing configuration
+	// Note: role selection is stored in .sym/.env which is gitignored, so each user sets their own role
+	defaultRole := selectDefaultRole(policyCreated)
+	if err := roles.SetCurrentRole(defaultRole); err != nil {
 		printWarn(fmt.Sprintf("Failed to save role selection: %v", err))
 	} else {
-		printOK("Your role has been set to: admin")
+		printOK(fmt.Sprintf("Your role has been set to: %s", defaultRole))
 	}
 
 	// MCP registration prompt
@@ -131,19 +154,20 @@ func runInit(cmd *cobra.Command, args []string) {
 	fmt.Println(indent("Commit .sym/ folder to share with your team"))
 }
 
-// createDefaultPolicy creates a default policy file with RBAC roles
-func createDefaultPolicy() error {
+// createDefaultPolicy creates a default policy file with RBAC roles.
+// Returns (true, nil) if a new file was created, (false, nil) if existing file was preserved.
+func createDefaultPolicy() (bool, error) {
 	defaultPolicyPath := ".sym/user-policy.json"
 
 	// Check if policy file already exists
 	exists, err := policy.PolicyExists(defaultPolicyPath)
 	if err != nil {
-		return err
+		return false, err
 	}
 
 	if exists && !initForce {
-		// Policy already exists, skip creation
-		return nil
+		// Policy already exists, preserve it
+		return false, nil
 	}
 
 	// Create default policy with categories and RBAC roles
@@ -188,14 +212,18 @@ func createDefaultPolicy() error {
 		Rules: []schema.UserRule{},
 	}
 
-	return policy.SavePolicy(defaultPolicy, defaultPolicyPath)
+	if err := policy.SavePolicy(defaultPolicy, defaultPolicyPath); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
-// initializeConfigFile creates .sym/config.json with default settings
-func initializeConfigFile() error {
+// initializeConfigFile creates .sym/config.json with default settings.
+// Returns (true, nil) if a new file was created, (false, nil) if existing file was preserved.
+func initializeConfigFile() (bool, error) {
 	// Check if config.json already exists (skip unless force is set)
 	if config.ProjectConfigExists() && !initForce {
-		return nil
+		return false, nil
 	}
 
 	// Create default project config
@@ -203,7 +231,49 @@ func initializeConfigFile() error {
 		PolicyPath: ".sym/user-policy.json",
 	}
 
-	return config.SaveProjectConfig(defaultConfig)
+	if err := config.SaveProjectConfig(defaultConfig); err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+// selectDefaultRole determines the appropriate default role for a new user.
+// For existing projects, selects a role without policy/role editing permissions.
+// For new projects, returns the first available role (typically "admin").
+func selectDefaultRole(isNewProject bool) string {
+	// For new projects, use admin role
+	if isNewProject {
+		return "admin"
+	}
+
+	// Try to load existing policy to find a non-privileged role
+	loader := policy.NewLoader(false)
+	userPolicy, err := loader.LoadUserPolicy(".sym/user-policy.json")
+	if err != nil || userPolicy == nil || userPolicy.RBAC == nil || len(userPolicy.RBAC.Roles) == 0 {
+		// Fallback: try to get first available role from roles.json
+		availableRoles, err := roles.GetAvailableRoles()
+		if err != nil || len(availableRoles) == 0 {
+			return "admin" // Ultimate fallback
+		}
+		return availableRoles[0]
+	}
+
+	// Find a role without editing permissions (non-privileged)
+	var firstRole string
+	for roleName, role := range userPolicy.RBAC.Roles {
+		if firstRole == "" {
+			firstRole = roleName
+		}
+		if !role.CanEditPolicy && !role.CanEditRoles {
+			return roleName
+		}
+	}
+
+	// No non-privileged role found, return first available role
+	if firstRole != "" {
+		return firstRole
+	}
+	return "admin"
 }
 
 // removeExistingCodePolicy removes generated linter config files when --force flag is used
