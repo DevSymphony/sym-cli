@@ -301,6 +301,12 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 	}
 	sem := make(chan struct{}, maxConcurrent)
 
+	// Build category name -> description map
+	categoryMap := make(map[string]string)
+	for _, cat := range userPolicy.Category {
+		categoryMap[cat.Name] = cat.Description
+	}
+
 	// Process rules in parallel with concurrency limit
 	for _, rule := range userPolicy.Rules {
 		// Get languages for this rule
@@ -322,7 +328,7 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 		}
 
 		wg.Add(1)
-		go func(r schema.UserRule, linters []string) {
+		go func(r schema.UserRule, linters []string, catMap map[string]string) {
 			defer wg.Done()
 
 			// Acquire semaphore with context check
@@ -334,7 +340,7 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 			defer func() { <-sem }()
 
 			// Ask LLM which linters are appropriate for this rule
-			selectedLinters := c.selectLintersForRule(ctx, r, linters)
+			selectedLinters := c.selectLintersForRule(ctx, r, linters, catMap)
 
 			// Send result with context check to prevent deadlock
 			if len(selectedLinters) == 0 {
@@ -351,7 +357,7 @@ func (c *Converter) routeRulesWithLLM(ctx context.Context, userPolicy *schema.Us
 					return
 				}
 			}
-		}(rule, availableLinters)
+		}(rule, availableLinters, categoryMap)
 	}
 
 	// Close results channel after all goroutines complete
@@ -398,7 +404,7 @@ func (c *Converter) getAvailableLinters(languages []string) []string {
 }
 
 // selectLintersForRule uses LLM to determine which linters are appropriate for a rule
-func (c *Converter) selectLintersForRule(ctx context.Context, rule schema.UserRule, availableLinters []string) []string {
+func (c *Converter) selectLintersForRule(ctx context.Context, rule schema.UserRule, availableLinters []string, categoryMap map[string]string) []string {
 	// Build linter descriptions dynamically from registry
 	linterDescriptions := c.buildLinterDescriptions(availableLinters)
 
@@ -465,7 +471,11 @@ Input: "Imports from large packages must be specific"
 Output: []
 Reason: Requires knowing which packages are "large"`, linterDescriptions, routingHints, availableLinters)
 
-	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, rule.Category)
+	categoryInfo := rule.Category
+	if desc, ok := categoryMap[rule.Category]; ok && desc != "" {
+		categoryInfo = fmt.Sprintf("%s (%s)", rule.Category, desc)
+	}
+	userPrompt := fmt.Sprintf("Rule: %s\nCategory: %s", rule.Say, categoryInfo)
 
 	// Call LLM
 	prompt := systemPrompt + "\n\n" + userPrompt

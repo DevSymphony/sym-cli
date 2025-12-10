@@ -1,5 +1,12 @@
 {
   "version": "1.0.0",
+  "category": [
+    {"name": "security", "description": "Security rules (authentication, authorization, vulnerability prevention)"},
+    {"name": "error_handling", "description": "Error handling and exception management rules"},
+    {"name": "naming", "description": "Naming convention rules"},
+    {"name": "performance", "description": "Performance optimization rules"},
+    {"name": "documentation", "description": "Documentation rules (comments, logging, etc.)"}
+  ],
   "defaults": {
     "languages": ["javascript", "typescript"],
     "severity": "error",

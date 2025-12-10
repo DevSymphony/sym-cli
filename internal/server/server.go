@@ -56,6 +56,10 @@ func (s *Server) Start() error {
 	mux.HandleFunc("/api/policy/convert", s.handleConvert)
 	mux.HandleFunc("/api/users", s.handleUsers)
 
+	// Category API endpoints
+	mux.HandleFunc("/api/categories", s.handleCategories)
+	mux.HandleFunc("/api/categories/", s.handleCategoryByName)
+
 	// Static files
 	staticFS, err := fs.Sub(staticFiles, "static")
 	if err != nil {
@@ -727,4 +731,278 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(result)
+}
+
+// handleCategories handles GET (list) and POST (add) for categories
+func (s *Server) handleCategories(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		s.handleGetCategories(w, r)
+	case http.MethodPost:
+		s.handleAddCategory(w, r)
+	case http.MethodOptions:
+		w.WriteHeader(http.StatusOK)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleGetCategories returns all categories from policy
+func (s *Server) handleGetCategories(w http.ResponseWriter, r *http.Request) {
+	userPolicy, err := roles.LoadUserPolicyFromRepo()
+	if err != nil {
+		http.Error(w, "Failed to load policy", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(userPolicy.Category)
+}
+
+// handleAddCategory adds a new category
+func (s *Server) handleAddCategory(w http.ResponseWriter, r *http.Request) {
+	// Check permission
+	currentRole, err := roles.GetCurrentRole()
+	if err != nil {
+		http.Error(w, "Failed to get current role", http.StatusInternalServerError)
+		return
+	}
+
+	canEdit, err := s.hasPermissionForRole(currentRole, "editPolicy")
+	if err != nil || !canEdit {
+		http.Error(w, "Forbidden: editPolicy permission required", http.StatusForbidden)
+		return
+	}
+
+	// Parse request
+	var req struct {
+		Name        string `json:"name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate
+	if req.Name == "" {
+		http.Error(w, "Category name is required", http.StatusBadRequest)
+		return
+	}
+	if req.Description == "" {
+		http.Error(w, "Category description is required", http.StatusBadRequest)
+		return
+	}
+
+	// Load policy
+	userPolicy, err := policy.LoadPolicy("")
+	if err != nil {
+		http.Error(w, "Failed to load policy", http.StatusInternalServerError)
+		return
+	}
+
+	// Check for duplicate
+	for _, cat := range userPolicy.Category {
+		if cat.Name == req.Name {
+			http.Error(w, fmt.Sprintf("Category '%s' already exists", req.Name), http.StatusConflict)
+			return
+		}
+	}
+
+	// Add category
+	userPolicy.Category = append(userPolicy.Category, schema.CategoryDef{
+		Name:        req.Name,
+		Description: req.Description,
+	})
+
+	// Save policy
+	if err := policy.SavePolicy(userPolicy, ""); err != nil {
+		http.Error(w, "Failed to save policy", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":   "success",
+		"category": userPolicy.Category[len(userPolicy.Category)-1],
+	})
+}
+
+// handleCategoryByName handles PUT (edit) and DELETE (remove) for a specific category
+func (s *Server) handleCategoryByName(w http.ResponseWriter, r *http.Request) {
+	// Extract category name from URL
+	categoryName := strings.TrimPrefix(r.URL.Path, "/api/categories/")
+	if categoryName == "" {
+		http.Error(w, "Category name required", http.StatusBadRequest)
+		return
+	}
+
+	switch r.Method {
+	case http.MethodPut:
+		s.handleEditCategory(w, r, categoryName)
+	case http.MethodDelete:
+		s.handleDeleteCategory(w, r, categoryName)
+	case http.MethodOptions:
+		w.WriteHeader(http.StatusOK)
+	default:
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	}
+}
+
+// handleEditCategory edits an existing category
+func (s *Server) handleEditCategory(w http.ResponseWriter, r *http.Request, categoryName string) {
+	// Check permission
+	currentRole, err := roles.GetCurrentRole()
+	if err != nil {
+		http.Error(w, "Failed to get current role", http.StatusInternalServerError)
+		return
+	}
+
+	canEdit, err := s.hasPermissionForRole(currentRole, "editPolicy")
+	if err != nil || !canEdit {
+		http.Error(w, "Forbidden: editPolicy permission required", http.StatusForbidden)
+		return
+	}
+
+	// Parse request
+	var req struct {
+		NewName     string `json:"new_name"`
+		Description string `json:"description"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate at least one change
+	if req.NewName == "" && req.Description == "" {
+		http.Error(w, "At least one of new_name or description must be provided", http.StatusBadRequest)
+		return
+	}
+
+	// Load policy
+	userPolicy, err := policy.LoadPolicy("")
+	if err != nil {
+		http.Error(w, "Failed to load policy", http.StatusInternalServerError)
+		return
+	}
+
+	// Find category
+	categoryIndex := -1
+	for i, cat := range userPolicy.Category {
+		if cat.Name == categoryName {
+			categoryIndex = i
+			break
+		}
+	}
+
+	if categoryIndex == -1 {
+		http.Error(w, fmt.Sprintf("Category '%s' not found", categoryName), http.StatusNotFound)
+		return
+	}
+
+	// If renaming, check for duplicate and update rule references
+	affectedRules := 0
+	if req.NewName != "" && req.NewName != categoryName {
+		// Check for duplicate
+		for _, cat := range userPolicy.Category {
+			if cat.Name == req.NewName {
+				http.Error(w, fmt.Sprintf("Category '%s' already exists", req.NewName), http.StatusConflict)
+				return
+			}
+		}
+
+		// Update rule references
+		for i := range userPolicy.Rules {
+			if userPolicy.Rules[i].Category == categoryName {
+				userPolicy.Rules[i].Category = req.NewName
+				affectedRules++
+			}
+		}
+
+		userPolicy.Category[categoryIndex].Name = req.NewName
+	}
+
+	// Update description if provided
+	if req.Description != "" {
+		userPolicy.Category[categoryIndex].Description = req.Description
+	}
+
+	// Save policy
+	if err := policy.SavePolicy(userPolicy, ""); err != nil {
+		http.Error(w, "Failed to save policy", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":        "success",
+		"category":      userPolicy.Category[categoryIndex],
+		"affectedRules": affectedRules,
+	})
+}
+
+// handleDeleteCategory removes a category
+func (s *Server) handleDeleteCategory(w http.ResponseWriter, r *http.Request, categoryName string) {
+	// Check permission
+	currentRole, err := roles.GetCurrentRole()
+	if err != nil {
+		http.Error(w, "Failed to get current role", http.StatusInternalServerError)
+		return
+	}
+
+	canEdit, err := s.hasPermissionForRole(currentRole, "editPolicy")
+	if err != nil || !canEdit {
+		http.Error(w, "Forbidden: editPolicy permission required", http.StatusForbidden)
+		return
+	}
+
+	// Load policy
+	userPolicy, err := policy.LoadPolicy("")
+	if err != nil {
+		http.Error(w, "Failed to load policy", http.StatusInternalServerError)
+		return
+	}
+
+	// Find category
+	categoryIndex := -1
+	for i, cat := range userPolicy.Category {
+		if cat.Name == categoryName {
+			categoryIndex = i
+			break
+		}
+	}
+
+	if categoryIndex == -1 {
+		http.Error(w, fmt.Sprintf("Category '%s' not found", categoryName), http.StatusNotFound)
+		return
+	}
+
+	// Check if any rules reference this category
+	rulesUsingCategory := 0
+	for _, rule := range userPolicy.Rules {
+		if rule.Category == categoryName {
+			rulesUsingCategory++
+		}
+	}
+
+	if rulesUsingCategory > 0 {
+		http.Error(w, fmt.Sprintf("Category '%s' is used by %d rule(s). Remove rule references first.", categoryName, rulesUsingCategory), http.StatusConflict)
+		return
+	}
+
+	// Remove category
+	userPolicy.Category = append(userPolicy.Category[:categoryIndex], userPolicy.Category[categoryIndex+1:]...)
+
+	// Save policy
+	if err := policy.SavePolicy(userPolicy, ""); err != nil {
+		http.Error(w, "Failed to save policy", http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]interface{}{
+		"status":  "success",
+		"message": fmt.Sprintf("Category '%s' removed successfully", categoryName),
+	})
 }

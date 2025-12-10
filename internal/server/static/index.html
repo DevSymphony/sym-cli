@@ -131,6 +131,26 @@
                         </div>
                     </div>
                 </details>
+
+                <details class="bg-white rounded-lg border border-gray-300">
+                    <summary class="p-4 cursor-pointer font-semibold text-lg text-slate-800 hover:bg-gray-50 rounded-t-lg">
+                        카테고리 관리 (<span id="category-count">0</span>)
+                    </summary>
+                    <div class="p-6 border-t border-gray-300">
+                        <div id="categories-container" class="space-y-3 mb-4"></div>
+                        <div id="add-category-form" class="grid grid-cols-[1fr_2fr_auto] gap-3 items-end p-4 bg-gray-50 rounded-lg border border-dashed border-gray-300">
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-1">카테고리 이름</label>
+                                <input type="text" id="new-category-name" placeholder="예: accessibility" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-medium text-slate-600 mb-1">설명</label>
+                                <input type="text" id="new-category-description" placeholder="예: Accessibility rules (WCAG, ARIA, etc.)" class="w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none">
+                            </div>
+                            <button type="button" id="add-category-btn" class="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium whitespace-nowrap">추가</button>
+                        </div>
+                    </div>
+                </details>
             </div>
         </section>
 

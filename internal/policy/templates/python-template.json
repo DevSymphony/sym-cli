@@ -1,5 +1,12 @@
 {
   "version": "1.0.0",
+  "category": [
+    {"name": "formatting", "description": "Code formatting rules (PEP 8, indentation, line length)"},
+    {"name": "naming", "description": "Naming convention rules (snake_case, PascalCase, constants)"},
+    {"name": "documentation", "description": "Documentation rules (docstrings, type hints)"},
+    {"name": "error_handling", "description": "Error handling and exception management rules"},
+    {"name": "security", "description": "Security rules (secrets management, input validation)"}
+  ],
   "defaults": {
     "languages": ["python"],
     "severity": "warning",

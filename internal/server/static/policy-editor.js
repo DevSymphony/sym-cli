@@ -181,6 +181,40 @@ const API = {
         const result = await res.json();
         console.log('Conversion result:', result);
         return result;
+    },
+
+    // Category API methods
+    async getCategories() {
+        const res = await fetch('/api/categories');
+        return await res.json();
+    },
+
+    async addCategory(name, description) {
+        const res = await fetch('/api/categories', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, description })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
+    },
+
+    async editCategory(name, newName, description) {
+        const res = await fetch(`/api/categories/${encodeURIComponent(name)}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ new_name: newName, description })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
+    },
+
+    async deleteCategory(name) {
+        const res = await fetch(`/api/categories/${encodeURIComponent(name)}`, {
+            method: 'DELETE'
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
     }
 };
 
@@ -381,6 +415,240 @@ function addLanguagesToDefaults(languages) {
     return addedCount;
 }
 
+// ==================== Category Management ====================
+function getAvailableCategories() {
+    return appState.policy.category || [];
+}
+
+function getRulesCountForCategory(categoryName) {
+    return appState.policy.rules.filter(rule => rule.category === categoryName).length;
+}
+
+function renderCategories() {
+    const container = document.getElementById('categories-container');
+    const countSpan = document.getElementById('category-count');
+    const categories = getAvailableCategories();
+
+    if (countSpan) {
+        countSpan.textContent = categories.length;
+    }
+
+    if (categories.length === 0) {
+        container.innerHTML = '<div class="text-center text-slate-500 py-4">정의된 카테고리가 없습니다. 아래에서 새 카테고리를 추가하세요.</div>';
+        updateCategoryFilter();
+        return;
+    }
+
+    container.innerHTML = categories.map(cat => {
+        const rulesCount = getRulesCountForCategory(cat.name);
+        return `
+            <div class="category-card bg-gray-50 border border-gray-200 p-4 rounded-lg" data-category-name="${cat.name}">
+                <div class="category-view flex items-start justify-between">
+                    <div class="flex-1">
+                        <div class="flex items-center gap-2 mb-1">
+                            <span class="font-semibold text-slate-800">${cat.name}</span>
+                            <span class="text-xs px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">${rulesCount} 규칙</span>
+                        </div>
+                        <p class="text-sm text-slate-600">${cat.description || ''}</p>
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" class="edit-category-btn px-3 py-1 text-sm text-blue-600 hover:text-blue-800 hover:bg-blue-50 rounded" data-category-name="${cat.name}">편집</button>
+                        <button type="button" class="delete-category-btn px-3 py-1 text-sm text-red-600 hover:text-red-800 hover:bg-red-50 rounded" data-category-name="${cat.name}"${rulesCount > 0 ? ' disabled title="규칙이 있는 카테고리는 삭제할 수 없습니다"' : ''}>삭제</button>
+                    </div>
+                </div>
+                <div class="category-edit hidden">
+                    <div class="grid grid-cols-[1fr_2fr_auto_auto] gap-3 items-end">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">이름</label>
+                            <input type="text" class="edit-category-name w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" value="${cat.name}" data-original-name="${cat.name}">
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-500 mb-1">설명</label>
+                            <input type="text" class="edit-category-description w-full px-3 py-2 bg-white border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" value="${cat.description || ''}">
+                        </div>
+                        <button type="button" class="save-category-btn px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-md text-sm font-medium" data-category-name="${cat.name}">저장</button>
+                        <button type="button" class="cancel-edit-category-btn px-3 py-2 bg-gray-300 hover:bg-gray-400 text-gray-700 rounded-md text-sm font-medium" data-category-name="${cat.name}">취소</button>
+                    </div>
+                </div>
+            </div>
+        `;
+    }).join('');
+
+    // Attach event listeners
+    document.querySelectorAll('.edit-category-btn').forEach(btn => {
+        btn.addEventListener('click', handleEditCategoryClick);
+    });
+
+    document.querySelectorAll('.delete-category-btn').forEach(btn => {
+        if (!btn.disabled) {
+            btn.addEventListener('click', handleDeleteCategory);
+        }
+    });
+
+    document.querySelectorAll('.save-category-btn').forEach(btn => {
+        btn.addEventListener('click', handleSaveCategory);
+    });
+
+    document.querySelectorAll('.cancel-edit-category-btn').forEach(btn => {
+        btn.addEventListener('click', handleCancelEditCategory);
+    });
+
+    // Update category filter dropdown
+    updateCategoryFilter();
+
+    // Apply permissions
+    if (appState.currentUser?.permissions) {
+        applyPermissions();
+    }
+}
+
+function handleEditCategoryClick(e) {
+    const categoryName = e.target.dataset.categoryName;
+    const card = document.querySelector(`.category-card[data-category-name="${categoryName}"]`);
+    if (!card) return;
+
+    card.querySelector('.category-view').classList.add('hidden');
+    card.querySelector('.category-edit').classList.remove('hidden');
+}
+
+function handleCancelEditCategory(e) {
+    const categoryName = e.target.dataset.categoryName;
+    const card = document.querySelector(`.category-card[data-category-name="${categoryName}"]`);
+    if (!card) return;
+
+    card.querySelector('.category-view').classList.remove('hidden');
+    card.querySelector('.category-edit').classList.add('hidden');
+
+    // Reset input values
+    const category = getAvailableCategories().find(c => c.name === categoryName);
+    if (category) {
+        card.querySelector('.edit-category-name').value = category.name;
+        card.querySelector('.edit-category-description').value = category.description || '';
+    }
+}
+
+async function handleSaveCategory(e) {
+    const originalName = e.target.dataset.categoryName;
+    const card = document.querySelector(`.category-card[data-category-name="${originalName}"]`);
+    if (!card) return;
+
+    const newName = card.querySelector('.edit-category-name').value.trim();
+    const newDescription = card.querySelector('.edit-category-description').value.trim();
+
+    if (!newName) {
+        showToast('카테고리 이름을 입력해주세요', 'warning');
+        return;
+    }
+
+    try {
+        const result = await API.editCategory(originalName, newName !== originalName ? newName : '', newDescription);
+
+        // Update local state
+        const categoryIndex = appState.policy.category.findIndex(c => c.name === originalName);
+        if (categoryIndex !== -1) {
+            appState.policy.category[categoryIndex].name = newName;
+            appState.policy.category[categoryIndex].description = newDescription;
+
+            // Update rule references if name changed
+            if (newName !== originalName) {
+                appState.policy.rules.forEach(rule => {
+                    if (rule.category === originalName) {
+                        rule.category = newName;
+                    }
+                });
+            }
+        }
+
+        renderCategories();
+        renderRules(); // Update rules to reflect category changes
+        showToast(result.message || '카테고리가 수정되었습니다');
+    } catch (error) {
+        console.error('Failed to edit category:', error);
+        showToast('카테고리 수정에 실패했습니다: ' + error.message, 'error');
+    }
+}
+
+async function handleAddCategory() {
+    const nameInput = document.getElementById('new-category-name');
+    const descInput = document.getElementById('new-category-description');
+    const name = nameInput.value.trim();
+    const description = descInput.value.trim();
+
+    if (!name) {
+        showToast('카테고리 이름을 입력해주세요', 'warning');
+        nameInput.focus();
+        return;
+    }
+
+    if (!description) {
+        showToast('카테고리 설명을 입력해주세요', 'warning');
+        descInput.focus();
+        return;
+    }
+
+    // Check for duplicate locally
+    if (getAvailableCategories().some(c => c.name === name)) {
+        showToast(`카테고리 '${name}'이(가) 이미 존재합니다`, 'error');
+        return;
+    }
+
+    try {
+        await API.addCategory(name, description);
+
+        // Update local state
+        if (!appState.policy.category) {
+            appState.policy.category = [];
+        }
+        appState.policy.category.push({ name, description });
+
+        // Clear inputs
+        nameInput.value = '';
+        descInput.value = '';
+
+        renderCategories();
+        showToast(`카테고리 '${name}'이(가) 추가되었습니다`);
+    } catch (error) {
+        console.error('Failed to add category:', error);
+        showToast('카테고리 추가에 실패했습니다: ' + error.message, 'error');
+    }
+}
+
+async function handleDeleteCategory(e) {
+    const categoryName = e.target.dataset.categoryName;
+    const rulesCount = getRulesCountForCategory(categoryName);
+
+    if (rulesCount > 0) {
+        showToast(`카테고리 '${categoryName}'은(는) ${rulesCount}개의 규칙에서 사용 중입니다. 먼저 규칙을 삭제하거나 다른 카테고리로 변경해주세요.`, 'error');
+        return;
+    }
+
+    if (!confirm(`카테고리 '${categoryName}'을(를) 삭제하시겠습니까?`)) return;
+
+    try {
+        await API.deleteCategory(categoryName);
+
+        // Update local state
+        appState.policy.category = appState.policy.category.filter(c => c.name !== categoryName);
+
+        renderCategories();
+        showToast(`카테고리 '${categoryName}'이(가) 삭제되었습니다`);
+    } catch (error) {
+        console.error('Failed to delete category:', error);
+        showToast('카테고리 삭제에 실패했습니다: ' + error.message, 'error');
+    }
+}
+
+function updateCategoryFilter() {
+    const filterSelect = document.getElementById('category-filter');
+    if (!filterSelect) return;
+
+    const categories = getAvailableCategories();
+    const currentValue = filterSelect.value;
+
+    filterSelect.innerHTML = '<option value="">전체 카테고리</option>' +
+        categories.map(cat => `<option value="${cat.name}" ${cat.name === currentValue ? 'selected' : ''}>${cat.name}</option>`).join('');
+}
+
 // ==================== Role Selection ====================
 function renderRoleSelection() {
     const container = document.getElementById('role-selection-container');
@@ -534,10 +802,11 @@ function createRuleElement(rule, index) {
                             <label class="block text-sm font-medium text-slate-600 mb-1">카테고리</label>
                             <select class="category-select w-full px-3 py-2 bg-gray-50 border border-gray-300 rounded-md text-sm focus:ring-2 focus:ring-blue-500" data-rule-id="${rule.id}">
                                 <option value="">선택 안함</option>
-                                ${Object.keys(CATEGORY_COLORS).filter(c => c !== 'default').map(cat => `
-                                    <option value="${cat}" ${rule.category === cat ? 'selected' : ''}>${cat}</option>
+                                ${getAvailableCategories().map(cat => `
+                                    <option value="${cat.name}" ${rule.category === cat.name ? 'selected' : ''}>${cat.name}</option>
                                 `).join('')}
                             </select>
+                            ${getAvailableCategories().length === 0 ? '<p class="text-xs text-amber-600 mt-1">카테고리 관리 섹션에서 카테고리를 먼저 추가해주세요.</p>' : ''}
                         </div>
                         <div class="form-group">
                             <label class="block text-sm font-medium text-slate-600 mb-1">대상 언어</label>
@@ -896,7 +1165,7 @@ async function handleApplyTemplate(e) {
             throw new Error('Invalid template format received');
         }
 
-        // Preserve existing RBAC
+        // Preserve existing RBAC only (category is now overwritten from template)
         const currentRBAC = appState.policy.rbac;
 
         // Collect all languages from template (defaults and rules)
@@ -921,10 +1190,11 @@ async function handleApplyTemplate(e) {
         const templateDefaultLang = template.defaults?.defaultLanguage?.toLowerCase() ||
             (languageArray.length > 0 ? languageArray[0] : '');
 
-        // Apply template to policy
+        // Apply template to policy (category is overwritten from template)
         appState.policy = {
             version: template.version || '1.0.0',
-            rbac: currentRBAC || { roles: {} }, // Keep current RBAC
+            rbac: currentRBAC || { roles: {} },    // Keep current RBAC
+            category: template.category || [],      // Use template's category (overwrite)
             defaults: {
                 ...template.defaults,
                 languages: languageArray, // Normalized languages
@@ -945,14 +1215,16 @@ async function handleApplyTemplate(e) {
             })
         };
 
-        console.log('Template applied to appState (RBAC preserved):', appState.policy);
-        console.log('Languages added from template:', Array.from(templateLanguages));
+        console.log('Template applied to appState:', appState.policy);
+        console.log('Languages from template:', Array.from(templateLanguages));
+        console.log('Categories from template:', template.category?.length || 0);
 
         renderAll();
         hideModal('template-modal');
 
         const langCount = templateLanguages.size;
-        showToast(`템플릿이 적용되었습니다 (${langCount}개 언어 추가됨, RBAC 유지됨)`);
+        const catCount = template.category?.length || 0;
+        showToast(`템플릿이 적용되었습니다 (${langCount}개 언어, ${catCount}개 카테고리)`);
         markDirty();
     } catch (error) {
         console.error('Failed to apply template:', error);
@@ -1094,9 +1366,9 @@ async function savePolicy() {
             const message = changedItems.length > 0 ?
                 `${changedItems.join(', ')}.\n\n` +
                 'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
-                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.' :
+                '이 작업은 설정된 LLM Provider를 사용하며 몇 분 정도 소요될 수 있습니다.' :
                 'linter 설정 파일(ESLint, Checkstyle, PMD 등)을 자동으로 생성하시겠습니까?\n\n' +
-                '이 작업은 OpenAI API를 사용하며 몇 분 정도 소요될 수 있습니다.';
+                '이 작업은 설정된 LLM Provider를 사용하며 몇 분 정도 소요될 수 있습니다.';
 
             const shouldConvert = confirm(message);
 
@@ -1233,6 +1505,9 @@ function renderAll() {
     // RBAC
     renderRBAC();
 
+    // Categories
+    renderCategories();
+
     // Rules
     renderRules();
 
@@ -1288,6 +1563,25 @@ function applyPermissions() {
         // Show remove buttons on language tags
         document.querySelectorAll('.remove-language-btn').forEach(el => el.classList.remove('hidden'));
 
+        // Show category add form and edit/delete buttons
+        document.getElementById('add-category-form')?.classList.remove('hidden');
+        document.querySelectorAll('.edit-category-btn, .delete-category-btn').forEach(el => el.classList.remove('hidden'));
+        // Enable category edit inputs
+        document.querySelectorAll('.edit-category-name, .edit-category-description').forEach(el => {
+            el.disabled = false;
+            el.classList.remove('bg-gray-200', 'cursor-not-allowed');
+        });
+        const newCategoryName = document.getElementById('new-category-name');
+        const newCategoryDesc = document.getElementById('new-category-description');
+        if (newCategoryName) {
+            newCategoryName.disabled = false;
+            newCategoryName.classList.remove('bg-gray-200', 'cursor-not-allowed');
+        }
+        if (newCategoryDesc) {
+            newCategoryDesc.disabled = false;
+            newCategoryDesc.classList.remove('bg-gray-200', 'cursor-not-allowed');
+        }
+
         // Show rule add/edit/delete buttons
         document.getElementById('add-rule-btn')?.classList.remove('hidden');
         document.getElementById('add-rule-btn-bottom')?.classList.remove('hidden');
@@ -1337,6 +1631,15 @@ function applyPermissions() {
         }
         // Hide remove buttons on language tags
         document.querySelectorAll('.remove-language-btn').forEach(el => el.classList.add('hidden'));
+
+        // Hide category add form and edit/delete buttons
+        document.getElementById('add-category-form')?.classList.add('hidden');
+        document.querySelectorAll('.edit-category-btn, .delete-category-btn').forEach(el => el.classList.add('hidden'));
+        // Disable category edit inputs
+        document.querySelectorAll('.edit-category-name, .edit-category-description').forEach(el => {
+            el.disabled = true;
+            el.classList.add('bg-gray-200', 'cursor-not-allowed');
+        });
 
         // Hide rule add/edit/delete buttons
         document.getElementById('add-rule-btn')?.classList.add('hidden');
@@ -1422,6 +1725,21 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // RBAC management
     document.getElementById('add-role-btn').addEventListener('click', handleAddRBACRole);
+
+    // Category management
+    document.getElementById('add-category-btn').addEventListener('click', handleAddCategory);
+    document.getElementById('new-category-name').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddCategory();
+        }
+    });
+    document.getElementById('new-category-description').addEventListener('keypress', (e) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            handleAddCategory();
+        }
+    });
 
     // Language management
     document.getElementById('add-language-btn').addEventListener('click', handleAddLanguage);
