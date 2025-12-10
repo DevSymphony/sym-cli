@@ -208,3 +208,71 @@ func TestQueryConventions(t *testing.T) {
 		assert.NotContains(t, text, "DOC-001")
 	})
 }
+
+func TestListCategory(t *testing.T) {
+	t.Run("returns no categories message when no user policy", func(t *testing.T) {
+		server := &Server{
+			loader: policy.NewLoader(false),
+		}
+
+		result, rpcErr := server.handleListCategory()
+		require.Nil(t, rpcErr)
+		require.NotNil(t, result)
+
+		resultMap := result.(map[string]interface{})
+		content := resultMap["content"].([]map[string]interface{})
+		text := content[0]["text"].(string)
+
+		t.Logf("Result: %s", text)
+
+		// Should show no categories message (categories are now only from user-policy.json)
+		assert.Contains(t, text, "No categories defined in user-policy.json")
+		assert.Contains(t, text, "Run 'sym init' to create default categories")
+	})
+
+	t.Run("returns only user-defined categories from user-policy.json", func(t *testing.T) {
+		// Setup: Create a temporary user policy with custom categories
+		tmpDir := t.TempDir()
+		userPolicyPath := filepath.Join(tmpDir, "user-policy.json")
+
+		userPolicyJSON := `{
+  "version": "1.0.0",
+  "category": [
+    {"name": "security", "description": "Custom security description"},
+    {"name": "naming", "description": "Naming convention rules"}
+  ],
+  "rules": []
+}`
+
+		err := os.WriteFile(userPolicyPath, []byte(userPolicyJSON), 0644)
+		require.NoError(t, err)
+
+		server := &Server{
+			configPath: userPolicyPath,
+			loader:     policy.NewLoader(false),
+		}
+
+		// Load user policy
+		userPolicy, err := server.loader.LoadUserPolicy(userPolicyPath)
+		require.NoError(t, err)
+		server.userPolicy = userPolicy
+
+		result, rpcErr := server.handleListCategory()
+		require.Nil(t, rpcErr)
+		require.NotNil(t, result)
+
+		resultMap := result.(map[string]interface{})
+		content := resultMap["content"].([]map[string]interface{})
+		text := content[0]["text"].(string)
+
+		t.Logf("Result: %s", text)
+
+		// Should include user-defined categories only (no merging with defaults)
+		assert.Contains(t, text, "security")
+		assert.Contains(t, text, "Custom security description")
+		assert.Contains(t, text, "naming")
+		assert.Contains(t, text, "Naming convention rules")
+		// Should have only 2 categories (user-defined only)
+		assert.Contains(t, text, "Available categories (2)")
+	})
+}
