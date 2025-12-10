@@ -174,7 +174,7 @@ func (s *Server) Start() error {
 	}
 
 	fmt.Fprintln(os.Stderr, "Symphony MCP server started (stdio mode)")
-	fmt.Fprintln(os.Stderr, "Available tools: query_conventions, validate_code")
+	fmt.Fprintln(os.Stderr, "Available tools: query_conventions, validate_code, list_category")
 
 	// Use official MCP go-sdk for stdio to ensure spec-compliant framing and lifecycle
 	return s.runStdioWithSDK(context.Background())
@@ -195,6 +195,11 @@ type QueryConventionsInput struct {
 // ValidateCodeInput represents the input schema for the validate_code tool (go-sdk).
 type ValidateCodeInput struct {
 	Role string `json:"role,omitempty" jsonschema:"RBAC role for validation (optional)"`
+}
+
+// ListCategoryInput represents the input schema for the list_category tool (go-sdk).
+type ListCategoryInput struct {
+	// No parameters - returns all categories
 }
 
 // runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
@@ -230,6 +235,18 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 			"role": input.Role,
 		}
 		result, rpcErr := s.handleValidateCode(ctx, req.Session, params)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
+	// Tool: list_category
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "list_category",
+		Description: "List all available convention categories with descriptions. Use this to discover what categories exist before querying conventions.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ListCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleListCategory()
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
@@ -806,5 +823,35 @@ func (s *Server) saveValidationResults(result *validator.ValidationResult, viola
 	}
 
 	fmt.Fprintf(os.Stderr, "✓ Validation results saved to %s\n", resultsPath)
+	return nil
+}
+
+// handleListCategory handles category listing requests.
+func (s *Server) handleListCategory() (interface{}, *RPCError) {
+	category := s.getCategory()
+
+	var textContent string
+	if len(category) == 0 {
+		textContent = "No categories defined in user-policy.json.\n\nRun 'sym init' to create default categories."
+	} else {
+		textContent = fmt.Sprintf("Available categories (%d):\n\n", len(category))
+		for _, cat := range category {
+			textContent += fmt.Sprintf("• %s\n  %s\n\n", cat.Name, cat.Description)
+		}
+		textContent += "Use query_conventions with a specific category to get rules for that category."
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{"type": "text", "text": textContent},
+		},
+	}, nil
+}
+
+// getCategory returns categories from user-policy.json.
+func (s *Server) getCategory() []schema.CategoryDef {
+	if s.userPolicy != nil {
+		return s.userPolicy.Category
+	}
 	return nil
 }
