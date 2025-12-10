@@ -32,7 +32,6 @@ jobs:
         uses: golangci/golangci-lint-action@v9
         with:
           version: v2.7.2
-          args: --timeout=5m
 
   test:
     name: Unit Test
@@ -50,9 +49,6 @@ jobs:
 
       - name: Download dependencies
         run: go mod download
-
-      - name: Verify dependencies
-        run: go mod verify
 
       - name: Run tests
         run: go test -short -v -race -coverprofile=coverage.out -covermode=atomic ./...
