@@ -1177,22 +1177,5 @@ func (s *Server) buildBatchResponse(action string, succeeded []string, failed []
 
 // saveUserPolicy saves the user policy to file.
 func (s *Server) saveUserPolicy() error {
-	// Get policy path
-	projectCfg, _ := config.LoadProjectConfig()
-	userPolicyPath := projectCfg.PolicyPath
-	if userPolicyPath == "" {
-		userPolicyPath = ".sym/user-policy.json"
-	}
-
-	// Make absolute path if relative
-	if !filepath.IsAbs(userPolicyPath) {
-		repoRoot, err := git.GetRepoRoot()
-		if err != nil {
-			return fmt.Errorf("failed to get repo root: %w", err)
-		}
-		userPolicyPath = filepath.Join(repoRoot, userPolicyPath)
-	}
-
-	// Save using policy package
 	return policy.SavePolicy(s.userPolicy, "")
 }

@@ -225,7 +225,7 @@ func TestAddCategory(t *testing.T) {
 		// Change to temp dir first, before any git operations
 		originalDir, _ := os.Getwd()
 		require.NoError(t, os.Chdir(tmpDir))
-		defer os.Chdir(originalDir)
+		defer func() { _ = os.Chdir(originalDir) }()
 
 		// Initialize real git repository and .sym directory
 		require.NoError(t, runGitInit(tmpDir))
@@ -300,8 +300,8 @@ func TestAddCategory(t *testing.T) {
 
 		input := AddCategoryInput{
 			Categories: []CategoryItem{
-				{Name: "security", Description: "Duplicate"},  // will fail
-				{Name: "performance", Description: "Perf"},    // will succeed
+				{Name: "security", Description: "Duplicate"}, // will fail
+				{Name: "performance", Description: "Perf"},   // will succeed
 			},
 		}
 		result, rpcErr := server.handleAddCategory(input)
@@ -335,7 +335,7 @@ func TestEditCategory(t *testing.T) {
 
 		originalDir, _ := os.Getwd()
 		require.NoError(t, os.Chdir(tmpDir))
-		defer os.Chdir(originalDir)
+		defer func() { _ = os.Chdir(originalDir) }()
 
 		require.NoError(t, runGitInit(tmpDir))
 		require.NoError(t, os.MkdirAll(".sym", 0755))
@@ -374,7 +374,7 @@ func TestEditCategory(t *testing.T) {
 
 		originalDir, _ := os.Getwd()
 		require.NoError(t, os.Chdir(tmpDir))
-		defer os.Chdir(originalDir)
+		defer func() { _ = os.Chdir(originalDir) }()
 
 		require.NoError(t, runGitInit(tmpDir))
 		require.NoError(t, os.MkdirAll(".sym", 0755))
@@ -433,8 +433,8 @@ func TestEditCategory(t *testing.T) {
 
 		input := EditCategoryInput{
 			Edits: []CategoryEditItem{
-				{Name: "security", NewName: "style"},     // fail: duplicate
-				{Name: "style", Description: "Updated"},  // succeed
+				{Name: "security", NewName: "style"},    // fail: duplicate
+				{Name: "style", Description: "Updated"}, // succeed
 			},
 		}
 		result, rpcErr := server.handleEditCategory(input)
@@ -467,7 +467,7 @@ func TestRemoveCategory(t *testing.T) {
 
 		originalDir, _ := os.Getwd()
 		require.NoError(t, os.Chdir(tmpDir))
-		defer os.Chdir(originalDir)
+		defer func() { _ = os.Chdir(originalDir) }()
 
 		require.NoError(t, runGitInit(tmpDir))
 		require.NoError(t, os.MkdirAll(".sym", 0755))
