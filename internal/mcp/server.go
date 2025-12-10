@@ -204,20 +204,20 @@ type ListCategoryInput struct {
 
 // AddCategoryInput represents the input schema for the add_category tool (go-sdk).
 type AddCategoryInput struct {
-	Name        string `json:"name" jsonschema:"required,description=Category name (unique identifier)"`
-	Description string `json:"description" jsonschema:"required,description=Category description (1-2 lines)"`
+	Name        string `json:"name" jsonschema:"Category name (unique identifier)"`
+	Description string `json:"description" jsonschema:"Category description (1-2 lines)"`
 }
 
 // EditCategoryInput represents the input schema for the edit_category tool (go-sdk).
 type EditCategoryInput struct {
-	Name        string `json:"name" jsonschema:"required,description=Current category name to edit"`
-	NewName     string `json:"new_name,omitempty" jsonschema:"description=New category name (optional)"`
-	Description string `json:"description,omitempty" jsonschema:"description=New description (optional)"`
+	Name        string `json:"name" jsonschema:"Current category name to edit"`
+	NewName     string `json:"new_name,omitempty" jsonschema:"New category name (optional)"`
+	Description string `json:"description,omitempty" jsonschema:"New description (optional)"`
 }
 
 // RemoveCategoryInput represents the input schema for the remove_category tool (go-sdk).
 type RemoveCategoryInput struct {
-	Name string `json:"name" jsonschema:"required,description=Category name to remove"`
+	Name string `json:"name" jsonschema:"Category name to remove"`
 }
 
 // runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
