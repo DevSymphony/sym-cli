@@ -143,7 +143,7 @@ func (l *Linter) Install(ctx context.Context, config linter.InstallConfig) error
 				errMsg = "venv creation failed (no error message)"
 			}
 			if strings.Contains(errMsg, "ensurepip") || strings.Contains(errMsg, "python3-venv") {
-				return fmt.Errorf("failed to create virtualenv: python3-venv package not installed. "+
+				return fmt.Errorf("failed to create virtualenv: python3-venv package not installed. " +
 					"On Debian/Ubuntu, run: sudo apt install python3-venv")
 			}
 			return fmt.Errorf("failed to create virtualenv: %s", errMsg)

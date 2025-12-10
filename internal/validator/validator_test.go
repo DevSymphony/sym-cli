@@ -3,8 +3,8 @@ package validator
 import (
 	"testing"
 
-	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/linter"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
 )
@@ -141,39 +141,39 @@ func TestParseJSON(t *testing.T) {
 
 func TestParseValidationResponseFallback(t *testing.T) {
 	tests := []struct {
-		name            string
-		response        string
-		expectViolates  bool
+		name             string
+		response         string
+		expectViolates   bool
 		expectConfidence string
 	}{
 		{
-			name:            "violates true",
-			response:        `{"violates": true, "description": "test"}`,
-			expectViolates:  true,
+			name:             "violates true",
+			response:         `{"violates": true, "description": "test"}`,
+			expectViolates:   true,
 			expectConfidence: "medium",
 		},
 		{
-			name:            "violates true no space",
-			response:        `{"violates":true}`,
-			expectViolates:  true,
+			name:             "violates true no space",
+			response:         `{"violates":true}`,
+			expectViolates:   true,
 			expectConfidence: "medium",
 		},
 		{
-			name:            "violates false",
-			response:        `{"violates": false}`,
-			expectViolates:  false,
+			name:             "violates false",
+			response:         `{"violates": false}`,
+			expectViolates:   false,
 			expectConfidence: "low",
 		},
 		{
-			name:            "does not violate text",
-			response:        `The code does not violate the rule.`,
-			expectViolates:  false,
+			name:             "does not violate text",
+			response:         `The code does not violate the rule.`,
+			expectViolates:   false,
 			expectConfidence: "low",
 		},
 		{
-			name:            "no violation indicators",
-			response:        `Random text without any violation`,
-			expectViolates:  false,
+			name:             "no violation indicators",
+			response:         `Random text without any violation`,
+			expectViolates:   false,
 			expectConfidence: "low",
 		},
 	}
@@ -239,47 +239,6 @@ func TestFilterChangesForRule(t *testing.T) {
 			When: &schema.Selector{Languages: []string{"rust"}},
 		}
 		result := v.filterChangesForRule(changes, rule)
-		assert.Len(t, result, 0)
-	})
-}
-
-func TestFilterLLMRules_Detailed(t *testing.T) {
-	t.Run("filters llm-validator rules only", func(t *testing.T) {
-		policy := &schema.CodePolicy{
-			Rules: []schema.PolicyRule{
-				{ID: "rule1", Enabled: true, Check: map[string]interface{}{"engine": "llm-validator"}},
-				{ID: "rule2", Enabled: true, Check: map[string]interface{}{"engine": "eslint"}},
-				{ID: "rule3", Enabled: true, Check: map[string]interface{}{"engine": "llm-validator"}},
-			},
-		}
-		v := &llmValidator{policy: policy}
-		result := v.filterLLMRules()
-		assert.Len(t, result, 2)
-		assert.Equal(t, "rule1", result[0].ID)
-		assert.Equal(t, "rule3", result[1].ID)
-	})
-
-	t.Run("skips disabled rules", func(t *testing.T) {
-		policy := &schema.CodePolicy{
-			Rules: []schema.PolicyRule{
-				{ID: "rule1", Enabled: false, Check: map[string]interface{}{"engine": "llm-validator"}},
-				{ID: "rule2", Enabled: true, Check: map[string]interface{}{"engine": "llm-validator"}},
-			},
-		}
-		v := &llmValidator{policy: policy}
-		result := v.filterLLMRules()
-		assert.Len(t, result, 1)
-		assert.Equal(t, "rule2", result[0].ID)
-	})
-
-	t.Run("returns empty for no matching rules", func(t *testing.T) {
-		policy := &schema.CodePolicy{
-			Rules: []schema.PolicyRule{
-				{ID: "rule1", Enabled: true, Check: map[string]interface{}{"engine": "eslint"}},
-			},
-		}
-		v := &llmValidator{policy: policy}
-		result := v.filterLLMRules()
 		assert.Len(t, result, 0)
 	})
 }

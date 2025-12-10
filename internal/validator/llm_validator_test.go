@@ -118,9 +118,3 @@ func TestExtractJSONField(t *testing.T) {
 		})
 	}
 }
-
-func TestFilterLLMRules(t *testing.T) {
-	// This would require creating a full CodePolicy and LLMValidator
-	// Skipping for now as it requires more setup
-	t.Skip("Integration test - requires full setup")
-}

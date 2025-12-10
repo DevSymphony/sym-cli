@@ -180,4 +180,3 @@ src/app.ts(20,10): error TS2339: Property 'bar' does not exist on type 'Object'.
 		t.Errorf("Expected 2 violations, got %d", len(violations))
 	}
 }
-

@@ -9,9 +9,9 @@ import (
 
 // PMDOutput represents the JSON output from PMD.
 type PMDOutput struct {
-	FormatVersion int              `json:"formatVersion"`
-	PMDVersion    string           `json:"pmdVersion"`
-	Files         []PMDFile        `json:"files"`
+	FormatVersion    int                  `json:"formatVersion"`
+	PMDVersion       string               `json:"pmdVersion"`
+	Files            []PMDFile            `json:"files"`
 	ProcessingErrors []PMDProcessingError `json:"processingErrors"`
 }
 
@@ -23,14 +23,14 @@ type PMDFile struct {
 
 // PMDViolation represents a single violation in PMD output.
 type PMDViolation struct {
-	BeginLine   int    `json:"beginLine"`
-	BeginColumn int    `json:"beginColumn"`
-	EndLine     int    `json:"endLine"`
-	EndColumn   int    `json:"endColumn"`
-	Description string `json:"description"`
-	Rule        string `json:"rule"`
-	RuleSet     string `json:"ruleSet"`
-	Priority    int    `json:"priority"`
+	BeginLine    int    `json:"beginLine"`
+	BeginColumn  int    `json:"beginColumn"`
+	EndLine      int    `json:"endLine"`
+	EndColumn    int    `json:"endColumn"`
+	Description  string `json:"description"`
+	Rule         string `json:"rule"`
+	RuleSet      string `json:"ruleSet"`
+	Priority     int    `json:"priority"`
 	ExternalInfo string `json:"externalInfoUrl"`
 }
 

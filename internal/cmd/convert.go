@@ -85,7 +85,7 @@ func runNewConverter(userPolicy *schema.UserPolicy) error {
 	if err != nil {
 		return fmt.Errorf("no available LLM backend for convert: %w\nTip: configure provider in .sym/config.json", err)
 	}
-	defer llmProvider.Close()
+	defer func() { _ = llmProvider.Close() }()
 
 	// Create new converter
 	conv := converter.NewConverter(llmProvider, convertOutputDir)

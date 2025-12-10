@@ -40,7 +40,7 @@ func ConvertPolicyWithLLM(userPolicyPath, codePolicyPath string) error {
 	if err != nil {
 		return fmt.Errorf("failed to create LLM provider: %w", err)
 	}
-	defer llmProvider.Close()
+	defer func() { _ = llmProvider.Close() }()
 
 	// Create converter with output directory
 	outputDir := filepath.Dir(codePolicyPath)

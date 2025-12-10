@@ -1,0 +1,19 @@
+# golangci-lint v2 configuration
+# Reference: https://github.com/golangci/golangci-lint/blob/main/.golangci.reference.yml
+
+version: "2"
+
+linters:
+  # 기본 린터 세트 사용 (errcheck, govet, ineffassign, staticcheck, unused)
+  default: standard
+
+formatters:
+  enable:
+    - goimports     # import 정리 및 포맷팅
+
+run:
+  # 타임아웃 설정
+  timeout: 5m
+
+  # 테스트 파일 포함
+  tests: true

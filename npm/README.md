@@ -1,25 +1,59 @@
-# Symphony MCP Server
+# Symphony
 
-LLM-friendly convention linter for AI coding tools.
+**LLM-Friendly Convention Linter for AI Coding Tools**
 
-## Quick Start
+Symphony는 AI 개발환경(IDE, MCP 기반 LLM Tooling)을 위한 정책 기반 코드 컨벤션 검사기입니다.
+간단한 설정만으로 프로젝트 규칙을 일관되게 적용하고, LLM 코드 생성 품질을 극대화할 수 있습니다.
+
+---
+
+## 목차
+
+- [Symphony](#symphony)
+  - [목차](#목차)
+  - [주요 기능](#주요-기능)
+  - [빠른 시작](#빠른-시작)
+  - [MCP 설정](#mcp-설정)
+  - [사용 가능한 MCP 도구](#사용-가능한-mcp-도구)
+    - [`query_conventions`](#query_conventions)
+    - [`validate_code`](#validate_code)
+  - [컨벤션 파일](#컨벤션-파일)
+  - [요구사항](#요구사항)
+  - [지원 플랫폼](#지원-플랫폼)
+  - [라이선스](#라이선스)
+
+---
+
+## 주요 기능
+
+- 자연어로 컨벤션 정의
+- LLM이 MCP를 통해 필요한 컨벤션만 추출하여 컨텍스트에 포함
+- LLM이 MCP를 통해 코드 변경사항에 대한 컨벤션 준수 여부를 검사
+- RBAC 기반 접근 제어
+
+---
+
+## 빠른 시작
 
 ```bash
-# 1. Install
+# 1. CLI 설치
 npm install -g @dev-symphony/sym
 
-# 2. Initialize (GitHub OAuth login + MCP auto-setup)
-sym login
+# 2. 프로젝트 초기화 (.sym/ 폴더 생성 + MCP 설정)
 sym init
+
+# 3. 대시보드 실행 및 컨벤션 편집
+sym dashboard
+
+# 4. MCP 서버를 LLM IDE 내부에서 사용
 ```
 
-> **Note**: `OPENAI_API_KEY` environment variable is required for LLM-based convention conversion.
+---
 
-## MCP Configuration
+## MCP 설정
 
-MCP is auto-configured during `sym init`.
-
-For manual setup:
+`sym init` 명령은 MCP 서버 구성을 자동으로 설정합니다.
+만약 수동으로 설정하고 싶다면 아래를 `~/.config/.../config.json` 등에 추가하세요.
 
 ```json
 {
@@ -32,19 +66,32 @@ For manual setup:
 }
 ```
 
-### Available Tools
+---
 
-**query_conventions**
-- Query project conventions by category, files, or languages
-- All parameters are optional
+## 사용 가능한 MCP 도구
 
-**validate_code**
-- Validate code against defined conventions
-- Parameters: files (required)
+### `query_conventions`
 
-## Policy File
+- 프로젝트 컨벤션을 조회합니다.
+- 카테고리, 파일 목록, 언어 등의 파라미터는 모두 optional입니다.
 
-Create `.sym/user-policy.json` in your project root:
+### `validate_code`
+
+- 코드가 정의된 규칙을 따르는지 검사합니다.
+- 필수 파라미터: `files`
+
+---
+
+## 컨벤션 파일
+
+Symphony는 프로젝트 컨벤션을 **정책 파일(`.sym/user-policy.json`)**로 관리합니다.
+아래 명령으로 대시보드를 열어 쉽게 편집할 수 있습니다.
+
+```bash
+sym dashboard
+```
+
+예시 정책 파일:
 
 ```json
 {
@@ -63,17 +110,23 @@ Create `.sym/user-policy.json` in your project root:
 }
 ```
 
-## Requirements
+---
+
+## 요구사항
 
 - Node.js >= 16.0.0
 - Policy file: `.sym/user-policy.json`
 
-## Supported Platforms
+---
+
+## 지원 플랫폼
 
 - macOS (Intel, Apple Silicon)
 - Linux (x64, ARM64)
 - Windows (x64)
 
-## License
+---
+
+## 라이선스
 
 MIT

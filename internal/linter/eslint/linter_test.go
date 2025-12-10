@@ -164,4 +164,3 @@ func TestParseOutput(t *testing.T) {
 		t.Error("Expected violations to be parsed")
 	}
 }
-

@@ -345,4 +345,3 @@ func ensureGitignore(path string) error {
 
 	return nil
 }
-

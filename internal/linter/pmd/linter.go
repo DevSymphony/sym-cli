@@ -144,7 +144,6 @@ func (l *Linter) Install(ctx context.Context, config linter.InstallConfig) error
 	return nil
 }
 
-
 // Execute runs PMD with the given config and files.
 func (l *Linter) Execute(ctx context.Context, config []byte, files []string) (*linter.ToolOutput, error) {
 	return l.execute(ctx, config, files)

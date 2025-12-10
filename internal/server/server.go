@@ -688,7 +688,7 @@ func (s *Server) handleConvert(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, fmt.Sprintf("Failed to create LLM provider: %v", err), http.StatusInternalServerError)
 		return
 	}
-	defer llmProvider.Close()
+	defer func() { _ = llmProvider.Close() }()
 
 	// Create converter with LLM provider and output directory
 	conv := converter.NewConverter(llmProvider, outputDir)

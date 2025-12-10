@@ -1,43 +1,59 @@
-# Symphony (sym)
+# Symphony
 
-자연어 기반 코딩 컨벤션 관리 및 검증 도구
+**LLM-Friendly Convention Linter for AI Coding Tools**
 
-## 빠른 시작
+Symphony는 AI 개발환경(IDE, MCP 기반 LLM Tooling)을 위한 정책 기반 코드 컨벤션 검사기입니다.
+간단한 설정만으로 프로젝트 규칙을 일관되게 적용하고, LLM 코드 생성 품질을 극대화할 수 있습니다.
 
-### 1. 설치
+---
 
-```bash
-npm i -g @dev-symphony/sym
-```
+## 목차
 
-### 2. 초기화
+- [Symphony](#symphony)
+  - [목차](#목차)
+  - [주요 기능](#주요-기능)
+  - [빠른 시작](#빠른-시작)
+  - [MCP 설정](#mcp-설정)
+  - [사용 가능한 MCP 도구](#사용-가능한-mcp-도구)
+    - [`query_conventions`](#query_conventions)
+    - [`validate_code`](#validate_code)
+  - [컨벤션 파일](#컨벤션-파일)
+  - [요구사항](#요구사항)
+  - [지원 플랫폼](#지원-플랫폼)
+  - [라이선스](#라이선스)
 
-```bash
-# 프로젝트 초기화 (.sym/ 폴더 생성, MCP 자동 설정)
-sym init
-```
-
-### 3. 사용
-
-**웹 대시보드로 컨벤션 편집:**
-```bash
-sym dashboard
-# http://localhost:8787 에서 역할/컨벤션 편집
-```
+---
 
 ## 주요 기능
 
-- 자연어로 코딩 컨벤션 정의 (`.sym/user-policy.json`)
-- RBAC 기반 파일 접근 권한 관리
-- LLM으로 자연어 규칙을 ESLint/Checkstyle/PMD 설정으로 변환
-- MCP 서버로 Claude, Cursor 등 AI 도구와 연동
-- 웹 대시보드에서 시각적으로 정책 편집
+- 자연어로 컨벤션 정의
+- LLM이 MCP를 통해 필요한 컨벤션만 추출하여 컨텍스트에 포함
+- LLM이 MCP를 통해 코드 변경사항에 대한 컨벤션 준수 여부를 검사
+- RBAC 기반 접근 제어
+
+---
+
+## 빠른 시작
+
+```bash
+# 1. CLI 설치
+npm install -g @dev-symphony/sym
+
+# 2. 프로젝트 초기화 (.sym/ 폴더 생성 + MCP 설정)
+sym init
+
+# 3. 대시보드 실행 및 컨벤션 편집
+sym dashboard
+
+# 4. MCP 서버를 LLM IDE 내부에서 사용
+```
+
+---
 
 ## MCP 설정
 
-`sym init` 실행 시 MCP가 자동으로 설정됩니다.
-
-수동 설정이 필요한 경우:
+`sym init` 명령은 MCP 서버 구성을 자동으로 설정합니다.
+만약 수동으로 설정하고 싶다면 아래를 `~/.config/.../config.json` 등에 추가하세요.
 
 ```json
 {
@@ -50,61 +66,67 @@ sym dashboard
 }
 ```
 
-## CLI 명령어
+---
 
-| 명령어 | 설명 |
-|--------|------|
-| `sym init` | 프로젝트 초기화 (.sym/ 생성) |
-| `sym dashboard` | 웹 대시보드 실행 (포트 8787) |
-| `sym my-role` | 내 역할 확인 |
-| `sym policy validate` | 정책 파일 유효성 검사 |
-| `sym convert -i user-policy.json --targets all` | 컨벤션을 linter 설정으로 변환 |
-| `sym mcp` | MCP 서버 실행 |
+## 사용 가능한 MCP 도구
 
-## 정책 파일 예시
+### `query_conventions`
 
-`.sym/user-policy.json`:
+- 프로젝트 컨벤션을 조회합니다.
+- 카테고리, 파일 목록, 언어 등의 파라미터는 모두 optional입니다.
+
+### `validate_code`
+
+- 코드가 정의된 규칙을 따르는지 검사합니다.
+- 필수 파라미터: `files`
+
+---
+
+## 컨벤션 파일
+
+Symphony는 프로젝트 컨벤션을 **정책 파일(`.sym/user-policy.json`)**로 관리합니다.
+아래 명령으로 대시보드를 열어 쉽게 편집할 수 있습니다.
+
+```bash
+sym dashboard
+```
+
+예시 정책 파일:
 
 ```json
 {
   "version": "1.0.0",
-  "rbac": {
-    "roles": {
-      "admin": { "allowWrite": ["**/*"] },
-      "developer": { "allowWrite": ["src/**"], "denyWrite": [".sym/**"] }
-    }
-  },
   "rules": [
-    { "say": "클래스 이름은 PascalCase", "category": "naming" },
-    { "say": "한 줄은 100자 이하", "category": "formatting" }
+    {
+      "say": "Functions should be documented",
+      "category": "documentation"
+    },
+    {
+      "say": "Lines should be less than 100 characters",
+      "category": "formatting",
+      "params": { "max": 100 }
+    }
   ]
 }
 ```
 
-`.sym/roles.json`:
+---
 
-```json
-{
-  "admin": ["alice"],
-  "developer": ["bob", "charlie"]
-}
-```
+## 요구사항
 
-## 개발
+- Node.js >= 16.0.0
+- Policy file: `.sym/user-policy.json`
 
-```bash
-make setup      # 의존성 설치
-make build      # 빌드
-make test       # 테스트
-make lint       # 린트
-```
+---
 
-**필수 도구:** Go 1.21+, Node.js 18+
+## 지원 플랫폼
+
+- macOS (Intel, Apple Silicon)
+- Linux (x64, ARM64)
+- Windows (x64)
+
+---
 
 ## 라이선스
 
-MIT License
-
-## 지원
-
-- GitHub Issues: https://github.com/DevSymphony/sym-cli/issues
+MIT

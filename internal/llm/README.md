@@ -1,43 +1,42 @@
-# LLM Package
+# LLM 패키지
 
-Unified interface for LLM providers.
+LLM 프로바이더를 위한 통합 인터페이스입니다.
 
-## File Structure
+## 파일 구조
 
 ```
 internal/llm/
-├── llm.go           # Provider, RawProvider interface, Config, ResponseFormat
-├── registry.go      # RegisterProvider, New, ListProviders
-├── wrapper.go       # parsedProvider (auto parsing wrapper)
-├── config.go        # LoadConfig
-├── parser.go        # Response parsing (private)
-├── DESIGN.md        # Architecture documentation
-├── claudecode/      # Claude Code CLI provider
-├── geminicli/       # Gemini CLI provider
-└── openaiapi/       # OpenAI API provider
+├── llm.go           # Provider, RawProvider 인터페이스, Config, ResponseFormat, ModelInfo, APIKeyConfig, ProviderInfo
+├── registry.go      # 프로바이더 레지스트리 및 유틸리티 함수
+├── wrapper.go       # parsedProvider (자동 파싱 래퍼)
+├── config.go        # LoadConfig, LoadConfigFromDir, Config.Validate
+├── parser.go        # 응답 파싱 (비공개)
+├── claudecode/      # Claude Code CLI 프로바이더
+├── geminicli/       # Gemini CLI 프로바이더
+└── openaiapi/       # OpenAI API 프로바이더
 ```
 
-## Usage
+## 사용법
 
 ```go
 import "github.com/DevSymphony/sym-cli/internal/llm"
 
-// 1. Load config
+// 1. 설정 로드
 cfg := llm.LoadConfig()
 
-// 2. Create provider
+// 2. 프로바이더 생성
 provider, err := llm.New(cfg)
 if err != nil {
-    return err // CLI not installed or API key missing
+    return err // CLI 미설치 또는 API 키 누락
 }
 
-// 3. Execute prompt
+// 3. 프롬프트 실행
 response, err := provider.Execute(ctx, prompt, llm.JSON)
 ```
 
-### Configuration
+### 설정
 
-Config file: `.sym/config.json`
+설정 파일: `.sym/config.json`
 
 ```json
 {
@@ -48,31 +47,31 @@ Config file: `.sym/config.json`
 }
 ```
 
-For OpenAI API, also add API key to `.sym/.env`:
+OpenAI API 사용 시 `.sym/.env`에 API 키 추가 필요:
 
 ```bash
 OPENAI_API_KEY=sk-...
 ```
 
-### Response Format
+### 응답 형식
 
-| Format | Description |
-|--------|-------------|
-| `llm.Text` | Return raw text |
-| `llm.JSON` | Extract JSON from LLM response |
-| `llm.XML` | Extract XML from LLM response |
+| 형식 | 설명 |
+|------|------|
+| `llm.Text` | 원시 텍스트 반환 |
+| `llm.JSON` | LLM 응답에서 JSON 추출 |
+| `llm.XML` | LLM 응답에서 XML 추출 |
 
-`llm.JSON` and `llm.XML` automatically extract structured data when LLM returns JSON/XML with preamble text.
+`llm.JSON`과 `llm.XML`은 LLM이 서두 텍스트와 함께 JSON/XML을 반환할 때 자동으로 구조화된 데이터를 추출합니다.
 
-## Provider List
+## 프로바이더 목록
 
-| Name | Type | Default Model | Installation |
-|------|------|---------------|--------------|
+| 이름 | 유형 | 기본 모델 | 설치 방법 |
+|------|------|-----------|-----------|
 | `claudecode` | CLI | sonnet | `npm i -g @anthropic-ai/claude-cli` |
 | `geminicli` | CLI | gemini-2.5-flash | `npm i -g @google/gemini-cli` |
-| `openaiapi` | API | gpt-4o-mini | Set `OPENAI_API_KEY` env var |
+| `openaiapi` | API | gpt-4o-mini | `OPENAI_API_KEY` 환경 변수 설정 |
 
-### Check Provider Status
+### 프로바이더 상태 확인
 
 ```go
 providers := llm.ListProviders()
@@ -81,16 +80,16 @@ for _, p := range providers {
 }
 ```
 
-## Adding New Provider
+## 새 프로바이더 추가
 
-### Step 1: Create Directory
+### 1단계: 디렉토리 생성
 
 ```
 internal/llm/<provider>/
 └── provider.go
 ```
 
-### Step 2: Implement RawProvider Interface
+### 2단계: RawProvider 인터페이스 구현
 
 ```go
 package myprovider
@@ -104,7 +103,7 @@ type Provider struct {
     model string
 }
 
-// Compile-time check: Provider must implement RawProvider interface
+// 컴파일 타임 검사: Provider가 RawProvider 인터페이스를 구현하는지 확인
 var _ llm.RawProvider = (*Provider)(nil)
 
 func (p *Provider) Name() string {
@@ -112,9 +111,9 @@ func (p *Provider) Name() string {
 }
 
 func (p *Provider) ExecuteRaw(ctx context.Context, prompt string, format llm.ResponseFormat) (string, error) {
-    // Execute prompt and return raw response
+    // 프롬프트 실행 후 원시 응답 반환
     response := callLLM(prompt)
-    return response, nil  // No manual parsing needed
+    return response, nil  // 수동 파싱 불필요
 }
 
 func (p *Provider) Close() error {
@@ -122,9 +121,9 @@ func (p *Provider) Close() error {
 }
 ```
 
-> **Note**: The `var _ llm.RawProvider = (*Provider)(nil)` line is a compile-time check that ensures `Provider` implements the `RawProvider` interface. If any method is missing or has the wrong signature, the code will fail to compile.
+> **참고**: `var _ llm.RawProvider = (*Provider)(nil)` 라인은 `Provider`가 `RawProvider` 인터페이스를 구현하는지 확인하는 컴파일 타임 검사입니다. 메서드가 누락되었거나 시그니처가 잘못된 경우 컴파일에 실패합니다.
 
-### Step 3: Register in init()
+### 3단계: init()에서 등록
 
 ```go
 func init() {
@@ -132,22 +131,22 @@ func init() {
         Name:         "myprovider",
         DisplayName:  "My Provider",
         DefaultModel: "default-model-v1",
-        Available:    checkAvailability(), // Check CLI exists or API key set
-        Path:         cliPath,             // CLI path (empty for API)
+        Available:    checkAvailability(), // CLI 존재 또는 API 키 설정 여부 확인
+        Path:         cliPath,             // CLI 경로 (API의 경우 빈 문자열)
         Models: []llm.ModelInfo{
-            {ID: "model-v1", DisplayName: "Model V1", Description: "Standard model", Recommended: true},
-            {ID: "model-v2", DisplayName: "Model V2", Description: "Advanced model", Recommended: false},
+            {ID: "model-v1", DisplayName: "Model V1", Description: "표준 모델", Recommended: true},
+            {ID: "model-v2", DisplayName: "Model V2", Description: "고급 모델", Recommended: false},
         },
         APIKey: llm.APIKeyConfig{
-            Required:   true,                    // Set false for CLI-based providers
-            EnvVarName: "MY_PROVIDER_API_KEY",   // Environment variable name
-            Prefix:     "mp-",                   // Expected prefix for validation (optional)
+            Required:   true,                    // CLI 기반 프로바이더는 false로 설정
+            EnvVarName: "MY_PROVIDER_API_KEY",   // 환경 변수 이름
+            Prefix:     "mp-",                   // 검증용 예상 접두사 (선택사항)
         },
     })
 }
 
 func newProvider(cfg llm.Config) (llm.RawProvider, error) {
-    // Return error if CLI not installed or API key missing
+    // CLI 미설치 또는 API 키 누락 시 에러 반환
     if !isAvailable() {
         return nil, fmt.Errorf("provider not available")
     }
@@ -161,7 +160,7 @@ func newProvider(cfg llm.Config) (llm.RawProvider, error) {
 }
 ```
 
-### Step 4: Add Import to Bootstrap
+### 4단계: 부트스트랩에 import 추가
 
 ```go
 // cmd/sym/bootstrap.go
@@ -170,12 +169,12 @@ import (
 )
 ```
 
-### Key Rules
+### 핵심 규칙
 
-- Add compile-time check: `var _ llm.RawProvider = (*Provider)(nil)`
-- Implement `RawProvider.ExecuteRaw()` - parsing is handled automatically by wrapper
-- Return clear error message if CLI not installed or API key missing
-- Check availability in init() to set ProviderInfo.Available
-- Define `Models` with at least one model marked as `Recommended: true`
-- Set `APIKey.Required: false` for CLI-based providers (they handle auth internally)
-- Refer to existing providers (claudecode, openaiapi) for patterns
+- 컴파일 타임 검사 추가: `var _ llm.RawProvider = (*Provider)(nil)`
+- `RawProvider.ExecuteRaw()` 구현 - 파싱은 래퍼에서 자동 처리
+- CLI 미설치 또는 API 키 누락 시 명확한 에러 메시지 반환
+- init()에서 가용성을 확인하여 ProviderInfo.Available 설정
+- `Models`에 최소 하나의 모델을 `Recommended: true`로 정의
+- CLI 기반 프로바이더는 `APIKey.Required: false` 설정 (자체적으로 인증 처리)
+- 기존 프로바이더(claudecode, openaiapi) 패턴 참조

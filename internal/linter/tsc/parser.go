@@ -20,13 +20,14 @@ type TSCDiagnostic struct {
 	Category int    `json:"category"` // 0=message, 1=error, 2=warning, 3=suggestion
 	Code     int    `json:"code"`
 	Message  string `json:"messageText"`
-	Line     int    `json:"line"`     // Custom field we add
-	Column   int    `json:"column"`   // Custom field we add
+	Line     int    `json:"line"`   // Custom field we add
+	Column   int    `json:"column"` // Custom field we add
 }
 
 // parseOutput parses tsc output and converts it to violations.
 // TSC output format (without --pretty):
-//   file.ts(line,col): error TS2304: Message here.
+//
+//	file.ts(line,col): error TS2304: Message here.
 func parseOutput(output *linter.ToolOutput) ([]linter.Violation, error) {
 	if output == nil {
 		return []linter.Violation{}, nil

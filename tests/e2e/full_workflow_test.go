@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/converter"
-	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/llm"
+	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/internal/validator"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -171,7 +171,7 @@ func ProcessData(data string) error {
 
 	llmValidator := validator.NewValidator(&convertedPolicy, false)
 	llmValidator.SetLLMProvider(provider)
-	defer llmValidator.Close()
+	defer func() { _ = llmValidator.Close() }()
 
 	// Validate BAD code
 	t.Log("STEP 4a: Validating BAD code (should find violations)")
@@ -340,7 +340,7 @@ func TestE2E_CodeGenerationFeedbackLoop(t *testing.T) {
 	require.NoError(t, err, "LLM provider creation should succeed")
 	v := validator.NewValidator(policy, false)
 	v.SetLLMProvider(provider)
-	defer v.Close()
+	defer func() { _ = v.Close() }()
 	ctx := context.Background()
 
 	// Iteration 1: Bad code

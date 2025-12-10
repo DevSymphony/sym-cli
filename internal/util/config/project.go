@@ -9,9 +9,9 @@ import (
 
 // ProjectConfig represents the .sym/config.json structure
 type ProjectConfig struct {
-	LLM        LLMConfig   `json:"llm,omitempty"`
-	MCP        MCPConfig   `json:"mcp,omitempty"`
-	PolicyPath string      `json:"policy_path,omitempty"`
+	LLM        LLMConfig `json:"llm,omitempty"`
+	MCP        MCPConfig `json:"mcp,omitempty"`
+	PolicyPath string    `json:"policy_path,omitempty"`
 }
 
 // LLMConfig holds LLM provider settings
