@@ -2,7 +2,7 @@
 
 Symphony CLI 명령어를 구현합니다.
 
-Cobra 프레임워크 기반으로 init, validate, convert, policy, dashboard, my-role, llm, mcp, version 등의 명령어를 제공합니다.
+Cobra 프레임워크 기반으로 init, validate, convert, policy, dashboard, my-role, llm, mcp, import, version 등의 명령어를 제공합니다.
 
 ## 패키지 구조
 
@@ -21,6 +21,7 @@ cmd/
 ├── mcp.go               # sym mcp 명령어 (MCP 서버)
 ├── mcp_register.go      # MCP 서버 등록 헬퍼 함수
 ├── category.go          # sym category list|add|edit|remove 명령어 (카테고리 관리)
+├── import.go            # sym import 명령어 (외부 문서에서 컨벤션 추출)
 ├── survey_templates.go  # 커스텀 survey UI 템플릿
 └── README.md
 ```
@@ -36,21 +37,21 @@ cmd/
 ### 패키지 의존성
 
 ```
-                         ┌───────────┐
-                         │    cmd    │
-                         └─────┬─────┘
-        ┌──────┬──────┬───────┼───────┬──────┬──────┬──────┐
-        ▼      ▼      ▼       ▼       ▼      ▼      ▼      ▼
-   converter  llm  validator policy  roles server  mcp  linter
-        │      │      │       │       │      │      │      │
-        └──────┴──────┴───────┴───────┴──────┴──────┴──────┘
-                              │
-               ┌──────────────┼──────────────┐
-               ▼              ▼              ▼
-          util/config     util/git       util/env
-                              │
-                              ▼
-                         pkg/schema
+                              ┌───────────┐
+                              │    cmd    │
+                              └─────┬─────┘
+        ┌──────┬──────┬───────┬─────┼─────┬──────┬──────┬──────┐
+        ▼      ▼      ▼       ▼     ▼     ▼      ▼      ▼      ▼
+   converter  llm  validator policy roles server  mcp  linter importer
+        │      │      │       │     │     │      │      │      │
+        └──────┴──────┴───────┴─────┴─────┴──────┴──────┴──────┘
+                                    │
+                     ┌──────────────┼──────────────┐
+                     ▼              ▼              ▼
+                util/config     util/git       util/env
+                                    │
+                                    ▼
+                               pkg/schema
 ```
 
 ## Public / Private API
@@ -86,6 +87,7 @@ cmd/
 | `llmSetupCmd` | llm.go:47 | llm setup 명령어 |
 | `mcpCmd` | mcp.go:15 | mcp 명령어 |
 | `categoryCmd` | category.go:10 | category 명령어 |
+| `importCmd` | import.go:18 | import 명령어 |
 
 #### 명령어 실행 함수
 
@@ -106,6 +108,7 @@ cmd/
 | `runCategoryAdd(cmd, args)` | category.go:165 | category add 실행 |
 | `runCategoryEdit(cmd, args)` | category.go:240 | category edit 실행 |
 | `runCategoryRemove(cmd, args)` | category.go:353 | category remove 실행 |
+| `runImport(cmd, args)` | import.go:50 | import 실행 |
 
 #### 헬퍼 함수 - 초기화
 
@@ -150,6 +153,7 @@ cmd/
 |------|------|------|
 | `printValidationResult(result)` | validate.go:131 | 검증 결과 출력 |
 | `runNewConverter(policy)` | convert.go:74 | 새 컨버터 실행 |
+| `printImportResults(result)` | import.go:108 | Import 결과 출력 |
 
 #### 터미널 포맷팅 (colors.go)
 

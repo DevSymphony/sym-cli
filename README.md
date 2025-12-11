@@ -21,6 +21,7 @@ Symphony는 AI 개발환경(IDE, MCP 기반 LLM Tooling)을 위한 정책 기반
     - [`add_category`](#add_category)
     - [`edit_category`](#edit_category)
     - [`remove_category`](#remove_category)
+    - [`import_convention`](#import_convention)
   - [컨벤션 파일](#컨벤션-파일)
   - [요구사항](#요구사항)
   - [지원 플랫폼](#지원-플랫폼)
@@ -104,6 +105,13 @@ sym dashboard
 
 - 카테고리를 삭제합니다 (배치 지원).
 - 필수 파라미터: `names` (배열)
+
+### `import_convention`
+
+- 외부 문서(텍스트, 마크다운, 코드 파일)에서 컨벤션을 추출합니다.
+- LLM을 사용하여 코딩 규칙을 자동으로 인식하고 정책에 추가합니다.
+- 필수 파라미터: `path`
+- 선택 파라미터: `mode` (`append` 또는 `clear`, 기본값: `append`)
 
 ---
 

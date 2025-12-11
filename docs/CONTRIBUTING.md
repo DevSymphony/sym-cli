@@ -126,6 +126,7 @@ sym-cli/
 │   │   └── openaiapi/          # OpenAI API 프로바이더
 │   ├── mcp/                    # AI 도구 통합을 위한 Model Context Protocol 서버
 │   ├── server/                 # 웹 대시보드 HTTP 서버
+│   ├── importer/               # 외부 문서에서 컨벤션 추출
 │   ├── policy/                 # 정책 파일 로드, 저장 및 템플릿 관리
 │   ├── roles/                  # RBAC (역할 기반 접근 제어) 관리
 │   └── util/                   # 공유 유틸리티

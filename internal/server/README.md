@@ -36,6 +36,7 @@ internal/server/
 | internal/policy | 정책 파일 로드/저장, 템플릿 관리 |
 | internal/roles | 역할 관리, 현재 역할 조회/설정 |
 | internal/util/config | 프로젝트 설정(config.json) 로드/저장 |
+| internal/importer | 외부 문서에서 컨벤션 추출 (`/api/import` 엔드포인트) |
 | pkg/schema | UserPolicy 타입 정의 |
 
 **외부 의존성:**
@@ -92,6 +93,7 @@ type Server struct {
 | handleAddCategory | POST /api/categories | 카테고리 추가 |
 | handleEditCategory | PUT /api/categories/{name} | 카테고리 편집 |
 | handleDeleteCategory | DELETE /api/categories/{name} | 카테고리 삭제 |
+| handleImport | POST /api/import | Import 실행 (editPolicy 권한 필요) |
 
 ## 참고 문헌
 
