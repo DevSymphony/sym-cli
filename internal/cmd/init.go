@@ -101,8 +101,15 @@ func runInit(cmd *cobra.Command, args []string) {
 	// Create default policy file with RBAC roles (only if not exists or --force)
 	policyCreated, err := createDefaultPolicy()
 	if err != nil {
-		printWarn(fmt.Sprintf("Failed to create policy file: %v", err))
-		fmt.Println(indent("You can manually create it later using the dashboard"))
+		printError(fmt.Sprintf("Failed to create policy file: %v", err))
+		fmt.Println()
+		printError("This is a critical error. Initialization cannot continue.")
+		fmt.Println(indent("Possible causes:"))
+		fmt.Println(indent("  - Disk write permissions (try running as administrator on Windows)"))
+		fmt.Println(indent("  - Antivirus blocking file creation (add sym to exclusions)"))
+		fmt.Println(indent("  - OneDrive/Dropbox sync conflict (pause sync temporarily)"))
+		fmt.Println(indent("  - Disk full or read-only filesystem"))
+		os.Exit(1)
 	} else if policyCreated {
 		printOK("user-policy.json created with default RBAC roles")
 	} else {
