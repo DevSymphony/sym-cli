@@ -213,6 +213,16 @@ const API = {
         });
         if (!res.ok) throw new Error(await res.text());
         return await res.json();
+    },
+
+    async importConventions(path, mode) {
+        const res = await fetch('/api/import', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path, mode })
+        });
+        if (!res.ok) throw new Error(await res.text());
+        return await res.json();
     }
 };
 
@@ -1231,6 +1241,60 @@ async function handleApplyTemplate(e) {
     }
 }
 
+// ==================== Import Management ====================
+async function handleImport() {
+    const pathInput = document.getElementById('import-file-path');
+    const path = pathInput.value.trim();
+
+    if (!path) {
+        showToast('파일 경로를 입력해주세요', 'warning');
+        pathInput.focus();
+        return;
+    }
+
+    const mode = document.querySelector('input[name="import-mode"]:checked').value;
+
+    if (mode === 'clear') {
+        if (!confirm('Clear 모드는 기존 카테고리와 규칙을 모두 삭제합니다. 계속하시겠습니까?')) {
+            return;
+        }
+    }
+
+    try {
+        showToast('Import 진행 중... LLM이 문서를 분석하고 있습니다', 'info');
+        const result = await API.importConventions(path, mode);
+
+        if (result.status === 'error') {
+            throw new Error(result.error);
+        }
+
+        // Reload policy to reflect changes
+        await loadPolicy();
+
+        hideModal('import-modal');
+        pathInput.value = '';
+
+        // Build success message
+        let msg = 'Import 완료! ';
+        if (result.categoriesAdded?.length > 0) {
+            msg += `${result.categoriesAdded.length}개 카테고리, `;
+        }
+        if (result.rulesAdded?.length > 0) {
+            msg += `${result.rulesAdded.length}개 규칙 추가`;
+        }
+        if (result.warnings?.length > 0) {
+            msg += ` (${result.warnings.length}개 경고)`;
+        }
+
+        showToast(msg, 'success');
+        markDirty();
+
+    } catch (error) {
+        console.error('Import failed:', error);
+        showToast('Import 실패: ' + error.message, 'error');
+    }
+}
+
 // ==================== Save & Load ====================
 async function savePolicy() {
     if (appState.settings.confirmSave) {
@@ -1445,6 +1509,9 @@ function applyPermissions() {
         // Show template button
         document.getElementById('template-btn')?.classList.remove('hidden');
 
+        // Show import button
+        document.getElementById('import-btn')?.classList.remove('hidden');
+
         // Enable RBAC inputs and show add/delete buttons
         document.querySelectorAll('.role-name-input, .role-allowWrite-input, .role-denyWrite-input').forEach(el => {
             el.disabled = false;
@@ -1513,6 +1580,9 @@ function applyPermissions() {
 
         // Hide template button
         document.getElementById('template-btn')?.classList.add('hidden');
+
+        // Hide import button
+        document.getElementById('import-btn')?.classList.add('hidden');
 
         // Disable RBAC inputs and hide add/delete buttons
         document.querySelectorAll('.role-name-input, .role-allowWrite-input, .role-denyWrite-input').forEach(el => {
@@ -1624,6 +1694,16 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('template-btn').addEventListener('click', () => {
         showModal('template-modal');
     });
+
+    // Import button
+    document.getElementById('import-btn').addEventListener('click', () => {
+        showModal('import-modal');
+    });
+
+    // Import modal buttons
+    document.getElementById('close-import-modal').addEventListener('click', () => hideModal('import-modal'));
+    document.getElementById('cancel-import-btn').addEventListener('click', () => hideModal('import-modal'));
+    document.getElementById('execute-import-btn').addEventListener('click', handleImport);
 
     // Rules management
     document.getElementById('add-rule-btn').addEventListener('click', handleAddRule);
