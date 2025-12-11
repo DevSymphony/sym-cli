@@ -37,10 +37,19 @@ func LoadPolicy(customPath string) (*schema.UserPolicy, error) {
 	data, err := os.ReadFile(policyPath)
 	if err != nil {
 		if os.IsNotExist(err) {
-			// Return empty policy if file doesn't exist
+			// Return safe fallback with minimal RBAC to prevent "admin with no permissions"
 			return &schema.UserPolicy{
 				Version: "1.0.0",
-				Rules:   []schema.UserRule{},
+				RBAC: &schema.UserRBAC{
+					Roles: map[string]schema.UserRole{
+						"admin": {
+							AllowWrite:    []string{"**/*"},
+							CanEditPolicy: true,
+							CanEditRoles:  true,
+						},
+					},
+				},
+				Rules: []schema.UserRule{},
 			}, nil
 		}
 		return nil, err
@@ -64,7 +73,7 @@ func SavePolicy(policy *schema.UserPolicy, customPath string) error {
 	// Ensure directory exists
 	dir := filepath.Dir(policyPath)
 	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+		return fmt.Errorf("failed to create directory %s: %w\nPossible causes: insufficient permissions, disk full, or antivirus blocking", dir, err)
 	}
 
 	// Validate policy before saving
@@ -77,7 +86,16 @@ func SavePolicy(policy *schema.UserPolicy, customPath string) error {
 		return err
 	}
 
-	return os.WriteFile(policyPath, data, 0644)
+	if err := os.WriteFile(policyPath, data, 0644); err != nil {
+		return fmt.Errorf("failed to write policy file to %s: %w\n"+
+			"Possible causes:\n"+
+			"  - Insufficient permissions (try running as administrator on Windows)\n"+
+			"  - Antivirus blocking file creation (add symphony to exclusions)\n"+
+			"  - OneDrive/Dropbox sync conflict (pause sync temporarily)\n"+
+			"  - Disk full or read-only filesystem", policyPath, err)
+	}
+
+	return nil
 }
 
 // ValidatePolicy validates the policy structure
