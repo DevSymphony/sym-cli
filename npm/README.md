@@ -3,7 +3,7 @@
 **LLM-Friendly Convention Linter for AI Coding Tools**
 
 Symphony는 AI 개발환경(IDE, MCP 기반 LLM Tooling)을 위한 정책 기반 코드 컨벤션 검사기입니다.
-간단한 설정만으로 프로젝트 규칙을 일관되게 적용하고, LLM 코드 생성 품질을 극대화할 수 있습니다.
+간단한 설정만으로 프로젝트 규칙을 일관되게 적용하고, LLM 코드 생성 품질을 향상시킬 수 있습니다.
 
 ---
 
@@ -27,7 +27,6 @@ Symphony는 AI 개발환경(IDE, MCP 기반 LLM Tooling)을 위한 정책 기반
     - [`edit_convention`](#edit_convention)
     - [`remove_convention`](#remove_convention)
     - [`convert`](#convert)
-  - [컨벤션 파일](#컨벤션-파일)
   - [요구사항](#요구사항)
   - [지원 플랫폼](#지원-플랫폼)
   - [라이선스](#라이선스)
@@ -52,6 +51,12 @@ npm install -g @dev-symphony/sym
 
 # 2. 프로젝트 초기화 (.sym/ 폴더 생성 + MCP 설정)
 sym init
+
+# 3. 컨벤션 관리
+# LLM IDE를 통해 기존 문서나 자연어로 컨벤션을 생성, 관리합니다. '컨벤션 관리' 부분을 참고해 주세요.
+
+# 4. 컨벤션 적용
+# LLM IDE에서 작업하면, 작업 전 컨벤션을 자동으로 가져오고, 작업 후 컨벤션을 자동으로 검증합니다.
 ```
 
 ---
@@ -60,13 +65,13 @@ sym init
 
 컨벤션은 아래 3가지 방식으로 관리할 수 있습니다:
 
-- **CLI 명령어**: `sym category|convention|import|convert`
 - **MCP 도구(권장)**: `list_*`, `add_*`, `edit_*`, `remove_*`, `import_convention`, `convert`
 - **Dashboard**: `sym dash`로 웹에서 편집
+- **CLI 명령어**: `sym category|convention|import|convert`
 
-권장사항: **LLM IDE(Cursor/Claude Code 등)를 사용한다면 MCP 기반 관리**를 권장합니다(조회/편집/변환/검증을 일관된 플로우로 자동화 가능).
+권장사항: **LLM IDE(Cursor/Claude Code 등)를 사용한다면 MCP 기반 관리**를 권장합니다.
 
-예시 문장: “`docs/team-standards.md`를 컨벤션에 반영해줘.”
+예시 문장: "`docs/team-standards.md`를 컨벤션에 반영해줘."
 
 자세한 내용은 [`docs/CONVENTION_MANAGEMENT.md`](docs/CONVENTION_MANAGEMENT.md)를 참고하세요.
 
@@ -147,44 +152,6 @@ sym init
 
 - user-policy.json(Schema A)에서 code-policy.json(Schema B) 및 린터 설정 파일을 생성/갱신합니다.
 - 컨벤션/카테고리를 추가/편집/삭제한 뒤 실행하는 것을 권장합니다.
-
----
-
-## 컨벤션 파일
-
-Symphony는 프로젝트 컨벤션을 **정책 파일(`.sym/user-policy.json`)**로 관리합니다.
-아래 명령으로 대시보드를 열어 쉽게 편집할 수 있습니다.
-
-```bash
-sym dashboard
-```
-
-컨벤션/카테고리를 수정한 후에는 아래 명령으로 린터 설정을 갱신하세요:
-
-```bash
-sym convert
-```
-
-자세한 관리 방법은 문서에서 확인할 수 있습니다: [`docs/CONVENTION_MANAGEMENT.md`](docs/CONVENTION_MANAGEMENT.md)
-
-예시 정책 파일:
-
-```json
-{
-  "version": "1.0.0",
-  "rules": [
-    {
-      "say": "Functions should be documented",
-      "category": "documentation"
-    },
-    {
-      "say": "Lines should be less than 100 characters",
-      "category": "formatting",
-      "params": { "max": 100 }
-    }
-  ]
-}
-```
 
 ---
 
