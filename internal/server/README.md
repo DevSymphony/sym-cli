@@ -97,4 +97,5 @@ type Server struct {
 
 ## 참고 문헌
 
-- [Server REST API Reference](../../docs/server-api.md) - 엔드포인트 상세 문서 (요청/응답 스키마, 권한 모델)
+- [Architecture](../../docs/ARCHITECTURE.md) - HTTP 엔드포인트 및 레이어 구조 개요
+- [Command Reference](../../docs/COMMAND.md#sym-dashboard) - 대시보드 실행 방법

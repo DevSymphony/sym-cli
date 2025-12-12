@@ -150,6 +150,7 @@ AI 코딩 도구(Claude Code, Cursor 등)와 stdio를 통해 통신합니다.
 | `add_convention` | 컨벤션 추가 (배치 지원) |
 | `edit_convention` | 컨벤션 편집 (배치 지원) |
 | `remove_convention` | 컨벤션 삭제 (배치 지원) |
+| `convert` | user-policy.json → code-policy.json + 린터 설정 생성/갱신 |
 
 #### HTTP Server (`internal/server`)
 

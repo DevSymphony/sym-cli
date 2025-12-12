@@ -49,6 +49,7 @@ Symphony (`sym`)는 코드 컨벤션 관리와 RBAC(역할 기반 접근 제어)
       - [add\_convention](#add_convention)
       - [edit\_convention](#edit_convention)
       - [remove\_convention](#remove_convention)
+      - [convert](#convert)
     - [등록 방법](#등록-방법)
   - [LLM 프로바이더](#llm-프로바이더)
     - [지원 프로바이더](#지원-프로바이더)
@@ -785,6 +786,7 @@ sym convention remove -f ids.json
 - `add_convention`: 컨벤션(규칙) 추가 (배치 지원)
 - `edit_convention`: 컨벤션(규칙) 편집 (배치 지원)
 - `remove_convention`: 컨벤션(규칙) 삭제 (배치 지원)
+- `convert`: user-policy.json → code-policy.json + 린터 설정 생성/갱신 (권장: 규칙/카테고리 변경 후 실행)
 
 **통신 방식**: stdio (Claude Desktop, Claude Code, Cursor 등 MCP 클라이언트와 통합)
 
@@ -1068,7 +1070,7 @@ Available categories (7):
 • testing
   Testing rules (coverage, test patterns, etc.)
 
-Use query_conventions with a specific category to get rules for that category.
+Use list_convention with a specific category to get rules for that category.
 ```
 
 #### add_category
@@ -1231,6 +1233,25 @@ Rules added (3):
 ```json
 {
   "ids": ["SEC-001", "PERF-001"]
+}
+```
+
+#### convert
+
+user-policy.json(Schema A)에서 code-policy.json(Schema B) 및 린터 설정 파일을 생성/갱신합니다.
+
+**입력 스키마**:
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `input_path` | string | 아니오 | user-policy.json 경로 (기본값: config 또는 `.sym/user-policy.json`) |
+| `output_dir` | string | 아니오 | 출력 디렉토리 (기본값: `.sym`) |
+
+**예시**:
+```json
+{
+  "input_path": ".sym/user-policy.json",
+  "output_dir": ".sym"
 }
 ```
 

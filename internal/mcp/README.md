@@ -113,5 +113,5 @@ mcp/
 
 ## 참고 문헌
 
-- [MCP 도구 스키마](../../docs/COMMAND.md#mcp-도구-스키마) - list_convention, validate_code, list_category, add_category, edit_category, remove_category, import_convention, add_convention, edit_convention, remove_convention 입력/출력 스펙
+- [MCP 도구 스키마](../../docs/COMMAND.md#mcp-도구-스키마) - list_convention, validate_code, list_category, add_category, edit_category, remove_category, import_convention, add_convention, edit_convention, remove_convention, convert 입력/출력 스펙
 - [MCP 통합 가이드](../../docs/COMMAND.md#mcp-통합) - 지원 도구 및 등록 방법

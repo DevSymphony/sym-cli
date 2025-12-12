@@ -138,8 +138,9 @@ sym-cli/
 │   └── schema/                 # 정책 스키마 타입 정의 (UserPolicy, CodePolicy)
 │
 ├── docs/                       # 문서
+│   ├── ARCHITECTURE.md         # 아키텍처 및 패키지 의존성
 │   ├── COMMAND.md              # CLI 명령 참조
-│   ├── server-api.md           # REST API 문서
+│   ├── CONVENTION_MANAGEMENT.md # 컨벤션/카테고리 관리 가이드 (MCP/Dashboard)
 │   └── CONTRIBUTING.md         # 이 파일
 │
 └── tests/                      # 테스트 픽스처 및 통합 테스트
