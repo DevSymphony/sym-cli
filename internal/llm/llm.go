@@ -34,6 +34,32 @@ const (
 	XML  ResponseFormat = "xml"
 )
 
+// the execution strategy for LLM-based validation.
+type ProviderMode string
+
+const (
+	// ModeParallelAPI is for traditional API providers (OpenAI, Gemini API).
+	ModeParallelAPI ProviderMode = "parallel_api"
+
+	// ModeAgenticSingle is for agentic CLI tools (Claude Code, Gemini CLI).
+	ModeAgenticSingle ProviderMode = "agentic_single"
+)
+
+// ProviderProfile contains mode-specific configuration for execution strategy.
+type ProviderProfile struct {
+	// MaxPromptChars is the maximum prompt length before truncation.
+	MaxPromptChars int
+
+	// DefaultTimeoutSec is the default timeout per request in seconds.
+	DefaultTimeoutSec int
+
+	// MaxRetries is the maximum retry attempts on transient failures.
+	MaxRetries int
+
+	// ResponseFormatHint suggests the expected response structure to the LLM.
+	ResponseFormatHint string
+}
+
 // String returns the string representation of the format.
 func (f ResponseFormat) String() string {
 	return string(f)
@@ -67,7 +93,9 @@ type ProviderInfo struct {
 	DisplayName  string
 	DefaultModel string
 	Available    bool
-	Path         string       // CLI path or empty for API providers
-	Models       []ModelInfo  // Available models for this provider
-	APIKey       APIKeyConfig // API key configuration
+	Path         string          // CLI path or empty for API providers
+	Models       []ModelInfo     // Available models for this provider
+	APIKey       APIKeyConfig    // API key configuration
+	Mode         ProviderMode    // Execution mode (agentic_single or parallel_api)
+	Profile      ProviderProfile // Mode-specific execution profile
 }

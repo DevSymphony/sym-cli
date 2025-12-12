@@ -35,14 +35,15 @@ type Violation struct {
 // Validator validates code against policy using adapters directly
 // This replaces the old engine-based architecture
 type Validator struct {
-	policy         *schema.CodePolicy
-	verbose        bool
-	linterRegistry *linter.Registry
-	workDir        string
-	symDir         string // .sym directory for config files
-	ctx            context.Context
-	ctxCancel      context.CancelFunc
-	llmProvider    llm.Provider
+	policy          *schema.CodePolicy
+	verbose         bool
+	linterRegistry  *linter.Registry
+	workDir         string
+	symDir          string // .sym directory for config files
+	ctx             context.Context
+	ctxCancel       context.CancelFunc
+	llmProvider     llm.Provider
+	llmProviderInfo *llm.ProviderInfo // Provider metadata including mode
 }
 
 // NewValidator creates a new adapter-based validator
@@ -88,6 +89,10 @@ func NewValidatorWithWorkDir(policy *schema.CodePolicy, verbose bool, workDir st
 // SetLLMProvider sets the LLM provider for this validator
 func (v *Validator) SetLLMProvider(provider llm.Provider) {
 	v.llmProvider = provider
+	// Also store provider info for mode-based execution decisions
+	if provider != nil {
+		v.llmProviderInfo = llm.GetProviderInfo(provider.Name())
+	}
 }
 
 // getEngineName extracts the engine name from a rule
@@ -175,31 +180,17 @@ func (v *Validator) groupRulesByEngine(rules []schema.PolicyRule, changes []git.
 }
 
 // createExecutionUnits creates execution units from rule groups
-// - Linter: {모든 파일, 모든 규칙} = 1개 단위
-// - LLM: {파일 1개, 규칙 1개} = 파일수 × 규칙수 단위
-func (v *Validator) createExecutionUnits(groups map[string]*ruleGroup, changes []git.Change) []executionUnit {
+// - Linter: all files + all rules = 1 unit
+// - LLM (agentic_single mode): all files + all rules = 1 unit (Claude Code, Gemini CLI)
+// - LLM (parallel_api mode): 1 file × 1 rule = N units (OpenAI API)
+func (v *Validator) createExecutionUnits(groups map[string]*ruleGroup) []executionUnit {
 	var units []executionUnit
 
 	for engineName, group := range groups {
 		if engineName == "llm-validator" {
-			// LLM: 각 (파일, 규칙) 쌍이 별도 실행 단위
-			for _, rule := range group.rules {
-				ruleChanges := v.filterChangesForRule(group.changes, &rule)
-				for _, change := range ruleChanges {
-					if change.Status == "D" {
-						continue
-					}
-					units = append(units, &llmExecutionUnit{
-						rule:     rule,
-						change:   change,
-						provider: v.llmProvider,
-						policy:   v.policy,
-						verbose:  v.verbose,
-					})
-				}
-			}
+			units = append(units, v.createLLMExecutionUnits(group)...)
 		} else {
-			// Linter: 모든 파일, 모든 규칙 = 1개 실행 단위
+			// Linter: all files + all rules = 1 unit
 			files := make([]string, 0, len(group.files))
 			for f := range group.files {
 				files = append(files, f)
@@ -212,6 +203,59 @@ func (v *Validator) createExecutionUnits(groups map[string]*ruleGroup, changes [
 				symDir:     v.symDir,
 				verbose:    v.verbose,
 			})
+		}
+	}
+
+	return units
+}
+
+// createLLMExecutionUnits creates execution units for LLM validation
+// based on the provider's mode (agentic_single vs parallel_api)
+func (v *Validator) createLLMExecutionUnits(group *ruleGroup) []executionUnit {
+	var units []executionUnit
+
+	// Check provider mode (default to parallel for backward compatibility)
+	mode := llm.ModeParallelAPI
+	var profile llm.ProviderProfile
+
+	if v.llmProviderInfo != nil {
+		mode = v.llmProviderInfo.Mode
+		profile = v.llmProviderInfo.Profile
+	}
+
+	switch mode {
+	case llm.ModeAgenticSingle:
+		// Agentic mode: all files + all rules = 1 unit
+		// Agent-based CLIs (Claude Code, Gemini CLI) can handle complex tasks
+		// internally, so we send everything in a single call
+		if len(group.changes) > 0 && len(group.rules) > 0 {
+			units = append(units, &agenticLLMExecutionUnit{
+				rules:    group.rules,
+				changes:  group.changes,
+				provider: v.llmProvider,
+				policy:   v.policy,
+				profile:  profile,
+				verbose:  v.verbose,
+			})
+		}
+
+	default: // ModeParallelAPI
+		// Parallel API mode: 1 file × 1 rule = separate units
+		// Traditional APIs (OpenAI) process multiple parallel requests
+		for _, rule := range group.rules {
+			ruleChanges := v.filterChangesForRule(group.changes, &rule)
+			for _, change := range ruleChanges {
+				if change.Status == "D" {
+					continue
+				}
+				units = append(units, &llmExecutionUnit{
+					rule:     rule,
+					change:   change,
+					provider: v.llmProvider,
+					policy:   v.policy,
+					verbose:  v.verbose,
+				})
+			}
 		}
 	}
 
@@ -327,7 +371,7 @@ func (v *Validator) ValidateChanges(ctx context.Context, changes []git.Change) (
 	groups := v.groupRulesByEngine(v.policy.Rules, changes)
 
 	// Phase 3: Create execution units
-	units := v.createExecutionUnits(groups, changes)
+	units := v.createExecutionUnits(groups)
 
 	if v.verbose {
 		// Count files to check
