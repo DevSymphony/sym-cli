@@ -78,7 +78,8 @@ func TestConverter_ConvertSingleRule_Success(t *testing.T) {
 
 	mockLLM := &mockProvider{
 		response: `{
-			"linter": "errcheck",
+			"name": "errcheck",
+			"is_formatter": false,
 			"settings": {"check-type-assertions": true}
 		}`,
 	}
@@ -96,16 +97,18 @@ func TestConverter_ConvertSingleRule_Success(t *testing.T) {
 
 	data, ok := result.Data.(golangciLinterData)
 	require.True(t, ok)
-	assert.Equal(t, "errcheck", data.Linter)
+	assert.Equal(t, "errcheck", data.Name)
+	assert.False(t, data.IsFormatter)
 	assert.NotEmpty(t, data.Settings)
 }
 
-func TestConverter_ConvertSingleRule_EmptyLinter(t *testing.T) {
+func TestConverter_ConvertSingleRule_EmptyName(t *testing.T) {
 	c := NewConverter()
 
 	mockLLM := &mockProvider{
 		response: `{
-			"linter": "",
+			"name": "",
+			"is_formatter": false,
 			"settings": {}
 		}`,
 	}
@@ -117,7 +120,7 @@ func TestConverter_ConvertSingleRule_EmptyLinter(t *testing.T) {
 
 	result, err := c.ConvertSingleRule(context.Background(), rule, mockLLM)
 	require.NoError(t, err)
-	assert.Nil(t, result, "Should return nil when linter is empty")
+	assert.Nil(t, result, "Should return nil when name is empty")
 }
 
 func TestConverter_ConvertSingleRule_InvalidLinter(t *testing.T) {
@@ -125,7 +128,8 @@ func TestConverter_ConvertSingleRule_InvalidLinter(t *testing.T) {
 
 	mockLLM := &mockProvider{
 		response: `{
-			"linter": "invalid-linter-name",
+			"name": "invalid-linter-name",
+			"is_formatter": false,
 			"settings": {}
 		}`,
 	}
@@ -162,15 +166,17 @@ func TestConverter_BuildConfig_Success(t *testing.T) {
 		{
 			RuleID: "rule-1",
 			Data: golangciLinterData{
-				Linter:   "errcheck",
-				Settings: map[string]interface{}{"check-type-assertions": true},
+				Name:        "errcheck",
+				IsFormatter: false,
+				Settings:    map[string]interface{}{"check-type-assertions": true},
 			},
 		},
 		{
 			RuleID: "rule-2",
 			Data: golangciLinterData{
-				Linter:   "gocyclo",
-				Settings: map[string]interface{}{"min-complexity": 10},
+				Name:        "gocyclo",
+				IsFormatter: false,
+				Settings:    map[string]interface{}{"min-complexity": 10},
 			},
 		},
 	}
@@ -241,17 +247,20 @@ func TestValidateConfig_NoVersion(t *testing.T) {
 	assert.Contains(t, err.Error(), "version is required")
 }
 
-func TestValidateConfig_NoLinters(t *testing.T) {
+func TestValidateConfig_NoLintersOrFormatters(t *testing.T) {
 	config := &golangciConfig{
 		Version: "2",
 		Linters: golangciLinters{
+			Enable: []string{},
+		},
+		Formatters: golangciFormatters{
 			Enable: []string{},
 		},
 	}
 
 	err := validateConfig(config)
 	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "no linters enabled")
+	assert.Contains(t, err.Error(), "no linters or formatters enabled")
 }
 
 func TestIsValidLinter(t *testing.T) {
@@ -268,6 +277,8 @@ func TestIsValidLinter(t *testing.T) {
 		{"invalid", "invalid-linter", false},
 		{"empty", "", false},
 		{"case insensitive", "ERRCHECK", true},
+		{"gofmt is formatter not linter", "gofmt", false},
+		{"goimports is formatter not linter", "goimports", false},
 	}
 
 	for _, tt := range tests {
@@ -276,6 +287,134 @@ func TestIsValidLinter(t *testing.T) {
 			assert.Equal(t, tt.expected, result)
 		})
 	}
+}
+
+func TestIsValidFormatter(t *testing.T) {
+	tests := []struct {
+		name      string
+		formatter string
+		expected  bool
+	}{
+		{"gofmt", "gofmt", true},
+		{"goimports", "goimports", true},
+		{"gofumpt", "gofumpt", true},
+		{"gci", "gci", true},
+		{"golines", "golines", true},
+		{"swaggo", "swaggo", true},
+		{"errcheck is linter not formatter", "errcheck", false},
+		{"invalid", "invalid-formatter", false},
+		{"empty", "", false},
+		{"case insensitive", "GOFMT", true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isValidFormatter(tt.formatter)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
+}
+
+func TestConverter_ConvertSingleRule_Formatter(t *testing.T) {
+	c := NewConverter()
+
+	mockLLM := &mockProvider{
+		response: `{
+			"name": "gofmt",
+			"is_formatter": true,
+			"settings": {}
+		}`,
+	}
+
+	rule := schema.UserRule{
+		ID:  "rule-1",
+		Say: "Code should follow Go formatting standards",
+	}
+
+	result, err := c.ConvertSingleRule(context.Background(), rule, mockLLM)
+	require.NoError(t, err)
+	require.NotNil(t, result)
+
+	data, ok := result.Data.(golangciLinterData)
+	require.True(t, ok)
+	assert.Equal(t, "gofmt", data.Name)
+	assert.True(t, data.IsFormatter)
+}
+
+func TestConverter_BuildConfig_WithFormatters(t *testing.T) {
+	c := NewConverter()
+
+	results := []*linter.SingleRuleResult{
+		{
+			RuleID: "rule-1",
+			Data: golangciLinterData{
+				Name:        "errcheck",
+				IsFormatter: false,
+				Settings:    map[string]interface{}{},
+			},
+		},
+		{
+			RuleID: "rule-2",
+			Data: golangciLinterData{
+				Name:        "gofmt",
+				IsFormatter: true,
+				Settings:    map[string]interface{}{},
+			},
+		},
+	}
+
+	config, err := c.BuildConfig(results)
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	// Parse YAML to verify structure
+	var parsedConfig golangciConfig
+	err = yaml.Unmarshal(config.Content, &parsedConfig)
+	require.NoError(t, err)
+
+	assert.Equal(t, "2", parsedConfig.Version)
+	assert.Contains(t, parsedConfig.Linters.Enable, "errcheck")
+	assert.Contains(t, parsedConfig.Formatters.Enable, "gofmt")
+}
+
+func TestConverter_BuildConfig_OnlyFormatters(t *testing.T) {
+	c := NewConverter()
+
+	results := []*linter.SingleRuleResult{
+		{
+			RuleID: "rule-1",
+			Data: golangciLinterData{
+				Name:        "gofmt",
+				IsFormatter: true,
+				Settings:    map[string]interface{}{},
+			},
+		},
+	}
+
+	config, err := c.BuildConfig(results)
+	require.NoError(t, err)
+	require.NotNil(t, config)
+
+	// Parse YAML to verify structure
+	var parsedConfig golangciConfig
+	err = yaml.Unmarshal(config.Content, &parsedConfig)
+	require.NoError(t, err)
+
+	assert.Equal(t, "2", parsedConfig.Version)
+	assert.Empty(t, parsedConfig.Linters.Enable)
+	assert.Contains(t, parsedConfig.Formatters.Enable, "gofmt")
+}
+
+func TestValidateConfig_OnlyFormatters(t *testing.T) {
+	config := &golangciConfig{
+		Version: "2",
+		Formatters: golangciFormatters{
+			Enable: []string{"gofmt"},
+		},
+	}
+
+	err := validateConfig(config)
+	assert.NoError(t, err)
 }
 
 func TestCompileTimeInterfaceCheck_Converter(t *testing.T) {

@@ -51,6 +51,12 @@ type Linter struct {
 
 	// executor runs subprocess
 	executor *linter.SubprocessExecutor
+
+	// targetFiles stores the files to filter results by (set during Execute)
+	targetFiles map[string]bool
+
+	// workDir stores the working directory when Execute is called
+	workDir string
 }
 
 // New creates a new golangci-lint linter.
@@ -169,7 +175,84 @@ func (l *Linter) Execute(ctx context.Context, config []byte, files []string) (*l
 
 // ParseOutput converts golangci-lint JSON output to violations.
 func (l *Linter) ParseOutput(output *linter.ToolOutput) ([]linter.Violation, error) {
-	return parseOutput(output)
+	violations, err := parseOutput(output)
+	if err != nil {
+		return nil, err
+	}
+
+	// Filter violations to only include target files (if set)
+	if len(l.targetFiles) > 0 {
+		filtered := make([]linter.Violation, 0)
+		for _, v := range violations {
+			// Check if the file is in our target list
+			if l.isTargetFile(v.File) {
+				filtered = append(filtered, v)
+			}
+		}
+		return filtered, nil
+	}
+
+	// If no target files filter set, return all violations
+	return violations, nil
+}
+
+// isTargetFile checks if a file path matches any of the target files.
+func (l *Linter) isTargetFile(filePath string) bool {
+	// Clean the file path
+	cleanFilePath := filepath.Clean(filePath)
+
+	// Check against each target file using multiple strategies
+	for target := range l.targetFiles {
+		cleanTarget := filepath.Clean(target)
+
+		// Strategy 1: Direct base name match (for simple cases)
+		if filepath.Base(cleanFilePath) == filepath.Base(cleanTarget) {
+			// For files in root, base name match is sufficient
+			// For files in subdirs, check if paths end the same way
+			if cleanTarget == filepath.Base(cleanTarget) {
+				// Target is just a filename, match by base name
+				if filepath.Base(cleanFilePath) == cleanTarget {
+					return true
+				}
+			}
+		}
+
+		// Strategy 2: Suffix match - violation path ends with target path
+		// e.g., "../../../ik/sym-cli/test_violations.go" ends with "test_violations.go"
+		if strings.HasSuffix(cleanFilePath, string(filepath.Separator)+cleanTarget) ||
+			cleanFilePath == cleanTarget {
+			return true
+		}
+
+		// Strategy 3: Target path ends with violation base path
+		// e.g., "internal/foo/bar.go" should match "bar.go" from violations
+		violationBase := filepath.Base(cleanFilePath)
+		if strings.HasSuffix(cleanTarget, string(filepath.Separator)+violationBase) ||
+			cleanTarget == violationBase {
+			return true
+		}
+
+		// Strategy 4: Extract project-relative path from violation
+		// For paths like "../../../ik/sym-cli/internal/foo.go", extract "internal/foo.go"
+		if l.workDir != "" {
+			// Get the last N path components from violation that might match target
+			parts := strings.Split(cleanFilePath, string(filepath.Separator))
+			for i := len(parts) - 1; i >= 0; i-- {
+				suffix := strings.Join(parts[i:], string(filepath.Separator))
+				if suffix == cleanTarget {
+					return true
+				}
+				// Also check absolute target
+				absTarget := filepath.Join(l.workDir, cleanTarget)
+				absSuffix := filepath.Join(l.workDir, suffix)
+				if absSuffix == absTarget {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }
 
 // getGolangciLintPath returns the path to golangci-lint binary.

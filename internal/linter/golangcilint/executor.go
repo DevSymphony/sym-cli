@@ -42,17 +42,31 @@ func (l *Linter) execute(ctx context.Context, config []byte, files []string) (*l
 	// Build command
 	golangciLintPath := l.getGolangciLintPath()
 
-	// golangci-lint command format:
-	// golangci-lint run --config <config> --format json --path-prefix="" <files>
+	// golangci-lint command format (v2.x):
+	// golangci-lint v2 doesn't handle individual files well, so we run on ./...
+	// and filter results to only include the specified files
 	args := []string{
 		"run",
 		"--config", configFile,
-		"--format", "json",
-		"--path-prefix", "", // Disable path prefix to get absolute paths
+		"--output.json.path", "stdout",
+		"--output.text.path", "/dev/null", // Disable text output to avoid mixing with JSON
+		"--show-stats=false",              // Disable "N issues." summary text
+		"./...",                           // Check all packages (v2 doesn't support individual files)
 	}
 
-	// Add files
-	args = append(args, goFiles...)
+	// Store working directory for path resolution
+	l.workDir, _ = os.Getwd()
+
+	// Store files for filtering results later
+	l.targetFiles = make(map[string]bool)
+	for _, f := range goFiles {
+		// Normalize paths for comparison
+		absPath, err := filepath.Abs(f)
+		if err == nil {
+			l.targetFiles[absPath] = true
+		}
+		l.targetFiles[f] = true
+	}
 
 	// Execute
 	start := time.Now()

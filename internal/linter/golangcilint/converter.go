@@ -53,11 +53,12 @@ func (c *Converter) GetRoutingHints() []string {
 
 // golangciLinterData holds golangci-lint-specific conversion data
 type golangciLinterData struct {
-	Linter   string                 `json:"linter"`
-	Settings map[string]interface{} `json:"settings"`
+	Name        string                 `json:"name"`
+	IsFormatter bool                   `json:"is_formatter"`
+	Settings    map[string]interface{} `json:"settings"`
 }
 
-// ConvertSingleRule converts ONE user rule to golangci-lint linter configuration.
+// ConvertSingleRule converts ONE user rule to golangci-lint linter/formatter configuration.
 // Returns (result, nil) on success,
 //
 //	(nil, nil) if rule cannot be converted by golangci-lint (skip),
@@ -67,21 +68,22 @@ func (c *Converter) ConvertSingleRule(ctx context.Context, rule schema.UserRule,
 		return nil, fmt.Errorf("LLM provider is required")
 	}
 
-	linterName, settings, err := c.convertToGolangciLinter(ctx, rule, provider)
+	name, isFormatter, settings, err := c.convertToGolangciLinter(ctx, rule, provider)
 	if err != nil {
 		return nil, err
 	}
 
-	// If linter name is empty, this rule cannot be converted by golangci-lint
-	if linterName == "" {
+	// If name is empty, this rule cannot be converted by golangci-lint
+	if name == "" {
 		return nil, nil
 	}
 
 	return &linter.SingleRuleResult{
 		RuleID: rule.ID,
 		Data: golangciLinterData{
-			Linter:   linterName,
-			Settings: settings,
+			Name:        name,
+			IsFormatter: isFormatter,
+			Settings:    settings,
 		},
 	}, nil
 }
@@ -92,9 +94,11 @@ func (c *Converter) BuildConfig(results []*linter.SingleRuleResult) (*linter.Lin
 		return nil, nil
 	}
 
-	// Collect enabled linters and their settings
+	// Collect enabled linters/formatters and their settings separately
 	enabledLinters := make(map[string]bool)
+	enabledFormatters := make(map[string]bool)
 	linterSettings := make(map[string]map[string]interface{})
+	formatterSettings := make(map[string]map[string]interface{})
 
 	for _, r := range results {
 		data, ok := r.Data.(golangciLinterData)
@@ -102,52 +106,77 @@ func (c *Converter) BuildConfig(results []*linter.SingleRuleResult) (*linter.Lin
 			continue
 		}
 
-		// Add to enabled linters
-		enabledLinters[data.Linter] = true
-
-		// Merge settings
-		if len(data.Settings) > 0 {
-			if _, exists := linterSettings[data.Linter]; !exists {
-				linterSettings[data.Linter] = make(map[string]interface{})
+		if data.IsFormatter {
+			// Add to formatters
+			enabledFormatters[data.Name] = true
+			if len(data.Settings) > 0 {
+				if _, exists := formatterSettings[data.Name]; !exists {
+					formatterSettings[data.Name] = make(map[string]interface{})
+				}
+				for k, v := range data.Settings {
+					formatterSettings[data.Name][k] = v
+				}
 			}
-			for k, v := range data.Settings {
-				linterSettings[data.Linter][k] = v
+		} else {
+			// Add to linters
+			enabledLinters[data.Name] = true
+			if len(data.Settings) > 0 {
+				if _, exists := linterSettings[data.Name]; !exists {
+					linterSettings[data.Name] = make(map[string]interface{})
+				}
+				for k, v := range data.Settings {
+					linterSettings[data.Name][k] = v
+				}
 			}
 		}
 	}
 
-	if len(enabledLinters) == 0 {
+	if len(enabledLinters) == 0 && len(enabledFormatters) == 0 {
 		return nil, nil
-	}
-
-	// Convert map to slice for YAML
-	enabledLintersList := make([]string, 0, len(enabledLinters))
-	for linterName := range enabledLinters {
-		enabledLintersList = append(enabledLintersList, linterName)
 	}
 
 	// Build golangci-lint config structure
 	config := golangciConfig{
 		Version: "2",
-		Linters: golangciLinters{
-			Enable: enabledLintersList,
-		},
 	}
 
-	// Add linter settings if any
-	if len(linterSettings) > 0 {
-		config.LintersSettings = linterSettings
+	// Add linters section if any
+	if len(enabledLinters) > 0 {
+		enabledLintersList := make([]string, 0, len(enabledLinters))
+		for name := range enabledLinters {
+			enabledLintersList = append(enabledLintersList, name)
+		}
+		config.Linters = golangciLinters{
+			Enable: enabledLintersList,
+		}
+		if len(linterSettings) > 0 {
+			config.LintersSettings = linterSettings
+		}
+	}
+
+	// Add formatters section if any
+	if len(enabledFormatters) > 0 {
+		enabledFormattersList := make([]string, 0, len(enabledFormatters))
+		for name := range enabledFormatters {
+			enabledFormattersList = append(enabledFormattersList, name)
+		}
+		config.Formatters = golangciFormatters{
+			Enable: enabledFormattersList,
+		}
+		if len(formatterSettings) > 0 {
+			config.FormattersSettings = formatterSettings
+		}
+	}
+
+	// Validate config
+	if err := validateConfig(&config); err != nil {
+		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
 	// Marshal to YAML
 	content, err := yaml.Marshal(config)
 	if err != nil {
 		return nil, fmt.Errorf("failed to marshal YAML config: %w", err)
-	}
-
-	// Validate config
-	if err := validateConfig(&config); err != nil {
-		return nil, fmt.Errorf("invalid config: %w", err)
 	}
 
 	return &linter.LinterConfig{
@@ -159,182 +188,200 @@ func (c *Converter) BuildConfig(results []*linter.SingleRuleResult) (*linter.Lin
 
 // golangciConfig represents the .golangci.yml configuration structure
 type golangciConfig struct {
-	Version         string                            `yaml:"version"`
-	Linters         golangciLinters                   `yaml:"linters"`
-	LintersSettings map[string]map[string]interface{} `yaml:"linters-settings,omitempty"`
+	Version            string                            `yaml:"version"`
+	Linters            golangciLinters                   `yaml:"linters,omitempty"`
+	LintersSettings    map[string]map[string]interface{} `yaml:"linters-settings,omitempty"`
+	Formatters         golangciFormatters                `yaml:"formatters,omitempty"`
+	FormattersSettings map[string]map[string]interface{} `yaml:"formatters-settings,omitempty"`
 }
 
 // golangciLinters represents the linters section
 type golangciLinters struct {
-	Enable []string `yaml:"enable"`
+	Enable []string `yaml:"enable,omitempty"`
 }
 
-// convertToGolangciLinter converts a single user rule to golangci-lint linter using LLM
-func (c *Converter) convertToGolangciLinter(ctx context.Context, rule schema.UserRule, provider llm.Provider) (string, map[string]interface{}, error) {
-	systemPrompt := `You are a golangci-lint configuration expert. Convert natural language Go coding rules to golangci-lint linter names and settings.
+// golangciFormatters represents the formatters section
+type golangciFormatters struct {
+	Enable []string `yaml:"enable,omitempty"`
+}
+
+// convertToGolangciLinter converts a single user rule to golangci-lint linter/formatter using LLM
+func (c *Converter) convertToGolangciLinter(ctx context.Context, rule schema.UserRule, provider llm.Provider) (string, bool, map[string]interface{}, error) {
+	systemPrompt := `You are a golangci-lint v2 configuration expert. Convert natural language Go coding rules to golangci-lint linter or formatter names and settings.
+
+CRITICAL: In golangci-lint v2, FORMATTERS and LINTERS are DIFFERENT categories.
+- FORMATTERS: Tools that format code (gofmt, goimports, gofumpt, gci, golines, swaggo)
+- LINTERS: Tools that analyze code for issues (errcheck, govet, gosec, etc.)
 
 Return ONLY a JSON object (no markdown fences) with this structure:
 {
-  "linter": "linter_name",
-  "settings": {
-    "key": "value"
-  }
+  "name": "tool_name",
+  "is_formatter": true/false,
+  "settings": {}
 }
 
-Available golangci-lint linters and their purposes:
+=== FORMATTERS (is_formatter: true) ===
+Use these for code formatting rules:
+- gofmt: Formats code according to standard Go formatting
+- goimports: Formats imports and adds missing imports
+- gofumpt: Stricter formatting than gofmt
+- gci: Import statement formatting with custom ordering
+- golines: Fixes long lines by wrapping them
+- swaggo: Formats swaggo comments
+
+=== LINTERS (is_formatter: false) ===
 
 Error Handling:
 - errcheck: Check for unchecked errors
 - wrapcheck: Checks that errors from external packages are wrapped
+- nilerr: Finds code that returns nil even if it checks that the error is not nil
 
 Code Quality:
-- govet: Vet examines Go source code and reports suspicious constructs
-- staticcheck: Advanced static analysis (find bugs, performance issues, etc.)
+- govet: Examines Go source code and reports suspicious constructs
+- staticcheck: Advanced static analysis (find bugs, performance issues)
 - ineffassign: Detects ineffectual assignments
-- unused: Checks for unused constants, variables, functions, and types
-- deadcode: Finds unused code
+- unused: Checks for unused code
+- revive: Fast, configurable linter (replacement for golint)
 
 Complexity:
-- gocyclo: Computes cyclomatic complexities (default threshold: 30)
-- gocognit: Computes cognitive complexities (more accurate than cyclomatic)
+- gocyclo: Computes cyclomatic complexity
+- gocognit: Computes cognitive complexity
 - nestif: Reports deeply nested if statements
-- funlen: Tool for detecting long functions
+- funlen: Detects long functions
+- cyclop: Checks function and package cyclomatic complexity
 
 Performance:
-- prealloc: Finds slice declarations that could potentially be preallocated
+- prealloc: Finds slice declarations that could be preallocated
+- bodyclose: Checks whether HTTP response body is closed
 
 Security:
 - gosec: Inspects source code for security problems
 
-Style & Formatting:
-- gofmt: Checks whether code was gofmt-ed
-- goimports: Checks import formatting and missing imports
-- stylecheck: Replacement for golint (enforces Go style guide)
-- revive: Fast, configurable, extensible Go linter
-
-Naming & Best Practices:
-- goconst: Finds repeated strings that could be replaced by a constant
-- misspell: Finds commonly misspelled English words in comments
-- unconvert: Removes unnecessary type conversions
-
-Other Useful Linters:
-- bodyclose: Checks whether HTTP response body is closed successfully
-- dupl: Tool for code clone detection
-- exportloopref: Checks for pointers to enclosing loop variables
-- gocritic: Provides diagnostics that check for bugs, performance and style issues
+Style:
+- stylecheck: Enforces Go style guide
+- goconst: Finds repeated strings for constants
+- misspell: Finds misspelled English words
 - godot: Checks if comments end in a period
-- goprintffuncname: Checks that printf-like functions are named with f at the end
-- gosimple: Linter for Go source code that specializes in simplifying code
-- noctx: Finds sending http request without context.Context
-- rowserrcheck: Checks whether Err of rows is checked successfully
-- sqlclosecheck: Checks that sql.Rows and sql.Stmt are closed
-- typecheck: Like the front-end of a Go compiler, parses and type-checks Go code
+- nlreturn: Checks for blank lines before return
+
+Other Linters:
+- dupl: Code clone detection
+- gocritic: Checks for bugs, performance and style issues
+- gosimple: Simplifies code
+- noctx: Finds HTTP requests without context
+- unconvert: Removes unnecessary type conversions
+- exportloopref: Checks for pointers to loop variables
 
 Settings examples:
 - gocyclo: {"min-complexity": 10}
 - gocognit: {"min-complexity": 15}
-- nestif: {"min-complexity": 4}
-- gosec: {"severity": "medium", "confidence": "medium"}
-- errcheck: {"check-type-assertions": true, "check-blank": true}
-- goconst: {"min-len": 3, "min-occurrences": 3}
 - funlen: {"lines": 60, "statements": 40}
-- revive: {"severity": "warning"}
+- gosec: {"severity": "medium", "confidence": "medium"}
+- errcheck: {"check-type-assertions": true}
+- gofmt: {"simplify": true}
+- goimports: {"local-prefixes": "github.com/myorg"}
 
 CRITICAL RULES:
-1. ONLY use actual golangci-lint linters - do NOT invent linter names
-2. If no linter can enforce this requirement, return linter as empty string ""
-3. When in doubt, return empty linter name - better to skip than use wrong linter
-4. Settings are optional - only include if the rule specifies parameters
+1. ONLY use actual golangci-lint tools - do NOT invent names
+2. For formatting rules (gofmt, goimports, etc.) → set is_formatter: true
+3. For analysis/linting rules → set is_formatter: false
+4. If no tool can enforce this requirement, return name as empty string ""
+5. Settings are optional - only include if the rule specifies parameters
 
 Examples:
+
+Input: "Code should follow Go formatting standards"
+Output:
+{
+  "name": "gofmt",
+  "is_formatter": true,
+  "settings": {}
+}
+
+Input: "Imports should be properly organized"
+Output:
+{
+  "name": "goimports",
+  "is_formatter": true,
+  "settings": {}
+}
 
 Input: "Check for unchecked errors"
 Output:
 {
-  "linter": "errcheck",
+  "name": "errcheck",
+  "is_formatter": false,
   "settings": {}
 }
 
 Input: "Cyclomatic complexity should not exceed 15"
 Output:
 {
-  "linter": "gocyclo",
+  "name": "gocyclo",
+  "is_formatter": false,
   "settings": {"min-complexity": 15}
 }
 
 Input: "Detect security vulnerabilities"
 Output:
 {
-  "linter": "gosec",
-  "settings": {}
-}
-
-Input: "Find unused variables and functions"
-Output:
-{
-  "linter": "unused",
-  "settings": {}
-}
-
-Input: "Code should follow Go formatting standards"
-Output:
-{
-  "linter": "gofmt",
+  "name": "gosec",
+  "is_formatter": false,
   "settings": {}
 }
 
 Input: "File names must be snake_case"
 Output:
 {
-  "linter": "",
+  "name": "",
+  "is_formatter": false,
   "settings": {}
 }
-(Reason: golangci-lint does not check file names)
+(Reason: golangci-lint does not check file names)`
 
-Input: "Maximum 3 database connections"
-Output:
-{
-  "linter": "",
-  "settings": {}
-}
-(Reason: No linter for runtime resource limits)`
-
-	userPrompt := fmt.Sprintf("Convert this Go coding rule to golangci-lint linter:\n\n%s", rule.Say)
+	userPrompt := fmt.Sprintf("Convert this Go coding rule to golangci-lint linter or formatter:\n\n%s", rule.Say)
 
 	// Call LLM
 	prompt := systemPrompt + "\n\n" + userPrompt
 	response, err := provider.Execute(ctx, prompt, llm.JSON)
 	if err != nil {
-		return "", nil, fmt.Errorf("LLM call failed: %w", err)
+		return "", false, nil, fmt.Errorf("LLM call failed: %w", err)
 	}
 
 	// Parse response
 	response = linter.CleanJSONResponse(response)
 
 	if response == "" {
-		return "", nil, fmt.Errorf("LLM returned empty response")
+		return "", false, nil, fmt.Errorf("LLM returned empty response")
 	}
 
 	var result struct {
-		Linter   string                 `json:"linter"`
-		Settings map[string]interface{} `json:"settings"`
+		Name        string                 `json:"name"`
+		IsFormatter bool                   `json:"is_formatter"`
+		Settings    map[string]interface{} `json:"settings"`
 	}
 
 	if err := json.Unmarshal([]byte(response), &result); err != nil {
-		return "", nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
+		return "", false, nil, fmt.Errorf("failed to parse LLM response: %w (response: %.100s)", err, response)
 	}
 
-	// If linter is empty, this rule cannot be converted
-	if result.Linter == "" {
-		return "", nil, nil
+	// If name is empty, this rule cannot be converted
+	if result.Name == "" {
+		return "", false, nil, nil
 	}
 
-	// Validate linter name
-	if !isValidLinter(result.Linter) {
-		return "", nil, fmt.Errorf("invalid linter name: %s", result.Linter)
+	// Validate tool name based on type
+	if result.IsFormatter {
+		if !isValidFormatter(result.Name) {
+			return "", false, nil, fmt.Errorf("invalid formatter name: %s", result.Name)
+		}
+	} else {
+		if !isValidLinter(result.Name) {
+			return "", false, nil, fmt.Errorf("invalid linter name: %s", result.Name)
+		}
 	}
 
-	return result.Linter, result.Settings, nil
+	return result.Name, result.IsFormatter, result.Settings, nil
 }
 
 // validateConfig validates the golangci-lint configuration
@@ -343,26 +390,49 @@ func validateConfig(config *golangciConfig) error {
 		return fmt.Errorf("version is required")
 	}
 
-	if len(config.Linters.Enable) == 0 {
-		return fmt.Errorf("no linters enabled")
+	// At least one linter or formatter must be enabled
+	if len(config.Linters.Enable) == 0 && len(config.Formatters.Enable) == 0 {
+		return fmt.Errorf("no linters or formatters enabled")
 	}
 
 	return nil
 }
 
-// isValidLinter checks if the linter name is a known golangci-lint linter
+// isValidLinter checks if the name is a known golangci-lint linter (NOT formatter)
 func isValidLinter(name string) bool {
 	validLinters := map[string]bool{
-		"errcheck": true, "govet": true, "staticcheck": true, "gosec": true,
-		"ineffassign": true, "unused": true, "deadcode": true,
-		"goconst": true, "gocyclo": true, "gocognit": true, "nestif": true, "funlen": true,
-		"prealloc": true, "gofmt": true, "goimports": true, "stylecheck": true, "revive": true,
-		"misspell": true, "unconvert": true, "bodyclose": true, "dupl": true,
-		"exportloopref": true, "gocritic": true, "godot": true, "goprintffuncname": true,
-		"gosimple": true, "noctx": true, "rowserrcheck": true, "sqlclosecheck": true,
-		"typecheck": true, "wrapcheck": true,
-		// Add more as needed
+		// Error Handling
+		"errcheck": true, "wrapcheck": true, "nilerr": true, "nilnil": true,
+		// Code Quality
+		"govet": true, "staticcheck": true, "ineffassign": true, "unused": true,
+		"revive": true, "typecheck": true,
+		// Complexity
+		"gocyclo": true, "gocognit": true, "nestif": true, "funlen": true, "cyclop": true,
+		// Performance
+		"prealloc": true, "bodyclose": true,
+		// Security
+		"gosec": true,
+		// Style (NOT formatters)
+		"stylecheck": true, "goconst": true, "misspell": true, "godot": true, "nlreturn": true,
+		// Other
+		"dupl": true, "gocritic": true, "gosimple": true, "noctx": true,
+		"unconvert": true, "exportloopref": true, "goprintffuncname": true,
+		"rowserrcheck": true, "sqlclosecheck": true,
 	}
 
 	return validLinters[strings.ToLower(name)]
+}
+
+// isValidFormatter checks if the name is a known golangci-lint formatter
+func isValidFormatter(name string) bool {
+	validFormatters := map[string]bool{
+		"gci":      true,
+		"gofmt":    true,
+		"gofumpt":  true,
+		"goimports": true,
+		"golines":  true,
+		"swaggo":   true,
+	}
+
+	return validFormatters[strings.ToLower(name)]
 }
