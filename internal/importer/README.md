@@ -123,7 +123,8 @@ importer/
 |-------------|------|
 | `assignUniqueIDs(existing, extracted, result)` | 고유 ID 생성 및 중복 처리 |
 | `generateUniqueID(baseID, existingIDs)` | 고유 규칙 ID 생성 |
-| `updateDefaultsLanguages(policy, newRules)` | defaults.languages 업데이트 |
+
+**참고**: `defaults.languages` 업데이트는 `policy.UpdateDefaultsLanguages()` 공용 함수로 처리됩니다.
 
 #### Extractor (extractor.go)
 
