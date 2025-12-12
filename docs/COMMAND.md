@@ -21,6 +21,7 @@ Symphony (`sym`)는 코드 컨벤션 관리와 RBAC(역할 기반 접근 제어)
       - [sym policy validate](#sym-policy-validate)
     - [sym convert](#sym-convert)
     - [sym validate](#sym-validate)
+    - [sym import](#sym-import)
     - [sym category](#sym-category)
     - [sym mcp](#sym-mcp)
     - [sym llm](#sym-llm)
@@ -44,6 +45,7 @@ Symphony (`sym`)는 코드 컨벤션 관리와 RBAC(역할 기반 접근 제어)
       - [add\_category](#add_category)
       - [edit\_category](#edit_category)
       - [remove\_category](#remove_category)
+      - [import\_convention](#import_convention)
     - [등록 방법](#등록-방법)
   - [LLM 프로바이더](#llm-프로바이더)
     - [지원 프로바이더](#지원-프로바이더)
@@ -109,6 +111,7 @@ sym
 │   └── validate           # 정책 파일 유효성 검사
 ├── convert                 # 정책 → 린터 설정 변환
 ├── validate                # Git 변경사항 검증
+├── import                  # 외부 문서에서 컨벤션 추출
 ├── category                # 카테고리 목록 조회
 ├── mcp                     # MCP 서버 실행
 ├── llm                     # LLM 프로바이더 관리
@@ -370,6 +373,80 @@ sym validate --timeout 60
 ```
 
 **관련 파일**: `internal/cmd/validate.go`
+
+---
+
+### sym import
+
+**설명**: 외부 문서에서 코딩 컨벤션을 추출하여 user-policy.json에 추가합니다.
+
+LLM을 사용하여 텍스트, 마크다운, 코드 파일 등에서 코딩 규칙을 자동으로 인식하고 Symphony 정책 형식으로 변환합니다.
+
+**지원 포맷**:
+- 텍스트 문서: `.txt`, `.md`, `.markdown`
+- 코드 파일: `.go`, `.js`, `.ts`, `.jsx`, `.tsx`, `.py`, `.java`, `.rs`, `.rb`, `.php`, `.c`, `.cpp`, `.h`, `.hpp`, `.cs`, `.swift`, `.kt`, `.scala`
+- 설정/데이터: `.yaml`, `.yml`, `.json`, `.toml`, `.xml`
+- 웹 파일: `.html`, `.htm`, `.css`, `.scss`, `.less`
+- 기타: `.rst`, `.adoc`
+
+**파일 크기 제한**: 50KB
+
+**문법**:
+```
+sym import <file> [flags]
+```
+
+**플래그**:
+
+| 플래그 | 단축 | 타입 | 기본값 | 설명 |
+|--------|------|------|--------|------|
+| `--mode` | `-m` | string | `append` | Import 모드: `append` (기존 유지, 새 항목 추가) 또는 `clear` (기존 삭제 후 추가) |
+
+**Import 모드**:
+- `append` (기본값): 기존 카테고리와 규칙을 유지하고 새 항목을 추가합니다. 중복 카테고리는 건너뛰고, 중복 규칙 ID는 접미어를 추가합니다 (예: `SEC-001-2`).
+- `clear`: 기존 모든 카테고리와 규칙을 삭제한 후 새 항목을 추가합니다. 사용자 확인이 필요합니다.
+
+**예시**:
+```bash
+# 마크다운 문서에서 컨벤션 추출 (append 모드, 기본값)
+sym import coding-standards.md
+
+# 텍스트 파일에서 컨벤션 추출
+sym import team-guidelines.txt
+
+# 기존 컨벤션 삭제 후 새로 추가 (clear 모드)
+sym import new-rules.md --mode clear
+```
+
+**Import 프로세스**:
+1. 파일 읽기 및 형식 검증
+2. LLM을 사용하여 코딩 컨벤션 추출
+3. 카테고리와 규칙에 고유 ID 생성
+4. 기존 user-policy.json과 병합
+5. 정책 파일 저장
+
+**출력 예시**:
+```
+[Import Conventions] Processing: coding-standards.md
+Mode: append
+
+[OK] Processed: /path/to/coding-standards.md
+
+[OK] Added 2 categories:
+    • security: Security rules for safe coding
+    • performance: Performance optimization guidelines
+
+[OK] Added 5 rules:
+    • [SEC-001] Use parameterized queries for database operations (security)
+    • [SEC-002] Sanitize all user inputs before processing (security)
+    • [PERF-001] Avoid N+1 queries in database operations (performance)
+    • [PERF-002] Use pagination for large data sets (performance)
+    • [PERF-003] Cache frequently accessed data (performance)
+
+[DONE] Import complete
+```
+
+**관련 파일**: `internal/cmd/import.go`
 
 ---
 
@@ -874,6 +951,41 @@ Use query_conventions with a specific category to get rules for that category.
 {
   "names": ["deprecated-category", "unused-category"]
 }
+```
+
+#### import_convention
+
+외부 문서에서 코딩 컨벤션을 추출하여 user-policy.json에 추가합니다.
+
+LLM을 사용하여 텍스트, 마크다운, 코드 파일 등에서 코딩 규칙을 자동으로 인식하고 카테고리와 규칙을 생성합니다.
+
+**입력 스키마**:
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `path` | string | 예 | Import할 파일 경로 |
+| `mode` | string | 아니오 | Import 모드: `append` (기본값, 기존 유지) 또는 `clear` (기존 삭제 후 추가) |
+
+**예시**:
+```json
+{
+  "path": "/path/to/coding-standards.md",
+  "mode": "append"
+}
+```
+
+**출력 예시**:
+```
+Import completed successfully.
+
+Categories added (2):
+• security: Security rules for safe coding
+• performance: Performance optimization guidelines
+
+Rules added (3):
+• [SEC-001] Use parameterized queries for database operations (security)
+• [PERF-001] Avoid N+1 queries in database operations (performance)
+• [PERF-002] Use pagination for large data sets (performance)
 ```
 
 ### 등록 방법

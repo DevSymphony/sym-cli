@@ -48,6 +48,7 @@ graph TD
     subgraph L3["3 Core"]
         converter["converter"]
         validator["validator"]
+        importer["importer"]
     end
 
     subgraph L4["4 Tool Adapters"]
@@ -126,6 +127,7 @@ Cobra 프레임워크 기반 CLI 명령어를 구현합니다.
 | `sym dashboard` | 웹 대시보드 실행 |
 | `sym mcp` | MCP 서버 실행 |
 | `sym my-role` | 역할 관리 |
+| `sym import` | 외부 문서에서 컨벤션 추출 |
 | `sym llm status\|test\|setup` | LLM 프로바이더 관리 |
 
 ### Layer 2: Gateways
@@ -144,6 +146,7 @@ AI 코딩 도구(Claude Code, Cursor 등)와 stdio를 통해 통신합니다.
 | `add_category` | 카테고리 추가 (배치 지원) |
 | `edit_category` | 카테고리 편집 (배치 지원) |
 | `remove_category` | 카테고리 삭제 (배치 지원) |
+| `import_convention` | 외부 문서에서 컨벤션 추출 |
 
 #### HTTP Server (`internal/server`)
 
@@ -159,6 +162,7 @@ AI 코딩 도구(Claude Code, Cursor 등)와 stdio를 통해 통신합니다.
 | `POST /api/categories` | 카테고리 추가 |
 | `PUT /api/categories/{name}` | 카테고리 편집 |
 | `DELETE /api/categories/{name}` | 카테고리 삭제 |
+| `POST /api/import` | 컨벤션 Import 실행 |
 
 ### Layer 3: Core
 
@@ -191,6 +195,14 @@ CodePolicy (정형화된 규칙) + 린터 설정 파일
 2. **규칙 그룹화**: 엔진별로 규칙 분류
 3. **실행 단위 생성**: 린터/LLM 실행 단위 구성
 4. **병렬 실행**: 세마포어 기반 동시성 제어
+
+#### Importer (`internal/importer`)
+
+외부 문서에서 LLM을 사용하여 코딩 컨벤션을 추출합니다:
+
+1. **파일 읽기**: 31개 포맷 지원 (txt, md, 코드 파일 등), 50KB 제한
+2. **LLM 추출**: 문서 내용에서 카테고리와 규칙 자동 인식
+3. **정책 병합**: 기존 user-policy.json과 병합 (append/clear 모드)
 
 ### Layer 4: Tool Adapters
 

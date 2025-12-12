@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/converter"
+	"github.com/DevSymphony/sym-cli/internal/importer"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
@@ -59,6 +60,9 @@ func (s *Server) Start() error {
 	// Category API endpoints
 	mux.HandleFunc("/api/categories", s.handleCategories)
 	mux.HandleFunc("/api/categories/", s.handleCategoryByName)
+
+	// Import API endpoint
+	mux.HandleFunc("/api/import", s.handleImport)
 
 	// Static files
 	staticFS, err := fs.Sub(staticFiles, "static")
@@ -1005,4 +1009,109 @@ func (s *Server) handleDeleteCategory(w http.ResponseWriter, r *http.Request, ca
 		"status":  "success",
 		"message": fmt.Sprintf("Category '%s' removed successfully", categoryName),
 	})
+}
+
+// ImportRequest represents the HTTP request body for import
+type ImportRequest struct {
+	Path string `json:"path"` // Single file path to import
+	Mode string `json:"mode"` // "append" or "clear"
+}
+
+// ImportResponse represents the HTTP response for import
+type ImportResponse struct {
+	Status            string               `json:"status"`
+	CategoriesAdded   []schema.CategoryDef `json:"categoriesAdded"`
+	RulesAdded        []schema.UserRule    `json:"rulesAdded"`
+	CategoriesRemoved int                  `json:"categoriesRemoved,omitempty"`
+	RulesRemoved      int                  `json:"rulesRemoved,omitempty"`
+	FileProcessed     string               `json:"fileProcessed"`
+	Warnings          []string             `json:"warnings,omitempty"`
+	Error             string               `json:"error,omitempty"`
+}
+
+// handleImport handles POST /api/import
+func (s *Server) handleImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodOptions {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	// Check permission
+	currentRole, err := roles.GetCurrentRole()
+	if err != nil {
+		http.Error(w, "Failed to get current role", http.StatusInternalServerError)
+		return
+	}
+
+	canEdit, err := s.hasPermissionForRole(currentRole, "editPolicy")
+	if err != nil || !canEdit {
+		http.Error(w, "Forbidden: editPolicy permission required", http.StatusForbidden)
+		return
+	}
+
+	// Parse request
+	var req ImportRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	// Validate
+	if req.Path == "" {
+		http.Error(w, "File path is required", http.StatusBadRequest)
+		return
+	}
+
+	// Setup LLM provider
+	llmCfg := llm.LoadConfig()
+	llmProvider, err := llm.New(llmCfg)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Failed to create LLM provider: %v", err), http.StatusInternalServerError)
+		return
+	}
+	defer func() { _ = llmProvider.Close() }()
+
+	// Create importer and execute
+	mode := importer.ImportModeAppend
+	if req.Mode == "clear" {
+		mode = importer.ImportModeClear
+	}
+
+	imp := importer.NewImporter(llmProvider, false)
+	ctx, cancel := context.WithTimeout(r.Context(), 10*time.Minute)
+	defer cancel()
+
+	input := &importer.ImportInput{
+		Path: req.Path,
+		Mode: mode,
+	}
+
+	result, err := imp.Import(ctx, input)
+
+	// Build response
+	response := ImportResponse{
+		Status: "success",
+	}
+
+	if result != nil {
+		response.CategoriesAdded = result.CategoriesAdded
+		response.RulesAdded = result.RulesAdded
+		response.CategoriesRemoved = result.CategoriesRemoved
+		response.RulesRemoved = result.RulesRemoved
+		response.FileProcessed = result.FileProcessed
+		response.Warnings = result.Warnings
+	}
+
+	if err != nil {
+		response.Status = "error"
+		response.Error = err.Error()
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(response)
 }

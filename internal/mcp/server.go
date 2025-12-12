@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DevSymphony/sym-cli/internal/converter"
+	"github.com/DevSymphony/sym-cli/internal/importer"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
@@ -236,6 +237,12 @@ type RemoveCategoryInput struct {
 	Names []string `json:"names" jsonschema:"Array of category names to remove"`
 }
 
+// ImportConventionsInput represents the input schema for the import_convention tool.
+type ImportConventionsInput struct {
+	Path string `json:"path" jsonschema:"File path to import conventions from"`
+	Mode string `json:"mode,omitempty" jsonschema:"Import mode: 'append' (default) keeps existing, 'clear' removes existing first"`
+}
+
 // runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
 func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{
@@ -317,6 +324,18 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 		Description: "Remove convention categories. Pass array of category names in 'names' field.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input RemoveCategoryInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		result, rpcErr := s.handleRemoveCategory(input)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
+	// Tool: import_convention
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "import_convention",
+		Description: "Import coding conventions from external documents (txt, md, code files) into user-policy.json. Uses LLM to extract categories and rules from document content.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ImportConventionsInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleImportConventions(ctx, input)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
@@ -1173,6 +1192,128 @@ func (s *Server) buildBatchResponse(action string, succeeded []string, failed []
 			{"type": "text", "text": textContent},
 		},
 	}
+}
+
+// handleImportConventions handles the import_convention tool.
+func (s *Server) handleImportConventions(ctx context.Context, input ImportConventionsInput) (interface{}, *RPCError) {
+	// Validate input
+	if input.Path == "" {
+		return nil, &RPCError{Code: -32602, Message: "File path is required"}
+	}
+
+	// Default mode to append
+	mode := importer.ImportModeAppend
+	if input.Mode == "clear" {
+		mode = importer.ImportModeClear
+	}
+
+	// Setup LLM provider
+	llmCfg := llm.LoadConfig()
+	llmProvider, err := llm.New(llmCfg)
+	if err != nil {
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to create LLM provider: %v", err)}
+	}
+	defer func() { _ = llmProvider.Close() }()
+
+	// Create importer and execute
+	imp := importer.NewImporter(llmProvider, false)
+	importInput := &importer.ImportInput{
+		Path: input.Path,
+		Mode: mode,
+	}
+
+	result, err := imp.Import(ctx, importInput)
+	if err != nil {
+		// Build partial result response if available
+		if result != nil {
+			return s.buildImportResponse(result, err), nil
+		}
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Import failed: %v", err)}
+	}
+
+	// Reload user policy after import
+	if s.userPolicy != nil {
+		userPolicyPath := s.getUserPolicyPath()
+		if userPolicy, err := s.loader.LoadUserPolicy(userPolicyPath); err == nil {
+			s.userPolicy = userPolicy
+		}
+	}
+
+	return s.buildImportResponse(result, nil), nil
+}
+
+// buildImportResponse builds the MCP response for import operation.
+func (s *Server) buildImportResponse(result *importer.ImportResult, importErr error) map[string]interface{} {
+	var textContent strings.Builder
+	textContent.WriteString("Convention Import ")
+
+	if importErr != nil {
+		textContent.WriteString("(completed with errors)\n\n")
+	} else {
+		textContent.WriteString("Complete\n\n")
+	}
+
+	if result.FileProcessed != "" {
+		textContent.WriteString(fmt.Sprintf("Processed: %s\n\n", result.FileProcessed))
+	}
+
+	if result.CategoriesRemoved > 0 || result.RulesRemoved > 0 {
+		textContent.WriteString(fmt.Sprintf("Removed: %d categories, %d rules (clear mode)\n\n",
+			result.CategoriesRemoved, result.RulesRemoved))
+	}
+
+	if len(result.CategoriesAdded) > 0 {
+		textContent.WriteString(fmt.Sprintf("Added %d categories:\n", len(result.CategoriesAdded)))
+		for _, cat := range result.CategoriesAdded {
+			textContent.WriteString(fmt.Sprintf("  • %s: %s\n", cat.Name, cat.Description))
+		}
+		textContent.WriteString("\n")
+	}
+
+	if len(result.RulesAdded) > 0 {
+		textContent.WriteString(fmt.Sprintf("Added %d rules:\n", len(result.RulesAdded)))
+		for _, rule := range result.RulesAdded {
+			textContent.WriteString(fmt.Sprintf("  • [%s] %s (%s)\n", rule.ID, rule.Say, rule.Category))
+		}
+		textContent.WriteString("\n")
+	}
+
+	if len(result.Warnings) > 0 {
+		textContent.WriteString(fmt.Sprintf("Warnings (%d):\n", len(result.Warnings)))
+		for _, w := range result.Warnings {
+			textContent.WriteString(fmt.Sprintf("  • %s\n", w))
+		}
+		textContent.WriteString("\n")
+	}
+
+	if importErr != nil {
+		textContent.WriteString(fmt.Sprintf("Import Error: %v\n", importErr))
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{"type": "text", "text": textContent.String()},
+		},
+	}
+}
+
+// getUserPolicyPath returns the user policy file path.
+func (s *Server) getUserPolicyPath() string {
+	projectCfg, _ := config.LoadProjectConfig()
+	userPolicyPath := projectCfg.PolicyPath
+	if userPolicyPath == "" {
+		repoRoot, err := git.GetRepoRoot()
+		if err != nil {
+			return ".sym/user-policy.json"
+		}
+		return filepath.Join(repoRoot, ".sym", "user-policy.json")
+	}
+	if !filepath.IsAbs(userPolicyPath) {
+		if repoRoot, err := git.GetRepoRoot(); err == nil {
+			userPolicyPath = filepath.Join(repoRoot, userPolicyPath)
+		}
+	}
+	return userPolicyPath
 }
 
 // saveUserPolicy saves the user policy to file.
