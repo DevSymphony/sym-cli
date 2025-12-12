@@ -81,7 +81,7 @@ func (i *Importer) Import(ctx context.Context, input *ImportInput) (*ImportResul
 	result.RulesAdded = newRules
 
 	// Step 5.5: Update defaults.languages with new languages from rules
-	i.updateDefaultsLanguages(existingPolicy, newRules)
+	policy.UpdateDefaultsLanguages(existingPolicy, newRules)
 
 	// Step 6: Save updated policy
 	if err := policy.SavePolicy(existingPolicy, ""); err != nil {
@@ -150,24 +150,5 @@ func (i *Importer) generateUniqueID(baseID string, existingIDs map[string]bool) 
 			return newID
 		}
 		counter++
-	}
-}
-
-// updateDefaultsLanguages adds new languages from rules to defaults.languages
-func (i *Importer) updateDefaultsLanguages(p *schema.UserPolicy, newRules []schema.UserRule) {
-	// Build set of existing default languages
-	existingLangs := make(map[string]bool)
-	for _, lang := range p.Defaults.Languages {
-		existingLangs[lang] = true
-	}
-
-	// Collect new languages from rules
-	for _, rule := range newRules {
-		for _, lang := range rule.Languages {
-			if !existingLangs[lang] {
-				p.Defaults.Languages = append(p.Defaults.Languages, lang)
-				existingLangs[lang] = true
-			}
-		}
 	}
 }

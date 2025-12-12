@@ -77,7 +77,7 @@ func TestQueryConventions(t *testing.T) {
 			"languages": []interface{}{"javascript"},
 		}
 
-		result, rpcErr := server.handleQueryConventions(params)
+		result, rpcErr := server.handleListConvention(params)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -100,7 +100,7 @@ func TestQueryConventions(t *testing.T) {
 			"languages": []interface{}{"javascript"},
 		}
 
-		result, rpcErr := server.handleQueryConventions(params)
+		result, rpcErr := server.handleListConvention(params)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -122,7 +122,7 @@ func TestQueryConventions(t *testing.T) {
 			"languages": []interface{}{"typescript"},
 		}
 
-		result, rpcErr := server.handleQueryConventions(params)
+		result, rpcErr := server.handleListConvention(params)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -143,7 +143,7 @@ func TestQueryConventions(t *testing.T) {
 			"languages": []interface{}{"python"},
 		}
 
-		result, rpcErr := server.handleQueryConventions(params)
+		result, rpcErr := server.handleListConvention(params)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -163,7 +163,7 @@ func TestQueryConventions(t *testing.T) {
 			"languages": []interface{}{"javascript"},
 		}
 
-		result, rpcErr := server.handleQueryConventions(params)
+		result, rpcErr := server.handleListConvention(params)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -181,7 +181,7 @@ func TestQueryConventions(t *testing.T) {
 	t.Run("empty parameters returns all conventions", func(t *testing.T) {
 		params := map[string]interface{}{}
 
-		result, rpcErr := server.handleQueryConventions(params)
+		result, rpcErr := server.handleListConvention(params)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 
@@ -202,7 +202,7 @@ func TestQueryConventions(t *testing.T) {
 			"category": "security",
 		}
 
-		result, rpcErr := server.handleQueryConventions(params)
+		result, rpcErr := server.handleListConvention(params)
 		require.Nil(t, rpcErr)
 		require.NotNil(t, result)
 

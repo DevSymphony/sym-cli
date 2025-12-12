@@ -10,6 +10,7 @@ UserPolicy(A 스키마)와 CodePolicy(B 스키마) 파일을 로드하고, 정�
 internal/policy/
 ├── loader.go        # 정책 파일 로더 (Loader 구조체)
 ├── manager.go       # 정책 관리 함수 (경로, 로드, 저장, 검증)
+├── defaults.go      # defaults.languages 자동 업데이트 함수
 ├── templates.go     # 템플릿 관리 (embed.FS 기반)
 ├── README.md
 └── templates/       # 내장 정책 템플릿 (7개)
@@ -30,9 +31,11 @@ internal/policy/
 |--------|------|-----------|
 | cmd | policy.go | 정책 경로 표시, 검증 CLI 명령 |
 | cmd | init.go | 프로젝트 초기화 시 기본 정책 생성 |
+| cmd | convention.go | 컨벤션 추가/편집 시 언어 자동 업데이트 |
 | roles | rbac.go | RBAC 검증을 위한 정책 로드 |
 | server | server.go | 대시보드 REST API (정책 CRUD, 템플릿) |
-| mcp | server.go | MCP 서버 정책 로드 및 변환 |
+| mcp | server.go | MCP 서버 정책 로드, 변환, add/edit_convention 시 언어 자동 업데이트 |
+| importer | importer.go | Import 시 언어 자동 업데이트 |
 
 ### 패키지 의존성
 
@@ -78,6 +81,7 @@ type Template struct {
 | `PolicyExists(customPath) (bool, error)` | manager.go:133 | 정책 파일 존재 여부 |
 | `GetTemplates() ([]Template, error)` | templates.go:26 | 템플릿 목록 반환 |
 | `GetTemplate(name) (*UserPolicy, error)` | templates.go:81 | 특정 템플릿 로드 |
+| `UpdateDefaultsLanguages(policy, rules)` | defaults.go:9 | 규칙에서 언어 추출하여 defaults.languages에 추가 |
 
 ### Private API
 

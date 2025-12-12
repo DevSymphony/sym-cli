@@ -22,8 +22,9 @@ rectangle Symphony {
     usecase "Validate Code\n(sym validate)" as UC_VALIDATE
 
     ' MCP Integration
-    usecase "Query Conventions\n(MCP Tool)" as UC_QUERY
+    usecase "List Conventions\n(MCP Tool)" as UC_QUERY
     usecase "Validate Changes\n(MCP Tool)" as UC_MCP_VALIDATE
+    usecase "Convert Policy\n(MCP Tool)" as UC_MCP_CONVERT
 
     ' RBAC
     usecase "Check Permissions\n(RBAC)" as UC_RBAC
@@ -35,14 +36,16 @@ dev --> UC_DEFINE
 dev --> UC_VALIDATE
 
 ' AI IDE interactions (MCP protocol)
-ai --> UC_QUERY : "query_conventions"
+ai --> UC_QUERY : "list_convention"
 ai --> UC_MCP_VALIDATE : "validate_code"
+ai --> UC_MCP_CONVERT : "convert"
 
 ' Internal relationships
 UC_DEFINE ..> UC_CONVERT : <<include>>
 UC_VALIDATE ..> UC_RBAC : <<include>>
 UC_MCP_VALIDATE ..> UC_VALIDATE : <<include>>
 UC_CONVERT ..> UC_QUERY : "enables"
+UC_MCP_CONVERT ..> UC_CONVERT : <<include>>
 
 note right of UC_CONVERT
   LLM transforms natural language

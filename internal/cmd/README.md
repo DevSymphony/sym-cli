@@ -21,6 +21,7 @@ cmd/
 ├── mcp.go               # sym mcp 명령어 (MCP 서버)
 ├── mcp_register.go      # MCP 서버 등록 헬퍼 함수
 ├── category.go          # sym category list|add|edit|remove 명령어 (카테고리 관리)
+├── convention.go        # sym convention list|add|edit|remove 명령어 (컨벤션 관리)
 ├── import.go            # sym import 명령어 (외부 문서에서 컨벤션 추출)
 ├── survey_templates.go  # 커스텀 survey UI 템플릿
 └── README.md
@@ -87,6 +88,11 @@ cmd/
 | `llmSetupCmd` | llm.go:47 | llm setup 명령어 |
 | `mcpCmd` | mcp.go:15 | mcp 명령어 |
 | `categoryCmd` | category.go:10 | category 명령어 |
+| `conventionCmd` | convention.go:44 | convention 명령어 |
+| `conventionListCmd` | convention.go:60 | convention list 명령어 |
+| `conventionAddCmd` | convention.go:68 | convention add 명령어 |
+| `conventionEditCmd` | convention.go:93 | convention edit 명령어 |
+| `conventionRemoveCmd` | convention.go:115 | convention remove 명령어 |
 | `importCmd` | import.go:18 | import 명령어 |
 
 #### 명령어 실행 함수
@@ -108,6 +114,10 @@ cmd/
 | `runCategoryAdd(cmd, args)` | category.go:165 | category add 실행 |
 | `runCategoryEdit(cmd, args)` | category.go:240 | category edit 실행 |
 | `runCategoryRemove(cmd, args)` | category.go:353 | category remove 실행 |
+| `runConventionList(cmd, args)` | convention.go:179 | convention list 실행 |
+| `runConventionAdd(cmd, args)` | convention.go:215 | convention add 실행 |
+| `runConventionEdit(cmd, args)` | convention.go:295 | convention edit 실행 |
+| `runConventionRemove(cmd, args)` | convention.go:414 | convention remove 실행 |
 | `runImport(cmd, args)` | import.go:50 | import 실행 |
 
 #### 헬퍼 함수 - 초기화

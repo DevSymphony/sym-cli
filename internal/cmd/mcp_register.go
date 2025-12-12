@@ -414,9 +414,10 @@ func getClaudeCodeInstructions() string {
 
 **Check MCP Status**: Verify Symphony MCP server is active. If unavailable, warn the user and do not proceed.
 
-**Query Conventions**: Use ` + "`mcp__symphony__query_conventions`" + ` to retrieve relevant rules.
+**Query Conventions**: Use ` + "`mcp__symphony__list_convention`" + ` to retrieve relevant rules.
 - Select appropriate category: security, style, documentation, error_handling, architecture, performance, testing
 - Filter by languages as needed
+**After Updating Rules/Categories**: If you add/edit/remove conventions or categories, run ` + "`mcp__symphony__convert`" + ` to regenerate derived policy and linter configs (then re-run validation if needed).
 
 ### 2. After Writing Code
 
@@ -452,7 +453,8 @@ alwaysApply: true
 
 ### Before Code Generation
 1. **Verify Symphony MCP is active** - If not available, stop and warn user
-2. **Query conventions** - Use ` + "`symphony/query_conventions`" + ` with appropriate category and language
+2. **Query conventions** - Use ` + "`symphony/list_convention`" + ` with appropriate category and language
+3. **After updating conventions/categories** - Use ` + "`symphony/convert`" + ` to regenerate derived policy and linter configs
 
 ### After Code Generation
 1. **Validate all changes** - Use ` + "`symphony/validate_code`" + `
@@ -489,9 +491,10 @@ This project uses Symphony MCP for automated code convention management.
 
 ### Before Writing Code
 1. Verify Symphony MCP server is active. If not available, warn user and stop.
-2. Query relevant conventions using symphony/query_conventions tool.
+2. Query relevant conventions using symphony/list_convention tool.
    - Categories: security, style, documentation, error_handling, architecture, performance, testing
    - Filter by programming language
+3. If you add/edit/remove conventions or categories, run symphony/convert (then validate again if needed).
 
 ### After Writing Code
 1. Always validate changes using symphony/validate_code tool (validates all git changes)

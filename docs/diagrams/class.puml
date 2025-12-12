@@ -119,7 +119,8 @@ package "Validator (Execution Unit Pattern)" {
 
 package "MCP Server" {
     class MCPServer {
-        +query_conventions(category, languages): string
+        +list_convention(category, languages): string
+        +convert(): ConvertResult
         +validate_code(role): ValidationResult
     }
 
