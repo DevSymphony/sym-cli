@@ -1025,7 +1025,7 @@ func (s *Server) handleListCategory() (interface{}, *RPCError) {
 		for _, cat := range category {
 			textContent += fmt.Sprintf("• %s\n  %s\n\n", cat.Name, cat.Description)
 		}
-		textContent += "Use query_conventions with a specific category to get rules for that category."
+		textContent += "Use list_convention with a specific category to get rules for that category."
 	}
 
 	return map[string]interface{}{

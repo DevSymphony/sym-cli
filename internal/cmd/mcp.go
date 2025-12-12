@@ -19,7 +19,16 @@ var mcpCmd = &cobra.Command{
 LLM-based coding tools can query conventions and validate code through stdio.
 
 Tools provided by MCP server:
-- query_conventions: Query conventions for given context
+- list_convention: List conventions (rules) with optional filters
+- add_convention: Add conventions (batch supported)
+- edit_convention: Edit conventions (batch supported)
+- remove_convention: Remove conventions (batch supported)
+- list_category: List convention categories
+- add_category: Add categories (batch supported)
+- edit_category: Edit categories (batch supported)
+- remove_category: Remove categories (batch supported)
+- import_convention: Import conventions from external documents
+- convert: Convert user policy to code policy and linter configs
 - validate_code: Validate code compliance with conventions
 
 Communicates via stdio for integration with Claude Desktop, Claude Code, Cursor, and other MCP clients.`,
