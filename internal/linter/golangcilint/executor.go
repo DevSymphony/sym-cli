@@ -43,11 +43,11 @@ func (l *Linter) execute(ctx context.Context, config []byte, files []string) (*l
 	golangciLintPath := l.getGolangciLintPath()
 
 	// golangci-lint command format:
-	// golangci-lint run --config <config> --out-format json --path-prefix="" <files>
+	// golangci-lint run --config <config> --format json --path-prefix="" <files>
 	args := []string{
 		"run",
 		"--config", configFile,
-		"--out-format", "json",
+		"--format", "json",
 		"--path-prefix", "", // Disable path prefix to get absolute paths
 	}
 
