@@ -140,13 +140,16 @@ AI 코딩 도구(Claude Code, Cursor 등)와 stdio를 통해 통신합니다.
 
 | Tool | Description |
 |------|-------------|
-| `query_conventions` | 프로젝트 컨벤션 조회 |
+| `list_convention` | 프로젝트 컨벤션 조회 |
 | `validate_code` | 코드 변경사항 검증 |
 | `list_category` | 카테고리 목록 조회 |
 | `add_category` | 카테고리 추가 (배치 지원) |
 | `edit_category` | 카테고리 편집 (배치 지원) |
 | `remove_category` | 카테고리 삭제 (배치 지원) |
 | `import_convention` | 외부 문서에서 컨벤션 추출 |
+| `add_convention` | 컨벤션 추가 (배치 지원) |
+| `edit_convention` | 컨벤션 편집 (배치 지원) |
+| `remove_convention` | 컨벤션 삭제 (배치 지원) |
 
 #### HTTP Server (`internal/server`)
 

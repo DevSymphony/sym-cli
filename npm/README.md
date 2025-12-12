@@ -15,12 +15,16 @@ Symphony는 AI 개발환경(IDE, MCP 기반 LLM Tooling)을 위한 정책 기반
   - [빠른 시작](#빠른-시작)
   - [MCP 설정](#mcp-설정)
   - [사용 가능한 MCP 도구](#사용-가능한-mcp-도구)
-    - [`query_conventions`](#query_conventions)
+    - [`list_convention`](#list_convention)
     - [`validate_code`](#validate_code)
     - [`list_category`](#list_category)
     - [`add_category`](#add_category)
     - [`edit_category`](#edit_category)
     - [`remove_category`](#remove_category)
+    - [`import_convention`](#import_convention)
+    - [`add_convention`](#add_convention)
+    - [`edit_convention`](#edit_convention)
+    - [`remove_convention`](#remove_convention)
   - [컨벤션 파일](#컨벤션-파일)
   - [요구사항](#요구사항)
   - [지원 플랫폼](#지원-플랫폼)
@@ -75,10 +79,10 @@ sym dashboard
 
 ## 사용 가능한 MCP 도구
 
-### `query_conventions`
+### `list_convention`
 
 - 프로젝트 컨벤션을 조회합니다.
-- 카테고리, 파일 목록, 언어 등의 파라미터는 모두 optional입니다.
+- 카테고리, 언어 등의 파라미터는 모두 optional입니다.
 
 ### `validate_code`
 
@@ -104,6 +108,29 @@ sym dashboard
 
 - 카테고리를 삭제합니다 (배치 지원).
 - 필수 파라미터: `names` (배열)
+
+### `import_convention`
+
+- 외부 문서(텍스트, 마크다운, 코드 파일)에서 컨벤션을 추출합니다.
+- LLM을 사용하여 코딩 규칙을 자동으로 인식하고 정책에 추가합니다.
+- 필수 파라미터: `path`
+- 선택 파라미터: `mode` (`append` 또는 `clear`, 기본값: `append`)
+
+### `add_convention`
+
+- 새 컨벤션(규칙)을 추가합니다 (배치 지원).
+- 필수 파라미터: `conventions` (배열)
+- 컨벤션에 포함된 언어는 자동으로 `defaults.languages`에 추가됩니다.
+
+### `edit_convention`
+
+- 기존 컨벤션을 편집합니다 (배치 지원).
+- 필수 파라미터: `edits` (배열)
+
+### `remove_convention`
+
+- 컨벤션을 삭제합니다 (배치 지원).
+- 필수 파라미터: `ids` (배열)
 
 ---
 

@@ -175,7 +175,7 @@ func (s *Server) Start() error {
 	}
 
 	fmt.Fprintln(os.Stderr, "Symphony MCP server started (stdio mode)")
-	fmt.Fprintln(os.Stderr, "Available tools: query_conventions, validate_code, list_category")
+	fmt.Fprintln(os.Stderr, "Available tools: list_convention, add_convention, edit_convention, remove_convention, validate_code, list_category, add_category, edit_category, remove_category, import_convention")
 
 	// Use official MCP go-sdk for stdio to ensure spec-compliant framing and lifecycle
 	return s.runStdioWithSDK(context.Background())
@@ -187,8 +187,8 @@ type RPCError struct {
 	Message string
 }
 
-// QueryConventionsInput represents the input schema for the query_conventions tool (go-sdk).
-type QueryConventionsInput struct {
+// ListConventionInput represents the input schema for the list_convention tool (go-sdk).
+type ListConventionInput struct {
 	Category  string   `json:"category,omitempty" jsonschema:"Filter by category (optional). Use 'all' or leave empty to fetch all categories. Options: security, style, documentation, error_handling, architecture, performance, testing"`
 	Languages []string `json:"languages,omitempty" jsonschema:"Programming languages to filter by (optional). Leave empty to get conventions for all languages. Examples: go, javascript, typescript, python, java"`
 }
@@ -243,6 +243,50 @@ type ImportConventionsInput struct {
 	Mode string `json:"mode,omitempty" jsonschema:"Import mode: 'append' (default) keeps existing, 'clear' removes existing first"`
 }
 
+// ConventionInput represents a single convention for add operations.
+type ConventionInput struct {
+	ID        string   `json:"id" jsonschema:"Rule ID (required)"`
+	Say       string   `json:"say" jsonschema:"Rule description in natural language (required)"`
+	Category  string   `json:"category,omitempty" jsonschema:"Category name"`
+	Languages []string `json:"languages,omitempty" jsonschema:"Programming languages"`
+	Severity  string   `json:"severity,omitempty" jsonschema:"error, warning, or info"`
+	Autofix   bool     `json:"autofix,omitempty" jsonschema:"Enable auto-fix"`
+	Message   string   `json:"message,omitempty" jsonschema:"Message to display on violation"`
+	Example   string   `json:"example,omitempty" jsonschema:"Code example"`
+	Include   []string `json:"include,omitempty" jsonschema:"File patterns to include"`
+	Exclude   []string `json:"exclude,omitempty" jsonschema:"File patterns to exclude"`
+}
+
+// ConventionEditInput represents a single convention edit for batch operations.
+type ConventionEditInput struct {
+	ID        string   `json:"id" jsonschema:"Current rule ID (required)"`
+	NewID     string   `json:"new_id,omitempty" jsonschema:"New rule ID"`
+	Say       string   `json:"say,omitempty" jsonschema:"New description"`
+	Category  string   `json:"category,omitempty" jsonschema:"New category name"`
+	Languages []string `json:"languages,omitempty" jsonschema:"New programming languages"`
+	Severity  string   `json:"severity,omitempty" jsonschema:"New severity level"`
+	Autofix   *bool    `json:"autofix,omitempty" jsonschema:"Enable auto-fix"`
+	Message   string   `json:"message,omitempty" jsonschema:"New message"`
+	Example   string   `json:"example,omitempty" jsonschema:"New code example"`
+	Include   []string `json:"include,omitempty" jsonschema:"New file patterns to include"`
+	Exclude   []string `json:"exclude,omitempty" jsonschema:"New file patterns to exclude"`
+}
+
+// AddConventionInput represents the input schema for the add_convention tool (batch mode).
+type AddConventionInput struct {
+	Conventions []ConventionInput `json:"conventions" jsonschema:"Array of conventions to add"`
+}
+
+// EditConventionInput represents the input schema for the edit_convention tool (batch mode).
+type EditConventionInput struct {
+	Edits []ConventionEditInput `json:"edits" jsonschema:"Array of convention edits"`
+}
+
+// RemoveConventionInput represents the input schema for the remove_convention tool (batch mode).
+type RemoveConventionInput struct {
+	IDs []string `json:"ids" jsonschema:"Array of convention IDs to remove"`
+}
+
 // runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
 func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{
@@ -250,16 +294,16 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 		Version: "1.0.0",
 	}, nil)
 
-	// Tool: query_conventions
+	// Tool: list_convention
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
-		Name:        "query_conventions",
-		Description: "[MANDATORY BEFORE CODING] Query project conventions BEFORE writing any code to ensure compliance from the start.",
-	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input QueryConventionsInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		Name:        "list_convention",
+		Description: "[MANDATORY BEFORE CODING] List project conventions BEFORE writing any code to ensure compliance from the start. Filter by category or languages.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ListConventionInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		params := map[string]any{
 			"category":  input.Category,
 			"languages": input.Languages,
 		}
-		result, rpcErr := s.handleQueryConventions(params)
+		result, rpcErr := s.handleListConvention(params)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
@@ -342,6 +386,42 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 		return nil, result.(map[string]any), nil
 	})
 
+	// Tool: add_convention (batch mode)
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "add_convention",
+		Description: "Add conventions (rules). Pass array of {id, say, category?, languages?, severity?, autofix?, message?, example?, include?, exclude?} objects in 'conventions' field.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input AddConventionInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleAddConvention(input)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
+	// Tool: edit_convention (batch mode)
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "edit_convention",
+		Description: "Edit conventions (rules). Pass array of {id, new_id?, say?, category?, languages?, severity?, autofix?, message?, example?, include?, exclude?} objects in 'edits' field.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input EditConventionInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleEditConvention(input)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
+	// Tool: remove_convention (batch mode)
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "remove_convention",
+		Description: "Remove conventions (rules). Pass array of convention IDs in 'ids' field.",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input RemoveConventionInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleRemoveConvention(input)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
 	// Run the server over stdio until the client disconnects
 	return server.Run(ctx, &sdkmcp.StdioTransport{})
 }
@@ -361,9 +441,9 @@ type ConventionItem struct {
 	Severity    string `json:"severity"`
 }
 
-// handleQueryConventions handles convention query requests.
+// handleListConvention handles convention list/query requests.
 // It finds and returns relevant conventions by category.
-func (s *Server) handleQueryConventions(params map[string]interface{}) (interface{}, *RPCError) {
+func (s *Server) handleListConvention(params map[string]interface{}) (interface{}, *RPCError) {
 	if s.userPolicy == nil && s.codePolicy == nil {
 		return map[string]interface{}{
 			"conventions": []ConventionItem{},
@@ -1319,4 +1399,277 @@ func (s *Server) getUserPolicyPath() string {
 // saveUserPolicy saves the user policy to file.
 func (s *Server) saveUserPolicy() error {
 	return policy.SavePolicy(s.userPolicy, "")
+}
+
+// handleAddConvention handles adding conventions (batch mode).
+func (s *Server) handleAddConvention(input AddConventionInput) (interface{}, *RPCError) {
+	// Validate input
+	if len(input.Conventions) == 0 {
+		return nil, &RPCError{Code: -32602, Message: "At least one convention is required in 'conventions' array"}
+	}
+
+	// Build existing IDs map
+	existingIDs := make(map[string]bool)
+	for _, rule := range s.userPolicy.Rules {
+		existingIDs[rule.ID] = true
+	}
+
+	var succeeded []string
+	var failed []FailedItem
+	var addedRules []schema.UserRule
+
+	// Process each convention
+	for _, conv := range input.Conventions {
+		// Validate
+		if conv.ID == "" {
+			failed = append(failed, FailedItem{Name: "(empty)", Reason: "Convention ID is required"})
+			continue
+		}
+		if conv.Say == "" {
+			failed = append(failed, FailedItem{Name: conv.ID, Reason: "Convention 'say' description is required"})
+			continue
+		}
+
+		// Check for duplicate
+		if existingIDs[conv.ID] {
+			failed = append(failed, FailedItem{Name: conv.ID, Reason: fmt.Sprintf("Convention '%s' already exists", conv.ID)})
+			continue
+		}
+
+		// Add convention
+		rule := schema.UserRule{
+			ID:        conv.ID,
+			Say:       conv.Say,
+			Category:  conv.Category,
+			Languages: conv.Languages,
+			Severity:  conv.Severity,
+			Autofix:   conv.Autofix,
+			Message:   conv.Message,
+			Example:   conv.Example,
+			Include:   conv.Include,
+			Exclude:   conv.Exclude,
+		}
+		s.userPolicy.Rules = append(s.userPolicy.Rules, rule)
+		addedRules = append(addedRules, rule)
+		existingIDs[conv.ID] = true
+		succeeded = append(succeeded, conv.ID)
+	}
+
+	// Update defaults.languages with new languages from rules
+	if len(addedRules) > 0 {
+		policy.UpdateDefaultsLanguages(s.userPolicy, addedRules)
+	}
+
+	// Save policy if any succeeded
+	if len(succeeded) > 0 {
+		if err := s.saveUserPolicy(); err != nil {
+			return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+		}
+	}
+
+	// Build response
+	return s.buildConventionBatchResponse("Added", succeeded, failed), nil
+}
+
+// handleEditConvention handles editing conventions (batch mode).
+func (s *Server) handleEditConvention(input EditConventionInput) (interface{}, *RPCError) {
+	// Validate input
+	if len(input.Edits) == 0 {
+		return nil, &RPCError{Code: -32602, Message: "At least one edit is required in 'edits' array"}
+	}
+
+	// Build rule index map
+	ruleIndex := make(map[string]int)
+	for i, rule := range s.userPolicy.Rules {
+		ruleIndex[rule.ID] = i
+	}
+
+	var succeeded []string
+	var failed []FailedItem
+	var editedRules []schema.UserRule
+
+	// Process each edit
+	for _, edit := range input.Edits {
+		// Validate
+		if edit.ID == "" {
+			failed = append(failed, FailedItem{Name: "(empty)", Reason: "Convention ID is required"})
+			continue
+		}
+
+		// Check if at least one field to edit
+		hasEdit := edit.NewID != "" || edit.Say != "" || edit.Category != "" ||
+			len(edit.Languages) > 0 || edit.Severity != "" || edit.Autofix != nil ||
+			edit.Message != "" || edit.Example != "" || len(edit.Include) > 0 || len(edit.Exclude) > 0
+
+		if !hasEdit {
+			failed = append(failed, FailedItem{Name: edit.ID, Reason: "At least one field to edit must be provided"})
+			continue
+		}
+
+		// Find convention
+		idx, exists := ruleIndex[edit.ID]
+		if !exists {
+			failed = append(failed, FailedItem{Name: edit.ID, Reason: fmt.Sprintf("Convention '%s' not found", edit.ID)})
+			continue
+		}
+
+		resultText := edit.ID
+
+		// If renaming ID
+		if edit.NewID != "" && edit.NewID != edit.ID {
+			// Check for duplicate
+			if _, dupExists := ruleIndex[edit.NewID]; dupExists {
+				failed = append(failed, FailedItem{Name: edit.ID, Reason: fmt.Sprintf("Convention '%s' already exists", edit.NewID)})
+				continue
+			}
+
+			// Update index map
+			delete(ruleIndex, edit.ID)
+			ruleIndex[edit.NewID] = idx
+
+			s.userPolicy.Rules[idx].ID = edit.NewID
+			resultText = fmt.Sprintf("%s → %s", edit.ID, edit.NewID)
+		}
+
+		// Update other fields
+		if edit.Say != "" {
+			s.userPolicy.Rules[idx].Say = edit.Say
+		}
+		if edit.Category != "" {
+			s.userPolicy.Rules[idx].Category = edit.Category
+		}
+		if len(edit.Languages) > 0 {
+			s.userPolicy.Rules[idx].Languages = edit.Languages
+		}
+		if edit.Severity != "" {
+			s.userPolicy.Rules[idx].Severity = edit.Severity
+		}
+		if edit.Autofix != nil {
+			s.userPolicy.Rules[idx].Autofix = *edit.Autofix
+		}
+		if edit.Message != "" {
+			s.userPolicy.Rules[idx].Message = edit.Message
+		}
+		if edit.Example != "" {
+			s.userPolicy.Rules[idx].Example = edit.Example
+		}
+		if len(edit.Include) > 0 {
+			s.userPolicy.Rules[idx].Include = edit.Include
+		}
+		if len(edit.Exclude) > 0 {
+			s.userPolicy.Rules[idx].Exclude = edit.Exclude
+		}
+
+		editedRules = append(editedRules, s.userPolicy.Rules[idx])
+		succeeded = append(succeeded, resultText)
+	}
+
+	// Update defaults.languages with new languages from edited rules
+	if len(editedRules) > 0 {
+		policy.UpdateDefaultsLanguages(s.userPolicy, editedRules)
+	}
+
+	// Save policy if any succeeded
+	if len(succeeded) > 0 {
+		if err := s.saveUserPolicy(); err != nil {
+			return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+		}
+	}
+
+	// Build response
+	return s.buildConventionBatchResponse("Updated", succeeded, failed), nil
+}
+
+// handleRemoveConvention handles removing conventions (batch mode).
+func (s *Server) handleRemoveConvention(input RemoveConventionInput) (interface{}, *RPCError) {
+	// Validate input
+	if len(input.IDs) == 0 {
+		return nil, &RPCError{Code: -32602, Message: "At least one convention ID is required in 'ids' array"}
+	}
+
+	// Build rule index map
+	ruleIndex := make(map[string]int)
+	for i, rule := range s.userPolicy.Rules {
+		ruleIndex[rule.ID] = i
+	}
+
+	var succeeded []string
+	var failed []FailedItem
+	toRemove := make(map[int]bool) // indices to remove
+
+	// Process each ID
+	for _, id := range input.IDs {
+		// Validate
+		if id == "" {
+			failed = append(failed, FailedItem{Name: "(empty)", Reason: "Convention ID is required"})
+			continue
+		}
+
+		// Find convention
+		idx, exists := ruleIndex[id]
+		if !exists {
+			failed = append(failed, FailedItem{Name: id, Reason: fmt.Sprintf("Convention '%s' not found", id)})
+			continue
+		}
+
+		toRemove[idx] = true
+		succeeded = append(succeeded, id)
+	}
+
+	// Remove conventions
+	if len(toRemove) > 0 {
+		newRules := make([]schema.UserRule, 0, len(s.userPolicy.Rules)-len(toRemove))
+		for i, rule := range s.userPolicy.Rules {
+			if !toRemove[i] {
+				newRules = append(newRules, rule)
+			}
+		}
+		s.userPolicy.Rules = newRules
+
+		if err := s.saveUserPolicy(); err != nil {
+			return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to save policy: %v", err)}
+		}
+	}
+
+	// Build response
+	return s.buildConventionBatchResponse("Removed", succeeded, failed), nil
+}
+
+// buildConventionBatchResponse builds a standardized batch operation response for conventions.
+func (s *Server) buildConventionBatchResponse(action string, succeeded []string, failed []FailedItem) map[string]interface{} {
+	var textContent string
+
+	if len(failed) == 0 && len(succeeded) > 0 {
+		// All succeeded
+		textContent = fmt.Sprintf("%s %d convention(s) successfully:\n", action, len(succeeded))
+		for _, id := range succeeded {
+			textContent += fmt.Sprintf("  ✓ %s\n", id)
+		}
+	} else if len(succeeded) == 0 && len(failed) > 0 {
+		// All failed
+		textContent = fmt.Sprintf("Failed to %s any conventions:\n", strings.ToLower(action))
+		for _, f := range failed {
+			textContent += fmt.Sprintf("  ✗ %s: %s\n", f.Name, f.Reason)
+		}
+	} else if len(succeeded) > 0 && len(failed) > 0 {
+		// Partial success
+		textContent = "Batch operation completed with errors:\n"
+		textContent += fmt.Sprintf("  ✓ Succeeded (%d):\n", len(succeeded))
+		for _, id := range succeeded {
+			textContent += fmt.Sprintf("    - %s\n", id)
+		}
+		textContent += fmt.Sprintf("  ✗ Failed (%d):\n", len(failed))
+		for _, f := range failed {
+			textContent += fmt.Sprintf("    - %s: %s\n", f.Name, f.Reason)
+		}
+	} else {
+		// Nothing to do
+		textContent = "No conventions to process."
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{"type": "text", "text": textContent},
+		},
+	}
 }

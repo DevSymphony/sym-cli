@@ -39,13 +39,16 @@ Symphony (`sym`)는 코드 컨벤션 관리와 RBAC(역할 기반 접근 제어)
   - [MCP 통합](#mcp-통합)
     - [지원 도구](#지원-도구)
     - [MCP 도구 스키마](#mcp-도구-스키마)
-      - [query\_conventions](#query_conventions)
+      - [list\_convention](#list_convention)
       - [validate\_code](#validate_code)
       - [list\_category](#list_category)
       - [add\_category](#add_category)
       - [edit\_category](#edit_category)
       - [remove\_category](#remove_category)
       - [import\_convention](#import_convention)
+      - [add\_convention](#add_convention)
+      - [edit\_convention](#edit_convention)
+      - [remove\_convention](#remove_convention)
     - [등록 방법](#등록-방법)
   - [LLM 프로바이더](#llm-프로바이더)
     - [지원 프로바이더](#지원-프로바이더)
@@ -112,7 +115,8 @@ sym
 ├── convert                 # 정책 → 린터 설정 변환
 ├── validate                # Git 변경사항 검증
 ├── import                  # 외부 문서에서 컨벤션 추출
-├── category                # 카테고리 목록 조회
+├── category                # 카테고리 관리
+├── convention              # 컨벤션(규칙) 관리
 ├── mcp                     # MCP 서버 실행
 ├── llm                     # LLM 프로바이더 관리
 │   ├── status             # 현재 설정 확인
@@ -599,17 +603,188 @@ sym category remove -f names.json
 
 ---
 
+### sym convention
+
+**설명**: 컨벤션(규칙)을 관리합니다.
+
+user-policy.json에 정의된 규칙을 조회, 추가, 편집, 삭제할 수 있습니다. 규칙은 코딩 컨벤션의 구체적인 내용을 정의합니다.
+
+**서브커맨드**:
+- `list` - 컨벤션 목록 조회
+- `add` - 새 컨벤션 추가
+- `edit` - 기존 컨벤션 편집
+- `remove` - 컨벤션 삭제
+
+**관련 파일**: `internal/cmd/convention.go`
+
+---
+
+#### sym convention list
+
+**설명**: 모든 컨벤션을 표시합니다.
+
+**문법**:
+```
+sym convention list [--category <name>] [--language <lang>]
+```
+
+**플래그**:
+- `--category`, `-c` - 특정 카테고리로 필터링
+- `--language`, `-l` - 특정 언어로 필터링
+
+**출력 예시**:
+```
+[Conventions] 5 rules available
+
+  • [SEC-001] security (error)
+    Use parameterized queries for database operations
+    languages: go, python
+
+  • [PERF-001] performance (warning)
+    Avoid N+1 queries in database operations
+```
+
+---
+
+#### sym convention add
+
+**설명**: 새 컨벤션을 추가합니다.
+
+**문법**:
+```
+sym convention add <id> <say> [flags]
+sym convention add -f <file.json>
+```
+
+**플래그**:
+- `-f, --file` - 배치 추가를 위한 JSON 파일
+- `--category` - 카테고리 (선택)
+- `--languages` - 언어 목록 (쉼표로 구분)
+- `--severity` - 심각도: error, warning, info (기본값: warning)
+- `--autofix` - 자동 수정 활성화
+- `--message` - 위반 시 표시할 메시지
+- `--example` - 코드 예시
+- `--include` - 포함할 파일 패턴 (쉼표로 구분)
+- `--exclude` - 제외할 파일 패턴 (쉼표로 구분)
+
+**예시**:
+```bash
+# 단일 추가
+sym convention add SEC-001 "Use parameterized queries" --category security --languages go,python --severity error
+
+# 배치 추가
+sym convention add -f conventions.json
+```
+
+**배치 파일 형식** (`conventions.json`):
+```json
+[
+  {
+    "id": "SEC-001",
+    "say": "Use parameterized queries",
+    "category": "security",
+    "languages": ["go", "python"],
+    "severity": "error"
+  }
+]
+```
+
+**참고**: 컨벤션에 포함된 언어는 자동으로 `defaults.languages`에 추가됩니다.
+
+---
+
+#### sym convention edit
+
+**설명**: 기존 컨벤션을 편집합니다.
+
+**문법**:
+```
+sym convention edit <id> [flags]
+sym convention edit -f <file.json>
+```
+
+**플래그**:
+- `-f, --file` - 배치 편집을 위한 JSON 파일
+- `--new-id` - 새 ID
+- `--say` - 새 설명
+- `--category` - 새 카테고리
+- `--languages` - 새 언어 목록
+- `--severity` - 새 심각도
+- `--autofix` - 자동 수정 활성화/비활성화
+- `--message` - 새 메시지
+- `--example` - 새 예시
+- `--include` - 새 포함 패턴
+- `--exclude` - 새 제외 패턴
+
+**예시**:
+```bash
+# 심각도 변경
+sym convention edit SEC-001 --severity warning
+
+# ID 변경
+sym convention edit SEC-001 --new-id SEC-001-v2
+
+# 배치 편집
+sym convention edit -f edits.json
+```
+
+**배치 파일 형식** (`edits.json`):
+```json
+[
+  {"id": "SEC-001", "severity": "warning"},
+  {"id": "PERF-001", "new_id": "PERF-001-v2"}
+]
+```
+
+---
+
+#### sym convention remove
+
+**설명**: 컨벤션을 삭제합니다.
+
+**문법**:
+```
+sym convention remove <id> [ids...]
+sym convention remove -f <file.json>
+```
+
+**플래그**:
+- `-f, --file` - 삭제할 컨벤션 ID가 담긴 JSON 파일
+
+**예시**:
+```bash
+# 단일 삭제
+sym convention remove SEC-001
+
+# 다중 삭제
+sym convention remove SEC-001 PERF-001 PERF-002
+
+# 배치 삭제
+sym convention remove -f ids.json
+```
+
+**배치 파일 형식** (`ids.json`):
+```json
+["SEC-001", "PERF-001", "PERF-002"]
+```
+
+---
+
 ### sym mcp
 
 **설명**: MCP(Model Context Protocol) 서버를 시작합니다. LLM 기반 코딩 도구가 stdio를 통해 컨벤션을 쿼리하고 코드를 검증할 수 있습니다.
 
 **제공되는 MCP 도구**:
-- `query_conventions`: 주어진 컨텍스트에 대한 컨벤션 쿼리
+- `list_convention`: 프로젝트 컨벤션 조회
 - `validate_code`: 코드의 컨벤션 준수 여부 검증
 - `list_category`: 사용 가능한 카테고리 목록 조회
 - `add_category`: 카테고리 추가 (배치 지원)
 - `edit_category`: 카테고리 편집 (배치 지원)
 - `remove_category`: 카테고리 삭제 (배치 지원)
+- `import_convention`: 외부 문서에서 컨벤션 추출
+- `add_convention`: 컨벤션(규칙) 추가 (배치 지원)
+- `edit_convention`: 컨벤션(규칙) 편집 (배치 지원)
+- `remove_convention`: 컨벤션(규칙) 삭제 (배치 지원)
 
 **통신 방식**: stdio (Claude Desktop, Claude Code, Cursor 등 MCP 클라이언트와 통합)
 
@@ -837,9 +1012,9 @@ Symphony는 다음 AI 코딩 도구에 MCP 서버로 등록될 수 있습니다.
 
 ### MCP 도구 스키마
 
-#### query_conventions
+#### list_convention
 
-코딩 전 프로젝트 컨벤션을 쿼리합니다.
+코딩 전 프로젝트 컨벤션을 조회합니다.
 
 **입력 스키마**:
 
@@ -986,6 +1161,77 @@ Rules added (3):
 • [SEC-001] Use parameterized queries for database operations (security)
 • [PERF-001] Avoid N+1 queries in database operations (performance)
 • [PERF-002] Use pagination for large data sets (performance)
+```
+
+#### add_convention
+
+컨벤션(규칙)을 추가합니다 (배치 모드).
+
+**입력 스키마**:
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `conventions` | array | 예 | `{id, say, category?, languages?, severity?, autofix?, message?, example?, include?, exclude?}` 객체 배열 |
+
+**예시**:
+```json
+{
+  "conventions": [
+    {
+      "id": "SEC-001",
+      "say": "Use parameterized queries for database operations",
+      "category": "security",
+      "languages": ["go", "python"],
+      "severity": "error"
+    },
+    {
+      "id": "PERF-001",
+      "say": "Avoid N+1 queries in database operations",
+      "category": "performance"
+    }
+  ]
+}
+```
+
+**참고**: 컨벤션에 포함된 언어는 자동으로 `defaults.languages`에 추가됩니다.
+
+#### edit_convention
+
+컨벤션(규칙)을 편집합니다 (배치 모드).
+
+**입력 스키마**:
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `edits` | array | 예 | `{id, new_id?, say?, category?, languages?, severity?, autofix?, message?, example?, include?, exclude?}` 객체 배열 |
+
+**예시**:
+```json
+{
+  "edits": [
+    {"id": "SEC-001", "severity": "warning"},
+    {"id": "PERF-001", "new_id": "PERF-001-v2", "say": "Updated description"}
+  ]
+}
+```
+
+**참고**: 편집된 컨벤션에 새 언어가 추가되면 자동으로 `defaults.languages`에 추가됩니다.
+
+#### remove_convention
+
+컨벤션(규칙)을 삭제합니다 (배치 모드).
+
+**입력 스키마**:
+
+| 파라미터 | 타입 | 필수 | 설명 |
+|----------|------|------|------|
+| `ids` | array | 예 | 삭제할 컨벤션 ID 배열 |
+
+**예시**:
+```json
+{
+  "ids": ["SEC-001", "PERF-001"]
+}
 ```
 
 ### 등록 방법
