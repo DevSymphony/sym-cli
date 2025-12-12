@@ -175,7 +175,7 @@ func (s *Server) Start() error {
 	}
 
 	fmt.Fprintln(os.Stderr, "Symphony MCP server started (stdio mode)")
-	fmt.Fprintln(os.Stderr, "Available tools: list_convention, add_convention, edit_convention, remove_convention, validate_code, list_category, add_category, edit_category, remove_category, import_convention")
+	fmt.Fprintln(os.Stderr, "Available tools: list_convention, add_convention, edit_convention, remove_convention, validate_code, list_category, add_category, edit_category, remove_category, import_convention, convert")
 
 	// Use official MCP go-sdk for stdio to ensure spec-compliant framing and lifecycle
 	return s.runStdioWithSDK(context.Background())
@@ -287,6 +287,12 @@ type RemoveConventionInput struct {
 	IDs []string `json:"ids" jsonschema:"Array of convention IDs to remove"`
 }
 
+// ConvertPolicyInput represents the input schema for the convert tool.
+type ConvertPolicyInput struct {
+	InputPath string `json:"input_path,omitempty" jsonschema:"Path to user-policy.json file (optional, defaults to config or .sym/user-policy.json)"`
+	OutputDir string `json:"output_dir,omitempty" jsonschema:"Output directory for generated configs (optional, defaults to .sym)"`
+}
+
 // runStdioWithSDK runs a spec-compliant MCP server over stdio using the official go-sdk.
 func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	server := sdkmcp.NewServer(&sdkmcp.Implementation{
@@ -377,7 +383,7 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	// Tool: import_convention
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "import_convention",
-		Description: "Import coding conventions from external documents (txt, md, code files) into user-policy.json. Uses LLM to extract categories and rules from document content.",
+		Description: "Import coding conventions from external documents (txt, md, code files) into user-policy.json. Uses LLM to extract categories and rules from document content. After importing, run 'convert' to generate linter configurations.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ImportConventionsInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		result, rpcErr := s.handleImportConventions(ctx, input)
 		if rpcErr != nil {
@@ -389,7 +395,7 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	// Tool: add_convention (batch mode)
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "add_convention",
-		Description: "Add conventions (rules). Pass array of {id, say, category?, languages?, severity?, autofix?, message?, example?, include?, exclude?} objects in 'conventions' field.",
+		Description: "Add conventions (rules). Pass array of {id, say, category?, languages?, severity?, autofix?, message?, example?, include?, exclude?} objects in 'conventions' field. After adding rules, run 'convert' to generate linter configurations.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input AddConventionInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		result, rpcErr := s.handleAddConvention(input)
 		if rpcErr != nil {
@@ -401,7 +407,7 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	// Tool: edit_convention (batch mode)
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "edit_convention",
-		Description: "Edit conventions (rules). Pass array of {id, new_id?, say?, category?, languages?, severity?, autofix?, message?, example?, include?, exclude?} objects in 'edits' field.",
+		Description: "Edit conventions (rules). Pass array of {id, new_id?, say?, category?, languages?, severity?, autofix?, message?, example?, include?, exclude?} objects in 'edits' field. After editing rules, run 'convert' to regenerate linter configurations.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input EditConventionInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		result, rpcErr := s.handleEditConvention(input)
 		if rpcErr != nil {
@@ -413,9 +419,21 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	// Tool: remove_convention (batch mode)
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "remove_convention",
-		Description: "Remove conventions (rules). Pass array of convention IDs in 'ids' field.",
+		Description: "Remove conventions (rules). Pass array of convention IDs in 'ids' field. After removing rules, run 'convert' to regenerate linter configurations.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input RemoveConventionInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		result, rpcErr := s.handleRemoveConvention(input)
+		if rpcErr != nil {
+			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
+		}
+		return nil, result.(map[string]any), nil
+	})
+
+	// Tool: convert
+	sdkmcp.AddTool(server, &sdkmcp.Tool{
+		Name:        "convert",
+		Description: "Convert user-policy.json (natural language rules) into linter-specific configurations and code-policy.json. Uses LLM to route rules to appropriate linters (ESLint, Prettier, Pylint, TSC, Checkstyle, PMD, golangci-lint).",
+	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ConvertPolicyInput) (*sdkmcp.CallToolResult, map[string]any, error) {
+		result, rpcErr := s.handleConvertPolicy(ctx, input)
 		if rpcErr != nil {
 			return &sdkmcp.CallToolResult{IsError: true}, nil, fmt.Errorf("%s", rpcErr.Message)
 		}
@@ -1368,6 +1386,100 @@ func (s *Server) buildImportResponse(result *importer.ImportResult, importErr er
 
 	if importErr != nil {
 		textContent.WriteString(fmt.Sprintf("Import Error: %v\n", importErr))
+	}
+
+	return map[string]interface{}{
+		"content": []map[string]interface{}{
+			{"type": "text", "text": textContent.String()},
+		},
+	}
+}
+
+// handleConvertPolicy handles the convert tool.
+func (s *Server) handleConvertPolicy(ctx context.Context, input ConvertPolicyInput) (interface{}, *RPCError) {
+	// 1. Determine input path
+	inputPath := input.InputPath
+	if inputPath == "" {
+		inputPath = s.getUserPolicyPath()
+	}
+
+	outputDir := input.OutputDir
+	if outputDir == "" {
+		outputDir = filepath.Dir(inputPath)
+	}
+
+	// 2. Load user-policy.json
+	data, err := os.ReadFile(inputPath)
+	if err != nil {
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to read policy: %v", err)}
+	}
+	var userPolicy schema.UserPolicy
+	if err := json.Unmarshal(data, &userPolicy); err != nil {
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to parse policy: %v", err)}
+	}
+
+	// 3. Setup LLM provider
+	llmCfg := llm.LoadConfig()
+	llmProvider, err := llm.New(llmCfg)
+	if err != nil {
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Failed to create LLM provider: %v", err)}
+	}
+	defer func() { _ = llmProvider.Close() }()
+
+	// 4. Create converter and execute
+	conv := converter.NewConverter(llmProvider, outputDir)
+	result, err := conv.Convert(ctx, &userPolicy)
+	if err != nil {
+		if result != nil {
+			return s.buildConvertResponse(result, err), nil
+		}
+		return nil, &RPCError{Code: -32000, Message: fmt.Sprintf("Conversion failed: %v", err)}
+	}
+
+	// 5. Reload code policy after conversion
+	codePolicyPath := filepath.Join(outputDir, "code-policy.json")
+	if codePolicy, loadErr := s.loader.LoadCodePolicy(codePolicyPath); loadErr == nil {
+		s.codePolicy = codePolicy
+	}
+
+	return s.buildConvertResponse(result, nil), nil
+}
+
+// buildConvertResponse builds the MCP response for convert operation.
+func (s *Server) buildConvertResponse(result *converter.ConvertResult, convertErr error) map[string]interface{} {
+	var textContent strings.Builder
+
+	if convertErr != nil {
+		textContent.WriteString("Conversion completed with errors\n\n")
+	} else {
+		textContent.WriteString("✓ Conversion completed successfully\n\n")
+	}
+
+	if len(result.GeneratedFiles) > 0 {
+		textContent.WriteString(fmt.Sprintf("Generated %d file(s):\n", len(result.GeneratedFiles)))
+		for _, file := range result.GeneratedFiles {
+			textContent.WriteString(fmt.Sprintf("  • %s\n", file))
+		}
+		textContent.WriteString("\n")
+	}
+
+	if len(result.Errors) > 0 {
+		textContent.WriteString(fmt.Sprintf("Errors (%d):\n", len(result.Errors)))
+		for linter, err := range result.Errors {
+			textContent.WriteString(fmt.Sprintf("  • %s: %v\n", linter, err))
+		}
+		textContent.WriteString("\n")
+	}
+
+	if len(result.Warnings) > 0 {
+		textContent.WriteString(fmt.Sprintf("Warnings (%d):\n", len(result.Warnings)))
+		for _, warning := range result.Warnings {
+			textContent.WriteString(fmt.Sprintf("  • %s\n", warning))
+		}
+	}
+
+	if convertErr != nil {
+		textContent.WriteString(fmt.Sprintf("\nError: %v\n", convertErr))
 	}
 
 	return map[string]interface{}{
