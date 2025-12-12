@@ -38,7 +38,7 @@ func init() {
 			{ID: "haiku", DisplayName: "haiku", Description: "Fast and efficient", Recommended: false},
 		},
 		APIKey: llm.APIKeyConfig{Required: false},
-		Mode: llm.ModeAgenticSingle,
+		Mode:   llm.ModeAgenticSingle,
 		Profile: llm.ProviderProfile{
 			MaxPromptChars:    100000,
 			DefaultTimeoutSec: 300,
