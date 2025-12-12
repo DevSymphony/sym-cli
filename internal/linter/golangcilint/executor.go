@@ -50,8 +50,8 @@ func (l *Linter) execute(ctx context.Context, config []byte, files []string) (*l
 		"--config", configFile,
 		"--output.json.path", "stdout",
 		"--output.text.path", "/dev/null", // Disable text output to avoid mixing with JSON
-		"--show-stats=false",              // Disable "N issues." summary text
-		"./...",                           // Check all packages (v2 doesn't support individual files)
+		"--show-stats=false", // Disable "N issues." summary text
+		"./...",              // Check all packages (v2 doesn't support individual files)
 	}
 
 	// Store working directory for path resolution

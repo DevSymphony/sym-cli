@@ -426,12 +426,12 @@ func isValidLinter(name string) bool {
 // isValidFormatter checks if the name is a known golangci-lint formatter
 func isValidFormatter(name string) bool {
 	validFormatters := map[string]bool{
-		"gci":      true,
-		"gofmt":    true,
-		"gofumpt":  true,
+		"gci":       true,
+		"gofmt":     true,
+		"gofumpt":   true,
 		"goimports": true,
-		"golines":  true,
-		"swaggo":   true,
+		"golines":   true,
+		"swaggo":    true,
 	}
 
 	return validFormatters[strings.ToLower(name)]
