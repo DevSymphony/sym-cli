@@ -47,6 +47,12 @@ func init() {
 			EnvVarName: "OPENAI_API_KEY",
 			Prefix:     "sk-",
 		},
+		Mode: llm.ModeParallelAPI,
+		Profile: llm.ProviderProfile{
+			MaxPromptChars:    8000,
+			DefaultTimeoutSec: 60,
+			MaxRetries:        2,
+		},
 	})
 }
 

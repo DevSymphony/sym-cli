@@ -37,6 +37,12 @@ func init() {
 			{ID: "gemini-2.5-pro", DisplayName: "2.5 pro", Description: "Higher capability", Recommended: false},
 		},
 		APIKey: llm.APIKeyConfig{Required: false},
+		Mode: llm.ModeAgenticSingle,
+		Profile: llm.ProviderProfile{
+			MaxPromptChars:    100000,
+			DefaultTimeoutSec: 300,
+			MaxRetries:        1,
+		},
 	})
 }
 

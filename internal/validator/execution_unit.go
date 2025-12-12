@@ -269,3 +269,234 @@ func (u *llmExecutionUnit) GetFiles() []string {
 	}
 	return nil
 }
+
+// agenticLLMExecutionUnit handles all LLM rules in a single call for agentic providers.
+// Unlike llmExecutionUnit which runs (file × rule) in parallel,
+// this sends all files, changes, and rules in one comprehensive prompt,
+// leveraging the agent's internal capabilities (e.g., Claude Code, Gemini CLI).
+type agenticLLMExecutionUnit struct {
+	rules    []schema.PolicyRule
+	changes  []git.Change
+	provider llm.Provider
+	policy   *schema.CodePolicy
+	profile  llm.ProviderProfile
+	verbose  bool
+}
+
+// Execute runs the agentic validation with all rules and changes in a single call.
+func (u *agenticLLMExecutionUnit) Execute(ctx context.Context) ([]Violation, error) {
+	if u.provider == nil {
+		return nil, fmt.Errorf("LLM provider not configured")
+	}
+
+	if len(u.changes) == 0 || len(u.rules) == 0 {
+		return nil, nil
+	}
+
+	// Build comprehensive prompt with all context
+	prompt := u.buildAgenticPrompt()
+
+	// Truncate if exceeds max prompt chars
+	if u.profile.MaxPromptChars > 0 && len(prompt) > u.profile.MaxPromptChars {
+		prompt = prompt[:u.profile.MaxPromptChars-100] + "\n\n... (truncated due to length limit)"
+	}
+
+	if u.verbose {
+		fmt.Printf("   Agentic validation: %d rule(s), %d file(s), prompt %d chars\n",
+			len(u.rules), len(u.changes), len(prompt))
+	}
+
+	// Execute single LLM call
+	response, err := u.provider.Execute(ctx, prompt, llm.JSON)
+	if err != nil {
+		return nil, fmt.Errorf("agentic validation failed: %w", err)
+	}
+
+	// Parse the comprehensive response
+	violations := u.parseAgenticResponse(response)
+
+	return violations, nil
+}
+
+// buildAgenticPrompt creates a comprehensive prompt for agentic validation.
+func (u *agenticLLMExecutionUnit) buildAgenticPrompt() string {
+	var sb strings.Builder
+
+	// System instructions
+	sb.WriteString(`You are a strict code reviewer. Your job is to check if code changes violate coding conventions.
+
+IMPORTANT INSTRUCTIONS:
+1. Be CONSERVATIVE - only report violations when you are CERTAIN the code violates the rule
+2. Do NOT report false positives - if unsure, report as NOT violating
+3. Consider the context of the code when making your decision
+4. Check ALL rules against ALL changed files
+5. Return results as a JSON array
+
+You MUST respond with ONLY a valid JSON array (no markdown, no explanation outside JSON):
+[
+  {
+    "rule_id": "rule-id-here",
+    "file": "path/to/file.ext",
+    "violates": true,
+    "confidence": "high",
+    "description": "Brief explanation of the violation",
+    "suggestion": "How to fix the violation"
+  }
+]
+
+If no violations are found, return an empty array: []
+
+Confidence levels:
+- "high": You are certain this is a violation
+- "medium": Likely a violation but some uncertainty
+- "low": Possible violation but significant uncertainty (will be ignored)
+
+`)
+
+	// Rules section
+	sb.WriteString("=== RULES TO CHECK ===\n\n")
+	for i, rule := range u.rules {
+		sb.WriteString(fmt.Sprintf("Rule %d: [%s] (severity: %s)\n", i+1, rule.ID, rule.Severity))
+		sb.WriteString(fmt.Sprintf("  Description: %s\n", rule.Desc))
+		if rule.Category != "" {
+			sb.WriteString(fmt.Sprintf("  Category: %s\n", rule.Category))
+		}
+		if rule.When != nil && len(rule.When.Languages) > 0 {
+			sb.WriteString(fmt.Sprintf("  Applies to: %s\n", strings.Join(rule.When.Languages, ", ")))
+		}
+		sb.WriteString("\n")
+	}
+
+	// Changes section
+	sb.WriteString("=== FILES AND CHANGES TO REVIEW ===\n\n")
+	for _, change := range u.changes {
+		if change.Status == "D" {
+			continue // Skip deleted files
+		}
+
+		sb.WriteString(fmt.Sprintf("--- File: %s (status: %s) ---\n", change.FilePath, change.Status))
+
+		// Extract and include added/modified lines
+		addedLines := git.ExtractAddedLines(change.Diff)
+		if len(addedLines) == 0 && strings.TrimSpace(change.Diff) != "" {
+			addedLines = strings.Split(change.Diff, "\n")
+		}
+
+		if len(addedLines) > 0 {
+			code := strings.Join(addedLines, "\n")
+			// Truncate individual file content if too long
+			const maxFileCodeLen = 5000
+			if len(code) > maxFileCodeLen {
+				code = code[:maxFileCodeLen] + "\n... (file content truncated)"
+			}
+			sb.WriteString(code)
+			sb.WriteString("\n")
+		}
+		sb.WriteString("\n")
+	}
+
+	sb.WriteString("=== END OF FILES ===\n\n")
+	sb.WriteString("Analyze ALL files against ALL rules. Report only confirmed violations as JSON array.")
+
+	return sb.String()
+}
+
+// agenticViolationResponse represents a single violation in the agentic response
+type agenticViolationResponse struct {
+	RuleID      string `json:"rule_id"`
+	File        string `json:"file"`
+	Violates    bool   `json:"violates"`
+	Confidence  string `json:"confidence"`
+	Description string `json:"description"`
+	Suggestion  string `json:"suggestion"`
+}
+
+// parseAgenticResponse parses the JSON array response from agentic validation
+func (u *agenticLLMExecutionUnit) parseAgenticResponse(response string) []Violation {
+	var violations []Violation
+
+	// Clean up response - remove markdown fences if present
+	response = strings.TrimSpace(response)
+	response = strings.TrimPrefix(response, "```json")
+	response = strings.TrimPrefix(response, "```")
+	response = strings.TrimSuffix(response, "```")
+	response = strings.TrimSpace(response)
+
+	// Find JSON array in response
+	startIdx := strings.Index(response, "[")
+	endIdx := strings.LastIndex(response, "]")
+	if startIdx == -1 || endIdx == -1 || endIdx <= startIdx {
+		return violations
+	}
+
+	jsonStr := response[startIdx : endIdx+1]
+
+	// Parse JSON array
+	var results []agenticViolationResponse
+	if err := json.Unmarshal([]byte(jsonStr), &results); err != nil {
+		// Try parsing as single object (fallback)
+		var single agenticViolationResponse
+		if err := json.Unmarshal([]byte(jsonStr), &single); err == nil {
+			results = []agenticViolationResponse{single}
+		} else {
+			return violations
+		}
+	}
+
+	// Convert to Violation structs
+	for _, r := range results {
+		// Skip non-violations and low-confidence results
+		if !r.Violates || r.Confidence == "low" {
+			continue
+		}
+
+		// Find the matching rule for severity
+		severity := "warning"
+		for _, rule := range u.rules {
+			if rule.ID == r.RuleID {
+				severity = rule.Severity
+				break
+			}
+		}
+
+		message := r.Description
+		if r.Suggestion != "" {
+			message += fmt.Sprintf(" | Suggestion: %s", r.Suggestion)
+		}
+
+		violations = append(violations, Violation{
+			RuleID:   r.RuleID,
+			Severity: severity,
+			Message:  message,
+			File:     r.File,
+			ToolName: "llm-validator",
+		})
+	}
+
+	return violations
+}
+
+// GetRuleIDs returns all rule IDs in this execution unit
+func (u *agenticLLMExecutionUnit) GetRuleIDs() []string {
+	ids := make([]string, len(u.rules))
+	for i, rule := range u.rules {
+		ids[i] = rule.ID
+	}
+	return ids
+}
+
+// GetEngineName returns "llm-validator"
+func (u *agenticLLMExecutionUnit) GetEngineName() string {
+	return "llm-validator"
+}
+
+// GetFiles returns all files in this execution unit
+func (u *agenticLLMExecutionUnit) GetFiles() []string {
+	files := make([]string, 0, len(u.changes))
+	for _, change := range u.changes {
+		if change.Status != "D" {
+			files = append(files, change.FilePath)
+		}
+	}
+	return files
+}

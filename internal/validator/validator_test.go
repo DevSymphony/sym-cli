@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/DevSymphony/sym-cli/internal/linter"
+	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/util/git"
 	"github.com/DevSymphony/sym-cli/pkg/schema"
 	"github.com/stretchr/testify/assert"
@@ -472,5 +473,242 @@ func TestGroupRulesByEngine(t *testing.T) {
 
 		assert.Len(t, groups["eslint"].files, 1)
 		assert.True(t, groups["eslint"].files["main.go"])
+	})
+}
+
+func TestCreateLLMExecutionUnits_ModeBasedBranching(t *testing.T) {
+	changes := []git.Change{
+		{FilePath: "app.js", Status: "M", Diff: "+console.log('test')"},
+		{FilePath: "main.py", Status: "A", Diff: "+print('hello')"},
+	}
+	rules := []schema.PolicyRule{
+		{ID: "rule-1", Enabled: true, Severity: "error", Desc: "No console.log"},
+		{ID: "rule-2", Enabled: true, Severity: "warning", Desc: "No print statements"},
+	}
+	group := &ruleGroup{
+		engineName: "llm-validator",
+		rules:      rules,
+		changes:    changes,
+		files:      map[string]bool{"app.js": true, "main.py": true},
+	}
+
+	t.Run("parallel_api mode creates multiple units (file x rule)", func(t *testing.T) {
+		v := &Validator{
+			llmProviderInfo: &llm.ProviderInfo{
+				Mode: llm.ModeParallelAPI,
+				Profile: llm.ProviderProfile{
+					MaxPromptChars: 8000,
+				},
+			},
+		}
+		units := v.createLLMExecutionUnits(group)
+
+		// 2 files x 2 rules = 4 units (parallel API mode)
+		assert.Len(t, units, 4)
+		for _, unit := range units {
+			assert.Equal(t, "llm-validator", unit.GetEngineName())
+			assert.Len(t, unit.GetRuleIDs(), 1) // Each unit has 1 rule
+			assert.Len(t, unit.GetFiles(), 1)   // Each unit has 1 file
+		}
+	})
+
+	t.Run("agentic_single mode creates single unit (all files, all rules)", func(t *testing.T) {
+		v := &Validator{
+			llmProviderInfo: &llm.ProviderInfo{
+				Mode: llm.ModeAgenticSingle,
+				Profile: llm.ProviderProfile{
+					MaxPromptChars:    100000,
+					DefaultTimeoutSec: 300,
+				},
+			},
+		}
+		units := v.createLLMExecutionUnits(group)
+
+		// Agentic mode: 1 unit with all files and rules
+		assert.Len(t, units, 1)
+		assert.Equal(t, "llm-validator", units[0].GetEngineName())
+		assert.Len(t, units[0].GetRuleIDs(), 2) // All rules in single unit
+		assert.Len(t, units[0].GetFiles(), 2)   // All files in single unit
+	})
+
+	t.Run("nil provider info defaults to parallel_api mode", func(t *testing.T) {
+		v := &Validator{
+			llmProviderInfo: nil, // No provider info
+		}
+		units := v.createLLMExecutionUnits(group)
+
+		// Default (parallel): 2 files x 2 rules = 4 units
+		assert.Len(t, units, 4)
+	})
+
+	t.Run("empty changes returns no units", func(t *testing.T) {
+		emptyGroup := &ruleGroup{
+			engineName: "llm-validator",
+			rules:      rules,
+			changes:    []git.Change{},
+			files:      map[string]bool{},
+		}
+		v := &Validator{
+			llmProviderInfo: &llm.ProviderInfo{Mode: llm.ModeAgenticSingle},
+		}
+		units := v.createLLMExecutionUnits(emptyGroup)
+		assert.Len(t, units, 0)
+	})
+
+	t.Run("empty rules returns no units", func(t *testing.T) {
+		noRulesGroup := &ruleGroup{
+			engineName: "llm-validator",
+			rules:      []schema.PolicyRule{},
+			changes:    changes,
+			files:      map[string]bool{"app.js": true},
+		}
+		v := &Validator{
+			llmProviderInfo: &llm.ProviderInfo{Mode: llm.ModeAgenticSingle},
+		}
+		units := v.createLLMExecutionUnits(noRulesGroup)
+		assert.Len(t, units, 0)
+	})
+}
+
+func TestAgenticLLMExecutionUnit_Getters(t *testing.T) {
+	rules := []schema.PolicyRule{
+		{ID: "rule-1", Severity: "error"},
+		{ID: "rule-2", Severity: "warning"},
+	}
+	changes := []git.Change{
+		{FilePath: "app.js", Status: "M"},
+		{FilePath: "main.py", Status: "A"},
+		{FilePath: "deleted.go", Status: "D"}, // Should be excluded from GetFiles
+	}
+
+	unit := &agenticLLMExecutionUnit{
+		rules:   rules,
+		changes: changes,
+	}
+
+	t.Run("GetRuleIDs returns all rule IDs", func(t *testing.T) {
+		ids := unit.GetRuleIDs()
+		assert.Equal(t, []string{"rule-1", "rule-2"}, ids)
+	})
+
+	t.Run("GetEngineName returns llm-validator", func(t *testing.T) {
+		assert.Equal(t, "llm-validator", unit.GetEngineName())
+	})
+
+	t.Run("GetFiles excludes deleted files", func(t *testing.T) {
+		files := unit.GetFiles()
+		assert.Len(t, files, 2)
+		assert.Contains(t, files, "app.js")
+		assert.Contains(t, files, "main.py")
+		assert.NotContains(t, files, "deleted.go")
+	})
+}
+
+func TestAgenticLLMExecutionUnit_BuildPrompt(t *testing.T) {
+	rules := []schema.PolicyRule{
+		{ID: "security-1", Severity: "error", Desc: "No hardcoded secrets", Category: "security"},
+		{ID: "style-1", Severity: "warning", Desc: "Use const instead of let", When: &schema.Selector{Languages: []string{"javascript"}}},
+	}
+	changes := []git.Change{
+		{FilePath: "app.js", Status: "M", Diff: "+const API_KEY = 'secret123';"},
+		{FilePath: "main.py", Status: "A", Diff: "+password = 'admin'"},
+	}
+
+	unit := &agenticLLMExecutionUnit{
+		rules:   rules,
+		changes: changes,
+		profile: llm.ProviderProfile{MaxPromptChars: 100000},
+	}
+
+	prompt := unit.buildAgenticPrompt()
+
+	// Check prompt contains key sections
+	assert.Contains(t, prompt, "=== RULES TO CHECK ===")
+	assert.Contains(t, prompt, "=== FILES AND CHANGES TO REVIEW ===")
+	assert.Contains(t, prompt, "=== END OF FILES ===")
+
+	// Check rules are included
+	assert.Contains(t, prompt, "security-1")
+	assert.Contains(t, prompt, "No hardcoded secrets")
+	assert.Contains(t, prompt, "style-1")
+	assert.Contains(t, prompt, "Use const instead of let")
+
+	// Check files are included
+	assert.Contains(t, prompt, "app.js")
+	assert.Contains(t, prompt, "main.py")
+
+	// Check JSON format instructions
+	assert.Contains(t, prompt, "JSON array")
+	assert.Contains(t, prompt, "rule_id")
+}
+
+func TestAgenticLLMExecutionUnit_ParseResponse(t *testing.T) {
+	rules := []schema.PolicyRule{
+		{ID: "security-1", Severity: "error"},
+		{ID: "style-1", Severity: "warning"},
+	}
+	unit := &agenticLLMExecutionUnit{rules: rules}
+
+	t.Run("parses valid JSON array response", func(t *testing.T) {
+		response := `[
+			{"rule_id": "security-1", "file": "app.js", "violates": true, "confidence": "high", "description": "Found hardcoded secret", "suggestion": "Use environment variables"},
+			{"rule_id": "style-1", "file": "main.py", "violates": true, "confidence": "medium", "description": "Should use const", "suggestion": "Change let to const"}
+		]`
+		violations := unit.parseAgenticResponse(response)
+
+		assert.Len(t, violations, 2)
+		assert.Equal(t, "security-1", violations[0].RuleID)
+		assert.Equal(t, "error", violations[0].Severity)
+		assert.Equal(t, "app.js", violations[0].File)
+		assert.Contains(t, violations[0].Message, "Found hardcoded secret")
+		assert.Contains(t, violations[0].Message, "Use environment variables")
+	})
+
+	t.Run("filters out low confidence results", func(t *testing.T) {
+		response := `[
+			{"rule_id": "security-1", "file": "app.js", "violates": true, "confidence": "high", "description": "High confidence"},
+			{"rule_id": "style-1", "file": "main.py", "violates": true, "confidence": "low", "description": "Low confidence - ignored"}
+		]`
+		violations := unit.parseAgenticResponse(response)
+
+		assert.Len(t, violations, 1)
+		assert.Equal(t, "security-1", violations[0].RuleID)
+	})
+
+	t.Run("filters out non-violations", func(t *testing.T) {
+		response := `[
+			{"rule_id": "security-1", "file": "app.js", "violates": true, "confidence": "high", "description": "Violation"},
+			{"rule_id": "style-1", "file": "main.py", "violates": false, "confidence": "high", "description": "Not a violation"}
+		]`
+		violations := unit.parseAgenticResponse(response)
+
+		assert.Len(t, violations, 1)
+		assert.Equal(t, "security-1", violations[0].RuleID)
+	})
+
+	t.Run("handles empty array", func(t *testing.T) {
+		response := `[]`
+		violations := unit.parseAgenticResponse(response)
+		assert.Len(t, violations, 0)
+	})
+
+	t.Run("handles markdown-wrapped JSON", func(t *testing.T) {
+		response := "```json\n[{\"rule_id\": \"security-1\", \"file\": \"app.js\", \"violates\": true, \"confidence\": \"high\", \"description\": \"test\"}]\n```"
+		violations := unit.parseAgenticResponse(response)
+		assert.Len(t, violations, 1)
+	})
+
+	t.Run("handles invalid JSON gracefully", func(t *testing.T) {
+		response := `not valid json`
+		violations := unit.parseAgenticResponse(response)
+		assert.Len(t, violations, 0)
+	})
+
+	t.Run("uses default severity for unknown rule", func(t *testing.T) {
+		response := `[{"rule_id": "unknown-rule", "file": "app.js", "violates": true, "confidence": "high", "description": "test"}]`
+		violations := unit.parseAgenticResponse(response)
+
+		assert.Len(t, violations, 1)
+		assert.Equal(t, "warning", violations[0].Severity) // Default severity
 	})
 }
