@@ -1,5 +1,9 @@
 {
   "version": "1.0.0",
+  "category": [
+    {"name": "naming", "description": "Naming conventions for classes, methods, and variables"},
+    {"name": "error_handling", "description": "Error handling and exception management rules"}
+  ],
   "defaults": {
     "languages": ["java"],
     "severity": "error"

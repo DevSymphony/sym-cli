@@ -1,5 +1,11 @@
 {
   "version": "1.0.0",
+  "category": [
+    {"name": "error_handling", "description": "Type safety and error handling rules"},
+    {"name": "naming", "description": "Naming conventions for types, interfaces, and variables"},
+    {"name": "formatting", "description": "Code formatting and module structure"},
+    {"name": "documentation", "description": "Documentation rules (JSDoc, type annotations)"}
+  ],
   "defaults": {
     "languages": ["typescript"],
     "severity": "error",

@@ -1,5 +1,11 @@
 {
   "version": "1.0.0",
+  "category": [
+    {"name": "naming", "description": "Naming conventions for components, variables, and functions"},
+    {"name": "error_handling", "description": "Error handling and React Hooks best practices"},
+    {"name": "formatting", "description": "Code formatting and component structure rules"},
+    {"name": "performance", "description": "Performance optimization and rendering efficiency"}
+  ],
   "defaults": {
     "languages": ["javascript", "typescript", "jsx", "tsx"],
     "severity": "error",
