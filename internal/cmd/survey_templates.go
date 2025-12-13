@@ -68,3 +68,27 @@ func useMultiSelectTemplateNoFilter() func() {
 		survey.MultiSelectQuestionTemplate = original
 	}
 }
+
+// Custom Select template with no message output - only shows options
+var selectTemplateNoMessage = `
+{{- define "option"}}
+    {{- if eq .SelectedIndex .CurrentIndex }}{{color .Config.Icons.SelectFocus.Format }}{{ .Config.Icons.SelectFocus.Text }} {{else}}{{color "default"}}  {{end}}
+    {{- .CurrentOpt.Value}}
+    {{- color "reset"}}
+{{end}}
+{{- if .ShowAnswer}}{{/* hide answer line */}}
+{{- else}}
+  {{- range $ix, $option := .PageEntries}}
+    {{- template "option" $.IterateOption $ix $option}}
+  {{- end}}
+{{- end}}`
+
+// useSelectTemplateNoMessage temporarily overrides the global Select template
+// to hide message and answer output. Only shows options.
+func useSelectTemplateNoMessage() func() {
+	original := survey.SelectQuestionTemplate
+	survey.SelectQuestionTemplate = selectTemplateNoMessage
+	return func() {
+		survey.SelectQuestionTemplate = original
+	}
+}
