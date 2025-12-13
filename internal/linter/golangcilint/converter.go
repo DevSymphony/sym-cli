@@ -210,7 +210,7 @@ func (c *Converter) convertToGolangciLinter(ctx context.Context, rule schema.Use
 	systemPrompt := `You are a golangci-lint v2 configuration expert. Convert natural language Go coding rules to golangci-lint linter or formatter names and settings.
 
 CRITICAL: In golangci-lint v2, FORMATTERS and LINTERS are DIFFERENT categories.
-- FORMATTERS: Tools that format code (gofmt, goimports, gofumpt, gci, golines, swaggo)
+- FORMATTERS: Tools that format code (gofmt, goimports, gofumpt, gci, golines)
 - LINTERS: Tools that analyze code for issues (errcheck, govet, gosec, etc.)
 
 Return ONLY a JSON object (no markdown fences) with this structure:
@@ -221,72 +221,76 @@ Return ONLY a JSON object (no markdown fences) with this structure:
 }
 
 === FORMATTERS (is_formatter: true) ===
-Use these for code formatting rules:
-- gofmt: Formats code according to standard Go formatting
-- goimports: Formats imports and adds missing imports
+- gofmt: Standard Go formatting
+- goimports: Formats imports and adds missing ones
 - gofumpt: Stricter formatting than gofmt
-- gci: Import statement formatting with custom ordering
-- golines: Fixes long lines by wrapping them
-- swaggo: Formats swaggo comments
+- gci: Import ordering (settings: {"sections": ["standard", "default", "prefix(github.com/myorg)"]})
+- golines: Line length limiting (settings: {"max-len": 120})
 
 === LINTERS (is_formatter: false) ===
 
-Error Handling:
-- errcheck: Check for unchecked errors
-- wrapcheck: Checks that errors from external packages are wrapped
-- nilerr: Finds code that returns nil even if it checks that the error is not nil
+ERROR HANDLING:
+- errcheck: Unchecked errors (settings: {"check-type-assertions": true, "check-blank": true})
+- wrapcheck: Errors from external packages must be wrapped
+- nilerr: Returns nil even when error is not nil
+- err113: Error handling best practices
+- errorlint: Error wrapping issues (settings: {"errorf": true})
 
-Code Quality:
-- govet: Examines Go source code and reports suspicious constructs
-- staticcheck: Advanced static analysis (find bugs, performance issues)
-- ineffassign: Detects ineffectual assignments
-- unused: Checks for unused code
-- revive: Fast, configurable linter (replacement for golint)
+CODE QUALITY:
+- govet: Suspicious constructs
+- staticcheck: Advanced static analysis (includes style checks formerly in stylecheck)
+- ineffassign: Ineffectual assignments
+- unused: Unused code detection
+- revive: Configurable linter (replacement for golint, can check style/naming)
 
-Complexity:
-- gocyclo: Computes cyclomatic complexity
-- gocognit: Computes cognitive complexity
-- nestif: Reports deeply nested if statements
-- funlen: Detects long functions
-- cyclop: Checks function and package cyclomatic complexity
+COMPLEXITY:
+- gocyclo: Cyclomatic complexity (settings: {"min-complexity": 10})
+- gocognit: Cognitive complexity (settings: {"min-complexity": 15})
+- funlen: Function length (settings: {"lines": 60, "statements": 40})
+- nestif: Nested if depth (settings: {"min-complexity": 4})
+- cyclop: Package complexity
 
-Performance:
-- prealloc: Finds slice declarations that could be preallocated
-- bodyclose: Checks whether HTTP response body is closed
+PERFORMANCE:
+- prealloc: Slice preallocation opportunities
+- bodyclose: HTTP response body closure
+- perfsprint: fmt.Sprintf optimization
 
-Security:
-- gosec: Inspects source code for security problems
+SECURITY:
+- gosec: Security vulnerabilities (settings: {"severity": "medium", "confidence": "medium"})
 
-Style:
-- stylecheck: Enforces Go style guide
-- goconst: Finds repeated strings for constants
-- misspell: Finds misspelled English words
-- godot: Checks if comments end in a period
-- nlreturn: Checks for blank lines before return
+STYLE & NAMING:
+- goconst: Repeated strings for constants (settings: {"min-len": 3, "min-occurrences": 3})
+- misspell: Spelling errors (settings: {"locale": "US"})
+- godot: Comments end with period
+- nlreturn: Blank line before return
+- varnamelen: Variable name length (settings: {"min-name-length": 3})
+- lll: Line length limit (settings: {"line-length": 120})
 
-Other Linters:
-- dupl: Code clone detection
-- gocritic: Checks for bugs, performance and style issues
-- gosimple: Simplifies code
-- noctx: Finds HTTP requests without context
-- unconvert: Removes unnecessary type conversions
-- exportloopref: Checks for pointers to loop variables
+DOCUMENTATION:
+- godoclint: Godoc comment validation
 
-Settings examples:
-- gocyclo: {"min-complexity": 10}
-- gocognit: {"min-complexity": 15}
-- funlen: {"lines": 60, "statements": 40}
-- gosec: {"severity": "medium", "confidence": "medium"}
-- errcheck: {"check-type-assertions": true}
-- gofmt: {"simplify": true}
-- goimports: {"local-prefixes": "github.com/myorg"}
+OTHER:
+- dupl: Code duplication (settings: {"threshold": 100})
+- gocritic: Bugs, performance, style issues
+- noctx: HTTP requests without context
+- unconvert: Unnecessary type conversions
+- mnd: Magic number detection (settings: {"checks": ["argument", "case", "condition", "operation", "return", "assign"]})
 
-CRITICAL RULES:
-1. ONLY use actual golangci-lint tools - do NOT invent names
-2. For formatting rules (gofmt, goimports, etc.) → set is_formatter: true
-3. For analysis/linting rules → set is_formatter: false
-4. If no tool can enforce this requirement, return name as empty string ""
-5. Settings are optional - only include if the rule specifies parameters
+IMPORTANT - REMOVED/CHANGED IN v2:
+1. stylecheck is REMOVED - use staticcheck or revive instead
+2. gosimple is MERGED into staticcheck
+3. typecheck is now built-in (don't use)
+4. exportloopref is REMOVED (Go 1.22+ handles this)
+5. For style rules, prefer revive (most configurable) or staticcheck
+
+DECISION GUIDE:
+- Error must be checked → errcheck
+- Error wrapping → wrapcheck or errorlint
+- Style/naming rules → revive (most flexible) or staticcheck
+- Line length → lll (linter) or golines (formatter)
+- Variable naming → varnamelen or revive
+- Security issues → gosec
+- Cannot be enforced → return empty name ""
 
 Examples:
 
@@ -294,14 +298,6 @@ Input: "Code should follow Go formatting standards"
 Output:
 {
   "name": "gofmt",
-  "is_formatter": true,
-  "settings": {}
-}
-
-Input: "Imports should be properly organized"
-Output:
-{
-  "name": "goimports",
   "is_formatter": true,
   "settings": {}
 }
@@ -322,12 +318,28 @@ Output:
   "settings": {"min-complexity": 15}
 }
 
-Input: "Detect security vulnerabilities"
+Input: "Follow Go style guide"
 Output:
 {
-  "name": "gosec",
+  "name": "staticcheck",
   "is_formatter": false,
   "settings": {}
+}
+
+Input: "Variable names should be descriptive"
+Output:
+{
+  "name": "varnamelen",
+  "is_formatter": false,
+  "settings": {"min-name-length": 3}
+}
+
+Input: "Line length should not exceed 120 characters"
+Output:
+{
+  "name": "lll",
+  "is_formatter": false,
+  "settings": {"line-length": 120}
 }
 
 Input: "File names must be snake_case"
@@ -398,26 +410,30 @@ func validateConfig(config *golangciConfig) error {
 	return nil
 }
 
-// isValidLinter checks if the name is a known golangci-lint linter (NOT formatter)
+// isValidLinter checks if the name is a known golangci-lint v2 linter (NOT formatter)
 func isValidLinter(name string) bool {
 	validLinters := map[string]bool{
 		// Error Handling
 		"errcheck": true, "wrapcheck": true, "nilerr": true, "nilnil": true,
+		"err113": true, "errorlint": true,
 		// Code Quality
 		"govet": true, "staticcheck": true, "ineffassign": true, "unused": true,
-		"revive": true, "typecheck": true,
+		"revive": true,
 		// Complexity
 		"gocyclo": true, "gocognit": true, "nestif": true, "funlen": true, "cyclop": true,
 		// Performance
-		"prealloc": true, "bodyclose": true,
+		"prealloc": true, "bodyclose": true, "perfsprint": true,
 		// Security
 		"gosec": true,
-		// Style (NOT formatters)
-		"stylecheck": true, "goconst": true, "misspell": true, "godot": true, "nlreturn": true,
+		// Style & Naming
+		"goconst": true, "misspell": true, "godot": true, "nlreturn": true,
+		"varnamelen": true, "lll": true,
+		// Documentation
+		"godoclint": true,
 		// Other
-		"dupl": true, "gocritic": true, "gosimple": true, "noctx": true,
-		"unconvert": true, "exportloopref": true, "goprintffuncname": true,
-		"rowserrcheck": true, "sqlclosecheck": true,
+		"dupl": true, "gocritic": true, "noctx": true,
+		"unconvert": true, "goprintffuncname": true,
+		"rowserrcheck": true, "sqlclosecheck": true, "mnd": true,
 	}
 
 	return validLinters[strings.ToLower(name)]
