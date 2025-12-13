@@ -11,6 +11,7 @@ import (
 
 	"github.com/DevSymphony/sym-cli/internal/converter"
 	"github.com/DevSymphony/sym-cli/internal/importer"
+	"github.com/DevSymphony/sym-cli/internal/linter"
 	"github.com/DevSymphony/sym-cli/internal/llm"
 	"github.com/DevSymphony/sym-cli/internal/policy"
 	"github.com/DevSymphony/sym-cli/internal/roles"
@@ -837,9 +838,15 @@ func (s *Server) needsConversion(codePolicyPath string) bool {
 // extractSourceRuleID extracts the original user-policy rule ID from a code-policy rule ID.
 // For example: "FMT-001-eslint" -> "FMT-001"
 func extractSourceRuleID(codePolicyRuleID string) string {
-	// Known linter suffixes that are appended during conversion (see converter.go:179)
-	linterSuffixes := []string{"-eslint", "-prettier", "-tsc", "-pylint", "-checkstyle", "-pmd", "-llm-validator"}
-	for _, suffix := range linterSuffixes {
+	// Build linter suffixes dynamically from registry + llm-validator
+	toolNames := linter.Global().GetAllToolNames()
+	suffixes := make([]string, 0, len(toolNames)+1)
+	for _, name := range toolNames {
+		suffixes = append(suffixes, "-"+name)
+	}
+	suffixes = append(suffixes, "-llm-validator") // llm-validator is not a linter but a validator
+
+	for _, suffix := range suffixes {
 		if strings.HasSuffix(codePolicyRuleID, suffix) {
 			return strings.TrimSuffix(codePolicyRuleID, suffix)
 		}
