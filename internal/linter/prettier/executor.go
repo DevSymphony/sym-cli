@@ -40,7 +40,9 @@ func (l *Linter) execute(ctx context.Context, config []byte, files []string, mod
 
 	args = append(args, files...)
 
-	// Execute (uses CWD by default)
+	// Execute
+	// Reset WorkDir to use CWD (Install() may have set it to ToolsDir)
+	l.executor.WorkDir = ""
 	output, err := l.executor.Execute(ctx, prettierCmd, args...)
 
 	// Prettier returns non-zero exit code if files need formatting (in --check mode)
