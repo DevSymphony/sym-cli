@@ -568,6 +568,7 @@ async function handleSaveCategory(e) {
         }
 
         renderCategories();
+        updateRuleCategorySelects(); // Update category dropdowns in rule cards
         renderRules(); // Update rules to reflect category changes
         showToast(result.message || '카테고리가 수정되었습니다');
     } catch (error) {
@@ -614,6 +615,7 @@ async function handleAddCategory() {
         descInput.value = '';
 
         renderCategories();
+        updateRuleCategorySelects(); // Update category dropdowns in rule cards
         showToast(`카테고리 '${name}'이(가) 추가되었습니다`);
     } catch (error) {
         console.error('Failed to add category:', error);
@@ -639,6 +641,7 @@ async function handleDeleteCategory(e) {
         appState.policy.category = appState.policy.category.filter(c => c.name !== categoryName);
 
         renderCategories();
+        updateRuleCategorySelects(); // Update category dropdowns in rule cards
         showToast(`카테고리 '${categoryName}'이(가) 삭제되었습니다`);
     } catch (error) {
         console.error('Failed to delete category:', error);
@@ -655,6 +658,16 @@ function updateCategoryFilter() {
 
     filterSelect.innerHTML = '<option value="">전체 카테고리</option>' +
         categories.map(cat => `<option value="${cat.name}" ${cat.name === currentValue ? 'selected' : ''}>${cat.name}</option>`).join('');
+}
+
+// Update all category dropdowns in rule cards
+function updateRuleCategorySelects() {
+    const categories = getAvailableCategories();
+    document.querySelectorAll('.category-select').forEach(select => {
+        const currentValue = select.value;
+        select.innerHTML = '<option value="">선택 안함</option>' +
+            categories.map(cat => `<option value="${cat.name}" ${cat.name === currentValue ? 'selected' : ''}>${cat.name}</option>`).join('');
+    });
 }
 
 // ==================== Role Selection ====================

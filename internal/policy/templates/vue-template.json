@@ -1,5 +1,11 @@
 {
   "version": "1.0.0",
+  "category": [
+    {"name": "naming", "description": "Naming conventions for components and files"},
+    {"name": "formatting", "description": "Code formatting and Composition API structure"},
+    {"name": "error_handling", "description": "Error handling and reactive state management"},
+    {"name": "performance", "description": "Performance optimization and computed properties"}
+  ],
   "defaults": {
     "languages": ["javascript", "typescript", "vue"],
     "severity": "error",

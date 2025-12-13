@@ -853,48 +853,36 @@ func (s *Server) convertUserPolicy(userPolicyPath, codePolicyPath string) error 
 	return ConvertPolicyWithLLM(userPolicyPath, codePolicyPath)
 }
 
-// getRBACInfo returns RBAC information for the current user
+// getRBACInfo returns RBAC information for the current role
 func (s *Server) getRBACInfo() string {
-	// Try to get current user
-	username, err := git.GetCurrentUser()
-	if err != nil {
-		// Not in a git environment or user not configured
+	// Get current role from .env
+	userRole, err := roles.GetCurrentRole()
+	if err != nil || userRole == "" {
+		// No role selected
 		return ""
-	}
-
-	// Get user's role
-	userRole, err := roles.GetUserRole(username)
-	if err != nil {
-		// Roles not configured
-		return ""
-	}
-
-	if userRole == "none" {
-		return fmt.Sprintf("⚠️  RBAC: User '%s' has no assigned role. You may not have permission to modify files.", username)
 	}
 
 	// Load user policy to get RBAC details
 	userPolicy, err := roles.LoadUserPolicyFromRepo()
 	if err != nil {
 		// User policy not available
-		return fmt.Sprintf("🔐 RBAC: Current user '%s' has role '%s'", username, userRole)
+		return fmt.Sprintf("🔐 RBAC: Current role '%s'", userRole)
 	}
 
 	// Check if RBAC is defined
 	if userPolicy.RBAC == nil || userPolicy.RBAC.Roles == nil {
-		return fmt.Sprintf("🔐 RBAC: Current user '%s' has role '%s' (no restrictions defined)", username, userRole)
+		return fmt.Sprintf("🔐 RBAC: Current role '%s' (no restrictions defined)", userRole)
 	}
 
 	// Get role configuration
 	roleConfig, exists := userPolicy.RBAC.Roles[userRole]
 	if !exists {
-		return fmt.Sprintf("⚠️  RBAC: User '%s' has role '%s', but role is not defined in policy", username, userRole)
+		return fmt.Sprintf("⚠️  RBAC: Role '%s' is not defined in policy", userRole)
 	}
 
 	// Build RBAC info message
 	var rbacMsg strings.Builder
 	rbacMsg.WriteString("🔐 RBAC Information:\n")
-	rbacMsg.WriteString(fmt.Sprintf("   User: %s\n", username))
 	rbacMsg.WriteString(fmt.Sprintf("   Role: %s\n", userRole))
 
 	if len(roleConfig.AllowWrite) > 0 {
