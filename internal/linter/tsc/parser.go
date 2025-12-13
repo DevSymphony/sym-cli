@@ -10,6 +10,31 @@ import (
 	"github.com/DevSymphony/sym-cli/internal/linter"
 )
 
+// errorCodeMapping maps TSC error codes to policy rule keywords.
+var errorCodeMapping = map[string]string{
+	// no-implicit-any: Parameter/variable implicitly has 'any' type
+	"7006": "no-implicit-any",
+	"7005": "no-implicit-any",
+	"7019": "no-implicit-any",
+	"7031": "no-implicit-any",
+
+	// strict-null-checks: Object is possibly null/undefined
+	"2531":  "strict-null-checks",
+	"2532":  "strict-null-checks",
+	"2533":  "strict-null-checks",
+	"18047": "strict-null-checks",
+	"18048": "strict-null-checks",
+}
+
+// mapErrorCode converts TSC error code to RuleID.
+// Returns mapped keyword if exists, otherwise returns "TS{code}" format.
+func mapErrorCode(code string) string {
+	if keyword, ok := errorCodeMapping[code]; ok {
+		return keyword
+	}
+	return fmt.Sprintf("TS%s", code)
+}
+
 // TSCDiagnostic represents a TypeScript diagnostic in JSON format.
 type TSCDiagnostic struct {
 	File struct {
@@ -76,7 +101,7 @@ func parseTextOutput(text string) ([]linter.Violation, error) {
 			Column:   col,
 			Message:  message,
 			Severity: mapSeverity(severity),
-			RuleID:   fmt.Sprintf("TS%s", code),
+			RuleID:   mapErrorCode(code),
 		})
 	}
 
@@ -98,7 +123,7 @@ func parseJSONOutput(jsonStr string) ([]linter.Violation, error) {
 			Column:   diag.Column,
 			Message:  diag.Message,
 			Severity: mapCategory(diag.Category),
-			RuleID:   fmt.Sprintf("TS%d", diag.Code),
+			RuleID:   mapErrorCode(strconv.Itoa(diag.Code)),
 		}
 	}
 
