@@ -58,10 +58,17 @@ Available subcommands:
 var conventionListCmd = &cobra.Command{
 	Use:   "list",
 	Short: "List all conventions",
-	Long: `List all conventions with their ID, category, description, and severity.
+	Long: `List conventions with their ID, category, description, and severity.
 
 Conventions are defined in user-policy.json and can be customized by the user.
-Run 'sym init' to create default conventions.`,
+Run 'sym init' to create default conventions.
+
+Examples:
+  sym convention list
+  sym convention list --category security
+  sym convention list --languages go
+  sym convention list --languages go,javascript
+  sym convention list --category style --languages typescript`,
 	RunE: runConventionList,
 }
 
@@ -168,9 +175,22 @@ func init() {
 
 	// Remove command flags
 	conventionRemoveCmd.Flags().StringP("file", "f", "", "JSON file with convention IDs to remove")
+
+	// List command flags
+	conventionListCmd.Flags().String("category", "", "Filter by category (e.g., security, style, documentation)")
+	conventionListCmd.Flags().StringSlice("languages", nil, "Filter by programming languages (comma-separated)")
 }
 
 func runConventionList(cmd *cobra.Command, args []string) error {
+	// Get filter flags
+	categoryFilter, _ := cmd.Flags().GetString("category")
+	languagesFilter, _ := cmd.Flags().GetStringSlice("languages")
+
+	// Normalize category: "all" or empty means no filtering
+	if strings.EqualFold(categoryFilter, "all") {
+		categoryFilter = ""
+	}
+
 	// Load conventions from user-policy.json
 	userPolicy, err := roles.LoadUserPolicyFromRepo()
 	if err != nil {
@@ -186,10 +206,46 @@ func runConventionList(cmd *cobra.Command, args []string) error {
 		return nil
 	}
 
-	printTitle("Conventions", fmt.Sprintf("%d conventions available", len(rules)))
+	// Filter rules
+	var filteredRules []schema.UserRule
+	for _, rule := range rules {
+		// Category filter
+		if categoryFilter != "" && rule.Category != categoryFilter {
+			continue
+		}
+
+		// Languages filter: if both request and rule have languages, check intersection
+		if len(languagesFilter) > 0 && len(rule.Languages) > 0 {
+			if !containsAny(rule.Languages, languagesFilter) {
+				continue
+			}
+		}
+
+		filteredRules = append(filteredRules, rule)
+	}
+
+	// Build filter description for output
+	filterDesc := ""
+	if categoryFilter != "" || len(languagesFilter) > 0 {
+		parts := []string{}
+		if categoryFilter != "" {
+			parts = append(parts, fmt.Sprintf("category=%s", categoryFilter))
+		}
+		if len(languagesFilter) > 0 {
+			parts = append(parts, fmt.Sprintf("languages=%s", strings.Join(languagesFilter, ",")))
+		}
+		filterDesc = fmt.Sprintf(" (filtered: %s)", strings.Join(parts, ", "))
+	}
+
+	if len(filteredRules) == 0 {
+		printWarn(fmt.Sprintf("No conventions found%s", filterDesc))
+		return nil
+	}
+
+	printTitle("Conventions", fmt.Sprintf("%d conventions available%s", len(filteredRules), filterDesc))
 	fmt.Println()
 
-	for _, rule := range rules {
+	for _, rule := range filteredRules {
 		// Format: ID [CATEGORY] (languages): description
 		languages := ""
 		if len(rule.Languages) > 0 {
@@ -567,6 +623,18 @@ func runConventionRemove(cmd *cobra.Command, args []string) error {
 	// Print results
 	printConventionBatchResult("Removed", succeeded, failed)
 	return nil
+}
+
+// containsAny checks if haystack contains any of the needles.
+func containsAny(haystack, needles []string) bool {
+	for _, needle := range needles {
+		for _, hay := range haystack {
+			if hay == needle {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // printConventionBatchResult prints the result of a batch operation for conventions.
