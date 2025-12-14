@@ -189,8 +189,8 @@ type RPCError struct {
 
 // ListConventionInput represents the input schema for the list_convention tool (go-sdk).
 type ListConventionInput struct {
-	Category  string   `json:"category,omitempty" jsonschema:"Filter by category (optional). Use 'all' or leave empty to fetch all categories. Options: security, style, documentation, error_handling, architecture, performance, testing"`
-	Languages []string `json:"languages,omitempty" jsonschema:"Programming languages to filter by (optional). Leave empty to get conventions for all languages. Examples: go, javascript, typescript, python, java"`
+	Categories []string `json:"categories,omitempty" jsonschema:"Filter by categories (optional). Leave empty or use [\"all\"] to fetch all categories. Example: [\"security\", \"style\"]"`
+	Languages  []string `json:"languages,omitempty" jsonschema:"Programming languages to filter by (optional). Leave empty to get conventions for all languages. Examples: go, javascript, typescript, python, java"`
 }
 
 // ValidateCodeInput represents the input schema for the validate_code tool (go-sdk).
@@ -303,11 +303,11 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 	// Tool: list_convention
 	sdkmcp.AddTool(server, &sdkmcp.Tool{
 		Name:        "list_convention",
-		Description: "[MANDATORY BEFORE CODING] List project conventions BEFORE writing any code to ensure compliance from the start. Filter by category or languages.",
+		Description: "[MANDATORY BEFORE CODING] List project conventions BEFORE writing any code to ensure compliance from the start. Filter by categories or languages.",
 	}, func(ctx context.Context, req *sdkmcp.CallToolRequest, input ListConventionInput) (*sdkmcp.CallToolResult, map[string]any, error) {
 		params := map[string]any{
-			"category":  input.Category,
-			"languages": input.Languages,
+			"categories": input.Categories,
+			"languages":  input.Languages,
 		}
 		result, rpcErr := s.handleListConvention(params)
 		if rpcErr != nil {
@@ -446,8 +446,8 @@ func (s *Server) runStdioWithSDK(ctx context.Context) error {
 
 // QueryConventionsRequest is a request to query conventions.
 type QueryConventionsRequest struct {
-	Category  string   `json:"category"`  // optional; use "all" or empty to fetch all categories
-	Languages []string `json:"languages"` // optional; empty means all languages
+	Categories []string `json:"categories"` // optional; use ["all"] or empty to fetch all categories
+	Languages  []string `json:"languages"`  // optional; empty means all languages
 }
 
 // ConventionItem is a convention item.
@@ -479,10 +479,8 @@ func (s *Server) handleListConvention(params map[string]interface{}) (interface{
 	}
 
 	// Apply defaults for missing parameters
-	// If category is empty or "all", return all categories
-	if strings.TrimSpace(req.Category) == "" || strings.EqualFold(req.Category, "all") {
-		req.Category = ""
-	}
+	// If categories contains "all" or is empty, return all categories
+	req.Categories = normalizeCategories(req.Categories)
 
 	// If languages is empty, return all languages
 	// This is more user-friendly than requiring the parameter
@@ -532,7 +530,8 @@ func (s *Server) filterConventions(req QueryConventionsRequest) []ConventionItem
 	// If UserPolicy is loaded, use natural language rules
 	if s.userPolicy != nil {
 		for _, rule := range s.userPolicy.Rules {
-			if req.Category != "" && rule.Category != req.Category {
+			// Check category filter
+			if !matchesCategories(rule.Category, req.Categories) {
 				continue
 			}
 
@@ -576,7 +575,8 @@ func (s *Server) filterConventions(req QueryConventionsRequest) []ConventionItem
 				continue
 			}
 
-			if req.Category != "" && rule.Category != req.Category {
+			// Check category filter (supports multiple categories)
+			if !matchesCategories(rule.Category, req.Categories) {
 				continue
 			}
 
@@ -787,6 +787,46 @@ func containsAny(haystack, needles []string) bool {
 			if hay == needle {
 				return true
 			}
+		}
+	}
+	return false
+}
+
+// normalizeCategories normalizes the categories input.
+// Returns nil if categories is empty or contains "all" (meaning fetch all).
+func normalizeCategories(categories []string) []string {
+	if len(categories) == 0 {
+		return nil
+	}
+	// Check if any category is "all"
+	for _, cat := range categories {
+		if strings.EqualFold(strings.TrimSpace(cat), "all") {
+			return nil
+		}
+	}
+	// Trim whitespace from each category
+	result := make([]string, 0, len(categories))
+	for _, cat := range categories {
+		trimmed := strings.TrimSpace(cat)
+		if trimmed != "" {
+			result = append(result, trimmed)
+		}
+	}
+	if len(result) == 0 {
+		return nil
+	}
+	return result
+}
+
+// matchesCategories checks if the given category matches any of the requested categories.
+// Returns true if categories is nil/empty (meaning all categories match).
+func matchesCategories(ruleCategory string, requestedCategories []string) bool {
+	if len(requestedCategories) == 0 {
+		return true
+	}
+	for _, cat := range requestedCategories {
+		if ruleCategory == cat {
+			return true
 		}
 	}
 	return false
