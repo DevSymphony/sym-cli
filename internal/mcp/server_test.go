@@ -73,8 +73,8 @@ func TestQueryConventions(t *testing.T) {
 
 	t.Run("query all categories for javascript", func(t *testing.T) {
 		params := map[string]interface{}{
-			"category":  "all",
-			"languages": []interface{}{"javascript"},
+			"categories": []interface{}{"all"},
+			"languages":  []interface{}{"javascript"},
 		}
 
 		result, rpcErr := server.handleListConvention(params)
@@ -96,8 +96,8 @@ func TestQueryConventions(t *testing.T) {
 
 	t.Run("query documentation category for javascript", func(t *testing.T) {
 		params := map[string]interface{}{
-			"category":  "documentation",
-			"languages": []interface{}{"javascript"},
+			"categories": []interface{}{"documentation"},
+			"languages":  []interface{}{"javascript"},
 		}
 
 		result, rpcErr := server.handleListConvention(params)
@@ -118,8 +118,8 @@ func TestQueryConventions(t *testing.T) {
 
 	t.Run("query security category for typescript", func(t *testing.T) {
 		params := map[string]interface{}{
-			"category":  "security",
-			"languages": []interface{}{"typescript"},
+			"categories": []interface{}{"security"},
+			"languages":  []interface{}{"typescript"},
 		}
 
 		result, rpcErr := server.handleListConvention(params)
@@ -139,8 +139,8 @@ func TestQueryConventions(t *testing.T) {
 
 	t.Run("query with unsupported language", func(t *testing.T) {
 		params := map[string]interface{}{
-			"category":  "all",
-			"languages": []interface{}{"python"},
+			"categories": []interface{}{"all"},
+			"languages":  []interface{}{"python"},
 		}
 
 		result, rpcErr := server.handleListConvention(params)
@@ -159,8 +159,8 @@ func TestQueryConventions(t *testing.T) {
 
 	t.Run("rule without severity uses defaults", func(t *testing.T) {
 		params := map[string]interface{}{
-			"category":  "style",
-			"languages": []interface{}{"javascript"},
+			"categories": []interface{}{"style"},
+			"languages":  []interface{}{"javascript"},
 		}
 
 		result, rpcErr := server.handleListConvention(params)
@@ -199,7 +199,7 @@ func TestQueryConventions(t *testing.T) {
 
 	t.Run("only category specified", func(t *testing.T) {
 		params := map[string]interface{}{
-			"category": "security",
+			"categories": []interface{}{"security"},
 		}
 
 		result, rpcErr := server.handleListConvention(params)
