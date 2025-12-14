@@ -239,8 +239,16 @@ func (c *Converter) Convert(ctx context.Context, userPolicy *schema.UserPolicy) 
 
 			// Add selector if languages are specified (for non-LLM linters)
 			if linterName != llmValidatorEngine && (len(userRule.Languages) > 0 || len(userRule.Include) > 0 || len(userRule.Exclude) > 0) {
+				// Filter languages to only those supported by this linter
+				filteredLanguages := userRule.Languages
+				if conv, ok := linter.Global().GetConverter(linterName); ok {
+					supportedLangs := conv.SupportedLanguages()
+					if len(supportedLangs) > 0 && len(userRule.Languages) > 0 {
+						filteredLanguages = intersectLanguages(userRule.Languages, supportedLangs)
+					}
+				}
 				policyRule.When = &schema.Selector{
-					Languages: userRule.Languages,
+					Languages: filteredLanguages,
 					Include:   userRule.Include,
 					Exclude:   userRule.Exclude,
 				}
@@ -710,4 +718,41 @@ func (c *Converter) convertRBAC(userRBAC *schema.UserRBAC) *schema.PolicyRBAC {
 	}
 
 	return policyRBAC
+}
+
+// intersectLanguages returns the intersection of two language slices.
+// It normalizes language names (e.g., "ts" -> "typescript") for comparison.
+func intersectLanguages(langs1, langs2 []string) []string {
+	// Normalization map for common language aliases
+	normalize := func(lang string) string {
+		switch strings.ToLower(lang) {
+		case "ts", "tsx":
+			return "typescript"
+		case "js", "jsx":
+			return "javascript"
+		case "py":
+			return "python"
+		default:
+			return strings.ToLower(lang)
+		}
+	}
+
+	// Build a set of normalized languages from langs2
+	supported := make(map[string]bool)
+	for _, lang := range langs2 {
+		supported[normalize(lang)] = true
+	}
+
+	// Find intersection - keep original language names from langs1
+	var result []string
+	seen := make(map[string]bool)
+	for _, lang := range langs1 {
+		normalized := normalize(lang)
+		if supported[normalized] && !seen[normalized] {
+			result = append(result, lang)
+			seen[normalized] = true
+		}
+	}
+
+	return result
 }

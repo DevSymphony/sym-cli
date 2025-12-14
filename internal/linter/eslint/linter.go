@@ -60,21 +60,45 @@ func (l *Linter) GetCapabilities() linter.Capabilities {
 	}
 }
 
-// CheckAvailability checks if ESLint is installed.
+// CheckAvailability checks if ESLint and TypeScript parser are installed.
 func (l *Linter) CheckAvailability(ctx context.Context) error {
-	// Try local installation first
 	eslintPath := l.getESLintPath()
+	parserPath := l.getTypeScriptParserPath()
+
+	// Check local installation (both ESLint and TypeScript parser required)
+	eslintExists := false
+	parserExists := false
+
 	if _, err := os.Stat(eslintPath); err == nil {
-		return nil // Found in tools dir
+		eslintExists = true
+	}
+	if _, err := os.Stat(parserPath); err == nil {
+		parserExists = true
 	}
 
-	// Try global installation
-	cmd := exec.CommandContext(ctx, "eslint", "--version")
-	if err := cmd.Run(); err == nil {
-		return nil // Found globally
+	// If both exist locally, we're good
+	if eslintExists && parserExists {
+		return nil
 	}
 
-	return fmt.Errorf("eslint not found (checked: %s and global PATH)", eslintPath)
+	// Try global ESLint installation
+	if !eslintExists {
+		cmd := exec.CommandContext(ctx, "eslint", "--version")
+		if err := cmd.Run(); err == nil {
+			eslintExists = true
+		}
+	}
+
+	// If ESLint exists but parser doesn't, need to install
+	if eslintExists && !parserExists {
+		return fmt.Errorf("@typescript-eslint/parser not found (required for TypeScript support)")
+	}
+
+	if !eslintExists {
+		return fmt.Errorf("eslint not found (checked: %s and global PATH)", eslintPath)
+	}
+
+	return nil
 }
 
 // Install installs ESLint via npm.
@@ -103,9 +127,9 @@ func (l *Linter) Install(ctx context.Context, config linter.InstallConfig) error
 		}
 	}
 
-	// Install ESLint
+	// Install ESLint and TypeScript parser
 	l.executor.WorkDir = l.ToolsDir
-	_, err := l.executor.Execute(ctx, "npm", "install", fmt.Sprintf("eslint@%s", version))
+	_, err := l.executor.Execute(ctx, "npm", "install", fmt.Sprintf("eslint@%s", version), "@typescript-eslint/parser")
 	if err != nil {
 		return fmt.Errorf("npm install failed: %w", err)
 	}
@@ -128,6 +152,11 @@ func (l *Linter) ParseOutput(output *linter.ToolOutput) ([]linter.Violation, err
 // getESLintPath returns the path to local ESLint binary.
 func (l *Linter) getESLintPath() string {
 	return filepath.Join(l.ToolsDir, "node_modules", ".bin", "eslint")
+}
+
+// getTypeScriptParserPath returns the path to @typescript-eslint/parser.
+func (l *Linter) getTypeScriptParserPath() string {
+	return filepath.Join(l.ToolsDir, "node_modules", "@typescript-eslint", "parser")
 }
 
 // initPackageJSON creates a minimal package.json.

@@ -129,17 +129,31 @@ func (v *Validator) groupRulesByEngine(rules []schema.PolicyRule, changes []git.
 
 	for _, rule := range rules {
 		if !rule.Enabled {
+			if v.verbose {
+				fmt.Printf("   [skip] %s: disabled\n", rule.ID)
+			}
 			continue
 		}
 
 		engineName := getEngineName(rule)
 		if engineName == "" {
+			if v.verbose {
+				fmt.Printf("   [skip] %s: no engine specified\n", rule.ID)
+			}
 			continue
 		}
 
 		// Filter changes relevant to this rule
 		relevantChanges := v.filterChangesForRule(changes, &rule)
 		if len(relevantChanges) == 0 {
+			if v.verbose {
+				langs := []string{}
+				if rule.When != nil {
+					langs = rule.When.Languages
+				}
+				fmt.Printf("   [skip] %s (%s): no matching files (languages: %v)\n",
+					rule.ID, engineName, langs)
+			}
 			continue
 		}
 

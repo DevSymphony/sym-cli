@@ -74,7 +74,9 @@ func (l *Linter) execute(ctx context.Context, config []byte, files []string) (*l
 		"--pretty", "false",
 	}
 
-	// Execute tsc (uses CWD by default)
+	// Execute tsc
+	// Reset WorkDir to use CWD (Install() may have set it to ToolsDir)
+	l.executor.WorkDir = ""
 	output, err := l.executor.Execute(ctx, tscPath, args...)
 
 	// TSC returns non-zero exit code when there are type errors

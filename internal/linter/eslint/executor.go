@@ -30,7 +30,8 @@ func (l *Linter) execute(ctx context.Context, config []byte, files []string) (*l
 	eslintCmd, args := l.getExecutionArgs(configPath, files)
 
 	// Execute with environment variable to support both ESLint 8 and 9
-	// Uses CWD by default
+	// Reset WorkDir to use CWD (Install() may have set it to ToolsDir)
+	l.executor.WorkDir = ""
 	l.executor.Env = map[string]string{
 		"ESLINT_USE_FLAT_CONFIG": "false",
 	}

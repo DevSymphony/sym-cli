@@ -158,7 +158,6 @@ sym init
 ## 요구사항
 
 - Node.js >= 16.0.0
-- Policy file: `.sym/user-policy.json`
 
 ---
 

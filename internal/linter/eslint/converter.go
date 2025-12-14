@@ -108,6 +108,7 @@ func (c *Converter) BuildConfig(results []*linter.SingleRuleResult) (*linter.Lin
 			"node":    true,
 			"browser": true,
 		},
+		"parser": "@typescript-eslint/parser",
 		"parserOptions": map[string]interface{}{
 			"ecmaVersion": "latest",
 			"sourceType":  "module",
