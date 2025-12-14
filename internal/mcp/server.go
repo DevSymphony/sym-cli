@@ -487,30 +487,14 @@ func (s *Server) handleListConvention(params map[string]interface{}) (interface{
 
 	conventions := s.filterConventions(req)
 
-	// Format conventions as readable text for MCP response
-	var textContent string
-	if len(conventions) == 0 {
-		textContent = "No conventions found for the specified criteria."
-	} else {
-		textContent = fmt.Sprintf("Found %d convention(s):\n\n", len(conventions))
-		for i, conv := range conventions {
-			textContent += fmt.Sprintf("%d. [%s] %s\n", i+1, conv.Severity, conv.ID)
-			textContent += fmt.Sprintf("   Category: %s\n", conv.Category)
-			textContent += fmt.Sprintf("   Description: %s\n", conv.Description)
-			if conv.Message != "" && conv.Message != conv.Description {
-				textContent += fmt.Sprintf("   Message: %s\n", conv.Message)
-			}
-			textContent += "\n"
-		}
-	}
+	// Build structured prompt-style response
+	textContent := s.buildConventionPrompt(conventions, req)
 
 	// Add RBAC information if available
 	rbacInfo := s.getRBACInfo()
 	if rbacInfo != "" {
-		textContent += "\n\n" + rbacInfo
+		textContent += "\n" + rbacInfo + "\n"
 	}
-
-	textContent += "\n✓ Next Step: Implement your code following these conventions. After completion, MUST call validate_code to verify compliance."
 
 	// Return MCP-compliant response with content array
 	return map[string]interface{}{
@@ -1824,4 +1808,60 @@ func (s *Server) buildConventionBatchResponse(action string, succeeded []string,
 			{"type": "text", "text": textContent},
 		},
 	}
+}
+
+// buildConventionPrompt builds a structured prompt-style response for AI coding assistants.
+func (s *Server) buildConventionPrompt(conventions []ConventionItem, req QueryConventionsRequest) string {
+	var sb strings.Builder
+
+	// Header
+	sb.WriteString("# Project Coding Conventions\n\n")
+
+	if len(conventions) == 0 {
+		sb.WriteString("No conventions found for the specified criteria.\n\n")
+		sb.WriteString("Use `list_category` to see available categories.\n")
+		return sb.String()
+	}
+
+	// Summary with filter context
+	sb.WriteString(fmt.Sprintf("Total: %d convention(s)\n", len(conventions)))
+	if len(req.Categories) > 0 {
+		sb.WriteString(fmt.Sprintf("Filtered by: %s\n", strings.Join(req.Categories, ", ")))
+	}
+	if len(req.Languages) > 0 {
+		sb.WriteString(fmt.Sprintf("Languages: %s\n", strings.Join(req.Languages, ", ")))
+	}
+	sb.WriteString("\n---\n\n")
+
+	// Group by category
+	categoryMap := make(map[string][]ConventionItem)
+	categoryOrder := []string{}
+	for _, conv := range conventions {
+		cat := conv.Category
+		if cat == "" {
+			cat = "General"
+		}
+		if _, exists := categoryMap[cat]; !exists {
+			categoryOrder = append(categoryOrder, cat)
+		}
+		categoryMap[cat] = append(categoryMap[cat], conv)
+	}
+
+	// Render each category
+	for _, cat := range categoryOrder {
+		sb.WriteString(fmt.Sprintf("## %s\n\n", cat))
+		for _, conv := range categoryMap[cat] {
+			sb.WriteString(fmt.Sprintf("**%s** `[%s]`\n", conv.ID, conv.Severity))
+			sb.WriteString(fmt.Sprintf("   %s\n\n", conv.Description))
+		}
+	}
+
+	// Instructions section
+	sb.WriteString("---\n\n")
+	sb.WriteString("## Instructions\n\n")
+	sb.WriteString("1. Apply all conventions above when writing code(without configuration files)\n")
+	sb.WriteString("2. Prioritize error-level rules (these block validation)\n")
+	sb.WriteString("3. After implementation, call `validate_code` to verify compliance\n")
+
+	return sb.String()
 }
